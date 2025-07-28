@@ -6,7 +6,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { ThemeProvider } from "next-themes";
 
-import { Navbar } from "~/_components/navbar";
+import { ConditionalLayout } from "~/_components/conditional-layout";
 import { Toaster } from "~/_components/ui/sonner";
 import { TRPCReactProvider } from "~/trpc/react";
 
@@ -53,12 +53,7 @@ export default async function RootLayout({
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
             <TRPCReactProvider>
-              <Navbar />
-              <div className="bg-muted flex min-h-screen justify-center py-8">
-                <div className="flex w-full max-w-4xl flex-col gap-4 px-6">
-                  {children}
-                </div>
-              </div>
+              <ConditionalLayout>{children}</ConditionalLayout>
             </TRPCReactProvider>
           </ThemeProvider>
         </NextIntlClientProvider>

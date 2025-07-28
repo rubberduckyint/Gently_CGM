@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CheckCircle, Loader2, Mail } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
+import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -77,6 +78,7 @@ const AppleIcon = () => (
 
 export default function LoginPage() {
   const t = useTranslations();
+  const { resolvedTheme } = useTheme();
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isAppleLoading, setIsAppleLoading] = useState(false);
   const [isEmailLoading, setIsEmailLoading] = useState(false);
@@ -119,12 +121,9 @@ export default function LoginPage() {
     setEmailSent(false);
     try {
       // Use better-auth magic link via direct API call
-      await authClient.$fetch("/magic-link/send", {
-        method: "POST",
-        body: {
-          email: data.email,
-          callbackURL: "/dashboard",
-        },
+      await authClient.signIn.magicLink({
+        email: data.email,
+        callbackURL: "/dashboard",
       });
 
       setEmailSent(true);
@@ -140,19 +139,18 @@ export default function LoginPage() {
   const isAnyLoading = isGoogleLoading || isAppleLoading || isEmailLoading;
 
   return (
-    <div
-      className="light bg-muted flex min-h-screen items-center justify-center p-4"
-      data-theme="light"
-    >
+    <div className="bg-muted flex min-h-screen items-center justify-center p-4">
       <div className="flex w-full max-w-md flex-col items-center">
-        <Image
-          src="/images/logo-dark.svg"
-          alt="Gently Logo"
-          width={220}
-          height={60}
-          priority
-          className="mb-8"
-        />
+        <div className="relative mb-8 h-[60px] w-[220px]">          
+          <Image
+            src="/images/logo-dark.svg"
+            alt="Gently Logo"
+            width={220}
+            height={60}
+            priority
+            className={`absolute inset-0 transition-opacity duration-200`}
+          />          
+        </div>
         <Card className="w-full shadow-lg">
           <CardHeader className="text-center">
             <CardTitle>{t("auth.welcomeToGently")}</CardTitle>

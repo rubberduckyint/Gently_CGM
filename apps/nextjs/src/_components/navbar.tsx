@@ -103,30 +103,7 @@ export function Navbar() {
 
   // Don't render if we're still loading session or not mounted
   if (!mounted || isPending) {
-    return (
-      <div className="bg-background sticky top-0 z-50 w-full border-b">
-        <nav className="mx-auto flex h-16 w-full max-w-4xl items-center justify-between px-6">
-          <Link href="/dashboard" className="text-lg font-bold tracking-tight">
-            <span className="sr-only">Gently</span>
-            {/* Use a stable logo during loading to prevent layout shift */}
-            <div className="relative h-8 w-[120px]">
-              <Image
-                src="/images/logo-dark.svg"
-                alt="Gently Logo"
-                width={120}
-                height={32}
-                priority
-                className="absolute inset-0"
-              />
-            </div>
-          </Link>
-          {/* Match the exact size and structure of the avatar button */}
-          <div className="flex h-10 w-10 items-center justify-center">
-            <div className="bg-muted h-8 w-8 animate-pulse rounded-full" />
-          </div>
-        </nav>
-      </div>
-    );
+    return null;
   }
 
   // Don't render navbar if no session

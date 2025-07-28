@@ -84,11 +84,10 @@ export function initAuth(options: {
     socialProviders: {
       google: {
         clientId: options.googleClientId,
-        clientSecret: options.googleClientSecret,
-        redirectURI: `${options.productionUrl}/api/auth/callback/google`,
+        clientSecret: options.googleClientSecret        
       },
     },
-    trustedOrigins: ["expo://", "expo://*"],
+    trustedOrigins: ["gently://", "gently://*"],
   } satisfies BetterAuthOptions;
 
   return betterAuth(config);

@@ -28,7 +28,7 @@ export default function RootLayout() {
           name="index" 
           options={{ 
             title: "Dashboard",
-            headerShown: true 
+            headerShown: false 
           }} 
         />
         <Stack.Screen 
@@ -42,16 +42,9 @@ export default function RootLayout() {
           name="login" 
           options={{ 
             title: "Login",
-            headerShown: true 
-          }} 
-        />
-        <Stack.Screen 
-          name="auth-callback" 
-          options={{ 
-            title: "Signing In",
             headerShown: false 
           }} 
-        />
+        />        
       </Stack>
       <StatusBar style="dark" />
     </QueryClientProvider>

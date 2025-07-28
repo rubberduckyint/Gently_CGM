@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,9 +16,17 @@ import { router } from "expo-router";
 import { authClient } from "~/utils/auth";
 
 export default function LoginPage() {
+  const { data: session, isPending } = authClient.useSession();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (session?.user) {
+      router.replace("/");
+    }
+  }, [session]);
 
   const handleEmailAuth = async () => {
     if (!email.trim()) {
@@ -60,7 +68,7 @@ export default function LoginPage() {
       console.log("Starting Google social sign-in...");
       const result = await authClient.signIn.social({
         provider: "google",
-        callbackURL: "gently://", // Use expo scheme for callback
+        callbackURL: "/",
       });
       console.log("Google sign-in result:", result);
       router.replace("/");
@@ -71,6 +79,18 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
+
+  // Show loading while checking authentication status
+  if (isPending) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6366f1" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -297,6 +317,17 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
     color: "#6b7280",
     textAlign: "center",
   },

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -86,22 +86,6 @@ function DeviceCard({ device }: { device: DeviceWithAlarmsCount }) {
   );
 }
 
-function LoginPrompt() {
-  return (
-    <View style={styles.loginPrompt}>
-      <Text style={styles.loginTitle}>Welcome to Gently</Text>
-      <Text style={styles.loginDescription}>
-        Please sign in to manage your devices and alarms
-      </Text>
-      <Link href="/login" asChild>
-        <Pressable style={styles.loginButton}>
-          <Text style={styles.loginButtonText}>Sign In</Text>
-        </Pressable>
-      </Link>
-    </View>
-  );
-}
-
 function EmptyState() {
   return (
     <View style={styles.emptyState}>
@@ -120,23 +104,14 @@ function EmptyState() {
 }
 
 export default function DashboardPage() {
-  const [session, setSession] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data: session, isPending } = authClient.useSession();
 
-  // Check authentication
+  // Redirect to login if not authenticated
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const sessionData = await authClient.getSession();
-        setSession(sessionData);
-      } catch (error) {
-        console.error("Auth check failed:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    checkAuth();
-  }, []);
+    if (!isPending && !session?.user) {
+      router.replace("/login");
+    }
+  }, [session, isPending]);
 
   // Fetch devices if authenticated
   const {
@@ -151,7 +126,7 @@ export default function DashboardPage() {
     enabled: !!session?.user,
   });
 
-  if (isLoading) {
+  if (isPending) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -162,10 +137,14 @@ export default function DashboardPage() {
     );
   }
 
+  // Show loading while redirecting to login
   if (!session?.user) {
     return (
       <SafeAreaView style={styles.container}>
-        <LoginPrompt />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3b82f6" />
+          <Text style={styles.loadingText}>Redirecting...</Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -216,7 +195,6 @@ export default function DashboardPage() {
         onPress={async () => {
           try {
             await authClient.signOut();
-            setSession(null);
             router.replace("/login");
           } catch (error) {
             Alert.alert("Error", "Failed to sign out");
@@ -322,37 +300,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#059669",
     fontWeight: "500",
-  },
-  loginPrompt: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 32,
-  },
-  loginTitle: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#1f2937",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  loginDescription: {
-    fontSize: 16,
-    color: "#6b7280",
-    textAlign: "center",
-    marginBottom: 32,
-    lineHeight: 24,
-  },
-  loginButton: {
-    backgroundColor: "#3b82f6",
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  loginButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
   },
   emptyState: {
     flex: 1,
