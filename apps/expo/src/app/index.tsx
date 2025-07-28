@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -106,13 +106,6 @@ function EmptyState() {
 export default function DashboardPage() {
   const { data: session, isPending } = authClient.useSession();
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!isPending && !session?.user) {
-      router.replace("/login");
-    }
-  }, [session, isPending]);
-
   // Fetch devices if authenticated
   const {
     data: devices,
@@ -126,6 +119,7 @@ export default function DashboardPage() {
     enabled: !!session?.user,
   });
 
+  // Show loading while checking authentication
   if (isPending) {
     return (
       <SafeAreaView style={styles.container}>
@@ -137,13 +131,19 @@ export default function DashboardPage() {
     );
   }
 
-  // Show loading while redirecting to login
+  // Redirect to login if not authenticated
   if (!session?.user) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3b82f6" />
-          <Text style={styles.loadingText}>Redirecting...</Text>
+          <Text style={styles.loadingText}>Please log in...</Text>
+          <Pressable
+            style={styles.loginButton}
+            onPress={() => router.push("/login")}
+          >
+            <Text style={styles.loginButtonText}>Go to Login</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -341,6 +341,18 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: "#6b7280",
+  },
+  loginButton: {
+    backgroundColor: "#3b82f6",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  loginButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
   },
   errorContainer: {
     flex: 1,
