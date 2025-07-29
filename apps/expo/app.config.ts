@@ -21,6 +21,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       light: "./assets/icon-light.png",
       dark: "./assets/icon-dark.png",
     },
+    infoPlist: {
+      NSBluetoothAlwaysUsageDescription: "This app uses Bluetooth to connect to your Gently devices for monitoring and control.",
+      NSBluetoothPeripheralUsageDescription: "This app uses Bluetooth to connect to your Gently devices for monitoring and control.",
+      NSLocationWhenInUseUsageDescription: "This app needs location access to scan for Bluetooth devices.",
+    },
   },
   android: {
     package: "com.gentlyus.gently",
@@ -29,6 +34,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: "#1F104A",
     },
     edgeToEdgeEnabled: true,
+    permissions: [
+      "android.permission.BLUETOOTH",
+      "android.permission.BLUETOOTH_ADMIN", 
+      "android.permission.BLUETOOTH_SCAN",
+      "android.permission.BLUETOOTH_CONNECT",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.ACCESS_COARSE_LOCATION",
+    ],
   },
   // extra: {
   //   eas: {
@@ -43,6 +56,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-router",
     "expo-secure-store",
     "expo-web-browser",
+    "expo-location",
     [
       "@react-native-google-signin/google-signin",
       {

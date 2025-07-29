@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { RouterOutputs } from "~/utils/api";
 import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
+import { AddDeviceModal } from "~/components/AddDeviceModal";
 
 type DeviceWithAlarmsCount = RouterOutputs["device"]["getAll"][number];
 
@@ -86,25 +87,41 @@ function DeviceCard({ device }: { device: DeviceWithAlarmsCount }) {
   );
 }
 
-function EmptyState() {
+function EmptyState({ onDeviceAdded }: { onDeviceAdded: () => void }) {
+  const [showAddModal, setShowAddModal] = React.useState(false);
+
+  const handleDeviceAdded = () => {
+    setShowAddModal(false);
+    onDeviceAdded();
+  };
+
   return (
-    <View style={styles.emptyState}>
-      <Text style={styles.emptyTitle}>No Devices Yet</Text>
-      <Text style={styles.emptyDescription}>
-        Add your first device to get started with gentle alarms
-      </Text>
-      <Pressable
-        style={styles.addButton}
-        onPress={() => Alert.alert("Coming Soon", "Device creation will be available soon!")}
-      >
-        <Text style={styles.addButtonText}>+ Add Device</Text>
-      </Pressable>
-    </View>
+    <>
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyTitle}>No Devices Yet</Text>
+        <Text style={styles.emptyDescription}>
+          Add your first device to get started with gentle alarms
+        </Text>
+        <Pressable
+          style={styles.addButton}
+          onPress={() => setShowAddModal(true)}
+        >
+          <Text style={styles.addButtonText}>+ Add Device</Text>
+        </Pressable>
+      </View>
+      
+      <AddDeviceModal
+        visible={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onDeviceAdded={handleDeviceAdded}
+      />
+    </>
   );
 }
 
 export default function DashboardPage() {
   const { data: session, isPending } = authClient.useSession();
+  const [showAddModal, setShowAddModal] = React.useState(false);
 
   // Redirect to login if not authenticated
   React.useEffect(() => {
@@ -118,6 +135,7 @@ export default function DashboardPage() {
     data: devices,
     isLoading: devicesLoading,
     error,
+    refetch: refetchDevices,
   } = useQuery({
     queryKey: ["device", "getAll"],
     queryFn: async () => {
@@ -125,6 +143,11 @@ export default function DashboardPage() {
     },
     enabled: !!session?.user,
   });
+
+  const handleDeviceAdded = () => {
+    setShowAddModal(false);
+    refetchDevices();
+  };
 
   // Show loading while checking authentication
   if (isPending) {
@@ -165,6 +188,14 @@ export default function DashboardPage() {
         <Text style={styles.headerDescription}>
           Manage your devices and gentle alarms
         </Text>
+        {devices && devices.length > 0 && (
+          <Pressable
+            style={styles.headerAddButton}
+            onPress={() => setShowAddModal(true)}
+          >
+            <Text style={styles.headerAddButtonText}>+ Add Device</Text>
+          </Pressable>
+        )}
       </View>
 
       {devicesLoading ? (
@@ -181,7 +212,7 @@ export default function DashboardPage() {
           showsVerticalScrollIndicator={false}
         />
       ) : (
-        <EmptyState />
+        <EmptyState onDeviceAdded={handleDeviceAdded} />
       )}
 
       <Pressable
@@ -197,6 +228,12 @@ export default function DashboardPage() {
       >
         <Text style={styles.logoutButtonText}>Sign Out</Text>
       </Pressable>
+
+      <AddDeviceModal
+        visible={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onDeviceAdded={handleDeviceAdded}
+      />
     </SafeAreaView>
   );
 }
@@ -220,6 +257,19 @@ const styles = StyleSheet.create({
   headerDescription: {
     fontSize: 16,
     color: "#6b7280",
+    marginBottom: 16,
+  },
+  headerAddButton: {
+    backgroundColor: "#10b981",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
+  headerAddButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
   },
   devicesList: {
     paddingBottom: 20,

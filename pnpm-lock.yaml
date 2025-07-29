@@ -114,6 +114,9 @@ importers:
       expo-linking:
         specifier: 7.1.7
         version: 7.1.7(expo@53.0.20(@babel/core@7.28.0)(@expo/metro-runtime@5.0.4(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0)))(bufferutil@4.0.9)(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0))(react@19.0.0))(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0))(react@19.0.0)
+      expo-location:
+        specifier: ^18.1.6
+        version: 18.1.6(expo@53.0.20(@babel/core@7.28.0)(@expo/metro-runtime@5.0.4(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0)))(bufferutil@4.0.9)(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0))(react@19.0.0))
       expo-router:
         specifier: 5.1.4
         version: 5.1.4(7d02fa798639e58fe759f30330804272)
@@ -144,6 +147,9 @@ importers:
       react-native:
         specifier: 0.79.5
         version: 0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0)
+      react-native-ble-plx:
+        specifier: ^3.5.0
+        version: 3.5.0(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0))(react@19.0.0)
       react-native-gesture-handler:
         specifier: ~2.27.2
         version: 2.27.2(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0))(react@19.0.0)
@@ -4616,6 +4622,11 @@ packages:
       react: '*'
       react-native: '*'
 
+  expo-location@18.1.6:
+    resolution: {integrity: sha512-l5dQQ2FYkrBgNzaZN1BvSmdhhcztFOUucu2kEfDBMV4wSIuTIt/CKsho+F3RnAiWgvui1wb1WTTf80E8zq48hA==}
+    peerDependencies:
+      expo: '*'
+
   expo-manifests@0.16.6:
     resolution: {integrity: sha512-1A+do6/mLUWF9xd3uCrlXr9QFDbjbfqAYmUy8UDLOjof1lMrOhyeC4Yi6WexA/A8dhZEpIxSMCKfn7G4aHAh4w==}
     peerDependencies:
@@ -6468,6 +6479,13 @@ packages:
 
   react-is@19.1.1:
     resolution: {integrity: sha512-tr41fA15Vn8p4X9ntI+yCyeGSf1TlYaY5vlTZfQmeLBrFo3psOPX6HhTDnFNL9uj3EhP0KAQ80cugCl4b4BERA==}
+
+  react-native-ble-plx@3.5.0:
+    resolution: {integrity: sha512-PeSnRswHLwLRVMQkOfDaRICtrGmo94WGKhlSC09XmHlqX2EuYgH+vNJpGcLkd8lyiYpEJyf8wlFAdj9Akliwmw==}
+    engines: {node: '>= 18.0.0'}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
 
   react-native-edge-to-edge@1.6.0:
     resolution: {integrity: sha512-2WCNdE3Qd6Fwg9+4BpbATUxCLcouF6YRY7K+J36KJ4l3y+tWN6XCqAC4DuoGblAAbb2sLkhEDp4FOlbOIot2Og==}
@@ -12059,6 +12077,10 @@ snapshots:
       - expo
       - supports-color
 
+  expo-location@18.1.6(expo@53.0.20(@babel/core@7.28.0)(@expo/metro-runtime@5.0.4(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0)))(bufferutil@4.0.9)(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0))(react@19.0.0)):
+    dependencies:
+      expo: 53.0.20(@babel/core@7.28.0)(@expo/metro-runtime@5.0.4(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0)))(bufferutil@4.0.9)(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0))(react@19.0.0)
+
   expo-manifests@0.16.6(expo@53.0.20(@babel/core@7.28.0)(@expo/metro-runtime@5.0.4(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0)))(bufferutil@4.0.9)(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0))(react@19.0.0)):
     dependencies:
       '@expo/config': 11.0.13
@@ -14073,6 +14095,11 @@ snapshots:
   react-is@18.3.1: {}
 
   react-is@19.1.1: {}
+
+  react-native-ble-plx@3.5.0(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0))(react@19.0.0):
+    dependencies:
+      react: 19.0.0
+      react-native: 0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0)
 
   react-native-edge-to-edge@1.6.0(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.1.8)(bufferutil@4.0.9)(react@19.0.0))(react@19.0.0):
     dependencies:
