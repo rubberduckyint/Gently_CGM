@@ -9,11 +9,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Link, router } from "expo-router";
+import { Link, router, useFocusEffect } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { RouterOutputs } from "~/utils/api";
-import { AddDeviceModal } from "~/components/AddDeviceModal";
 import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 
@@ -128,41 +127,25 @@ function DeviceCard({
   );
 }
 
-function EmptyState({ onDeviceAdded }: { onDeviceAdded: () => void }) {
-  const [showAddModal, setShowAddModal] = React.useState(false);
-
-  const handleDeviceAdded = () => {
-    setShowAddModal(false);
-    onDeviceAdded();
-  };
-
+function EmptyState() {
   return (
-    <>
-      <View style={styles.emptyState}>
-        <Text style={styles.emptyTitle}>No Devices Yet</Text>
-        <Text style={styles.emptyDescription}>
-          Add your first device to get started with gentle alarms
-        </Text>
-        <Pressable
-          style={styles.addButton}
-          onPress={() => setShowAddModal(true)}
-        >
-          <Text style={styles.addButtonText}>+ Add Device</Text>
-        </Pressable>
-      </View>
-
-      <AddDeviceModal
-        visible={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onDeviceAdded={handleDeviceAdded}
-      />
-    </>
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyTitle}>No Devices Yet</Text>
+      <Text style={styles.emptyDescription}>
+        Add your first device to get started with gentle alarms
+      </Text>
+      <Pressable
+        style={styles.addButton}
+        onPress={() => router.push("/add-device")}
+      >
+        <Text style={styles.addButtonText}>+ Add Device</Text>
+      </Pressable>
+    </View>
   );
 }
 
 export default function DashboardPage() {
   const { data: session, isPending } = authClient.useSession();
-  const [showAddModal, setShowAddModal] = React.useState(false);
   const queryClient = useQueryClient();
 
   // Redirect to login if not authenticated
@@ -199,14 +182,16 @@ export default function DashboardPage() {
     },
   });
 
-  const handleDeviceAdded = () => {
-    setShowAddModal(false);
-    void refetchDevices();
-  };
-
   const handleDeleteDevice = (deviceId: string) => {
     deleteDeviceMutation.mutate(deviceId);
   };
+
+  // Refresh devices when coming back from add-device screen
+  useFocusEffect(
+    React.useCallback(() => {
+      void refetchDevices();
+    }, [refetchDevices]),
+  );
 
   // Show loading while checking authentication
   if (isPending) {
@@ -250,7 +235,7 @@ export default function DashboardPage() {
         {devices && devices.length > 0 && (
           <Pressable
             style={styles.headerAddButton}
-            onPress={() => setShowAddModal(true)}
+            onPress={() => router.push("/add-device")}
           >
             <Text style={styles.headerAddButtonText}>+ Add Device</Text>
           </Pressable>
@@ -273,7 +258,7 @@ export default function DashboardPage() {
           showsVerticalScrollIndicator={false}
         />
       ) : (
-        <EmptyState onDeviceAdded={handleDeviceAdded} />
+        <EmptyState />
       )}
 
       <Pressable
@@ -289,12 +274,6 @@ export default function DashboardPage() {
       >
         <Text style={styles.logoutButtonText}>Sign Out</Text>
       </Pressable>
-
-      <AddDeviceModal
-        visible={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onDeviceAdded={handleDeviceAdded}
-      />
     </SafeAreaView>
   );
 }

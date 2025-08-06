@@ -13,7 +13,7 @@ import { router, useGlobalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { RouterOutputs } from "~/utils/api";
-import { bluetoothService } from "~/services/BluetoothService";
+import { useBluetooth } from "~/services/bluetooth";
 import { trpc } from "~/utils/api";
 
 type DeviceWithAlarms = RouterOutputs["device"]["getById"];
@@ -82,6 +82,8 @@ function AlarmCard({
 export default function DeviceDetailPage() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { connect, disconnect, getDeviceInfo, checkConnection } =
+    useBluetooth();
 
   const {
     data: device,
@@ -119,24 +121,29 @@ export default function DeviceDetailPage() {
     try {
       console.log("🔄 Starting device sync for:", device.title);
 
-      const result = await bluetoothService.syncWithDevice(
-        device.id,
-        // For now, we'll pass undefined since we don't have serialNumber stored
-        // In the future, you might want to add serialNumber to the device model
-        undefined,
-      );
+      // Try to connect to the device
+      const connectedDevice = await connect(device.id);
+      console.log("✅ Connected to device:", connectedDevice.name);
 
-      Alert.alert(
-        result.success ? "Sync Successful" : "Sync Failed",
-        result.message,
-        [{ text: "OK" }],
-      );
+      // Check connection health
+      const isConnected = await checkConnection();
+      if (isConnected) {
+        Alert.alert(
+          "Sync Successful",
+          "✅ Device connection is healthy and active! Your device is ready for use.",
+          [{ text: "OK" }],
+        );
 
-      if (result.success) {
-        // Optionally refresh device data
+        // Refresh device data
         void queryClient.invalidateQueries({
           queryKey: ["device", "getById", { id: id }],
         });
+      } else {
+        Alert.alert(
+          "Sync Failed",
+          "❌ Could not establish a healthy connection with the device.",
+          [{ text: "OK" }],
+        );
       }
     } catch (error) {
       console.error("❌ Sync error:", error);
