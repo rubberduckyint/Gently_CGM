@@ -23,8 +23,8 @@ import { Alarm, Device, user } from "./schema";
 // Configuration for seed data
 const SEED_CONFIG = {
   users: 10,
-  devicesPerUser: 2, // 1-3 devices per user
-  alarmsPerDevice: 5, // 2-8 alarms per device
+  devicesPerUser: 3, // 1-3 devices per user
+  alarmsPerDevice: 8, // 2-8 alarms per device
 };
 
 // Helper function to generate a random number between min and max (inclusive)
@@ -103,8 +103,8 @@ async function seedUsers() {
 
   const users = [];
 
-  // First, add the specific admin user
-  const adminUser = {
+  // First, add the specific admin users
+  const adminUser1 = {
     id: faker.string.uuid(),
     name: "Oliver Lett",
     email: "ollett@gmail.com",
@@ -117,10 +117,23 @@ async function seedUsers() {
     }),
   };
 
-  users.push(adminUser);
+  const adminUser2 = {
+    id: faker.string.uuid(),
+    name: "Kurt Jasin",
+    email: "kurtjasin@gmail.com",
+    emailVerified: true,
+    image: faker.image.avatar(),
+    isAdmin: true,
+    createdAt: faker.date.between({
+      from: new Date("2023-01-01"),
+      to: new Date(),
+    }),
+  };
+
+  users.push(adminUser1, adminUser2);
 
   // Then add the remaining random users
-  for (let i = 1; i < SEED_CONFIG.users; i++) {
+  for (let i = 2; i < SEED_CONFIG.users; i++) {
     const firstName = faker.person.firstName();
     const lastName = faker.person.lastName();
     const email = faker.internet.email({ firstName, lastName }).toLowerCase();
@@ -147,13 +160,16 @@ async function seedUsers() {
   return users;
 }
 
-async function seedDevices(users: { id: string; name: string }[]) {
+async function seedDevices(users: { id: string; name: string; isAdmin?: boolean }[]) {
   console.log("🖥️ Seeding devices...");
 
   const devices = [];
 
   for (const currentUser of users) {
-    const deviceCount = randomBetween(1, SEED_CONFIG.devicesPerUser);
+    // Admin users get at least 1 device, regular users get random amount
+    const deviceCount = currentUser.isAdmin 
+      ? Math.max(1, randomBetween(1, SEED_CONFIG.devicesPerUser))
+      : randomBetween(1, SEED_CONFIG.devicesPerUser);
 
     for (let i = 0; i < deviceCount; i++) {
       const createdAt = faker.date.between({
@@ -189,7 +205,7 @@ async function seedDevices(users: { id: string; name: string }[]) {
 }
 
 async function seedAlarms(
-  users: { id: string; name: string }[],
+  users: { id: string; name: string; isAdmin?: boolean }[],
   devices: { id: string; userId: string; title: string }[],
 ) {
   console.log("⏰ Seeding alarms...");
@@ -197,7 +213,14 @@ async function seedAlarms(
   const alarms = [];
 
   for (const device of devices) {
-    const alarmCount = randomBetween(2, SEED_CONFIG.alarmsPerDevice);
+    // Find the user for this device to check if they're admin
+    const deviceOwner = users.find(user => user.id === device.userId);
+    const isAdminDevice = deviceOwner?.isAdmin ?? false;
+    
+    // Admin users get more alarms (3-8), regular users get the configured amount (2-8)
+    const alarmCount = isAdminDevice 
+      ? randomBetween(3, SEED_CONFIG.alarmsPerDevice)
+      : randomBetween(2, SEED_CONFIG.alarmsPerDevice);
 
     for (let i = 0; i < alarmCount; i++) {
       const createdAt = faker.date.between({

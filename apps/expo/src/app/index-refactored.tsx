@@ -1,3 +1,9 @@
+/**
+ * Refactored Login Screen using the new design system
+ * 
+ * This demonstrates how to use the new style system for consistency and reusability
+ */
+
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { authClient } from "~/utils/auth";
+// Import the new design system
 import {
   colors,
   typography,
@@ -94,6 +101,11 @@ export default function LoginPage() {
     }
   };
 
+  const handleTryAgain = () => {
+    setEmailSent(false);
+    setEmail("");
+  };
+
   // Show loading while checking authentication status
   if (isPending) {
     return (
@@ -119,26 +131,44 @@ export default function LoginPage() {
           <View style={commonStyles.headerSection}>
             <Text style={typography.h1}>Welcome to Gently</Text>
             <Text style={[typography.subtitle, { textAlign: 'center' }]}>
-              {emailSent
-                ? "Check your email for a sign-in link"
-                : "Sign in to your account"}
+              {emailSent 
+                ? "We've sent you a magic link!" 
+                : "Sign in to your account to continue"
+              }
             </Text>
           </View>
 
-          {!emailSent && (
-            <>
+          {emailSent ? (
+            /* Email sent state */
+            <View style={commonStyles.centered}>
+              <Text style={[typography.h5, { color: colors.success[600], textAlign: 'center', marginBottom: spacing[3] }]}>
+                Check Your Email
+              </Text>
+              <Text style={[typography.body, { color: colors.text.secondary, textAlign: 'center', lineHeight: 24, marginBottom: spacing[6] }]}>
+                We've sent a sign-in link to {email}. Click the link to continue to your dashboard.
+              </Text>
+              <Pressable 
+                style={[buttons.base, buttons.medium, buttons.ghost]} 
+                onPress={handleTryAgain}
+              >
+                <Text style={buttonText.ghost}>Try a different email</Text>
+              </Pressable>
+            </View>
+          ) : (
+            /* Login form */
+            <View style={{ width: '100%' }}>
               {/* Email input */}
               <View style={inputs.container}>
                 <Text style={inputs.label}>Email</Text>
                 <TextInput
                   style={inputs.base}
-                  value={email}
-                  onChangeText={setEmail}
                   placeholder="Enter your email"
                   placeholderTextColor={colors.text.tertiary}
+                  value={email}
+                  onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  autoCorrect={false}
+                  autoComplete="email"
                   editable={!isLoading}
                 />
               </View>
@@ -158,7 +188,7 @@ export default function LoginPage() {
                   <ActivityIndicator color={colors.text.inverse} />
                 ) : (
                   <Text style={buttonText.primary}>
-                    Send Sign-In Link
+                    Send Magic Link
                   </Text>
                 )}
               </Pressable>
@@ -183,36 +213,13 @@ export default function LoginPage() {
               >
                 <Text style={buttonText.secondary}>Continue with Google</Text>
               </Pressable>
-            </>
-          )}
-
-          {emailSent && (
-            <View style={[flex.itemsCenter, { paddingVertical: spacing[8] }]}>
-              <Text style={[typography.h5, { color: colors.success[600], textAlign: 'center', marginBottom: spacing[3] }]}>
-                A sign-in link has been sent to {email}
-              </Text>
-              <Text style={[typography.body, { color: colors.text.secondary, textAlign: 'center', lineHeight: 24, marginBottom: spacing[6] }]}>
-                Click the link in your email to complete sign-in. You can close
-                this screen.
-              </Text>
-              <Pressable
-                style={[buttons.base, buttons.medium, buttons.ghost]}
-                onPress={() => {
-                  setEmailSent(false);
-                  setEmail("");
-                }}
-              >
-                <Text style={buttonText.ghost}>
-                  Try with different email
-                </Text>
-              </Pressable>
             </View>
           )}
 
           {/* Footer */}
           <View style={[flex.itemsCenter, { marginTop: spacing[12] }]}>
             <Text style={[typography.caption, { textAlign: 'center', color: colors.text.tertiary }]}>
-              Manage your devices and gentle alarms with ease
+              By continuing, you agree to our Terms of Service and Privacy Policy.
             </Text>
           </View>
         </View>
@@ -220,4 +227,3 @@ export default function LoginPage() {
     </SafeAreaView>
   );
 }
-
