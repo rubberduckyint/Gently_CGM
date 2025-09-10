@@ -8,12 +8,15 @@ import {
   Text,
   View,
 } from "react-native";
+import { State } from "react-native-ble-plx";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useGlobalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { BluetoothDevice } from "~/services/bluetooth/types";
 import type { RouterOutputs } from "~/utils/api";
 import { useBluetooth } from "~/services/bluetooth";
+import { readComprehensiveDeviceDetails } from "~/services/bluetooth/deviceData";
 import { trpc } from "~/utils/api";
 
 type DeviceWithAlarms = RouterOutputs["device"]["getById"];
@@ -82,8 +85,15 @@ function AlarmCard({
 export default function DeviceDetailPage() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const { connect, disconnect, getDeviceInfo, checkConnection } =
-    useBluetooth();
+  const {
+    connect,
+    disconnect,
+    getDeviceInfo,
+    startScan,
+    stopScan,
+    getBluetoothState,
+    checkConnection,
+  } = useBluetooth();
 
   const {
     data: device,
@@ -113,6 +123,195 @@ export default function DeviceDetailPage() {
   });
 
   const [isSyncing, setIsSyncing] = React.useState(false);
+  const [isGettingDetails, setIsGettingDetails] = React.useState(false);
+
+  const handleGetDeviceDetails = async () => {
+    if (!device?.id) return;
+
+    setIsGettingDetails(true);
+    try {
+      console.log(
+        `🔍 Getting comprehensive device details for: ${device.title}`,
+      );
+
+      // Check if Bluetooth is available and enabled
+      const bluetoothState = await getBluetoothState();
+      console.log("📡 Bluetooth State:", bluetoothState);
+
+      if (bluetoothState !== State.PoweredOn) {
+        console.error(
+          "❌ Bluetooth is not powered on. Current state:",
+          bluetoothState,
+        );
+        return;
+      }
+
+      // Check if device is nearby by scanning briefly
+      console.log("🔍 Checking if device is nearby...");
+
+      let deviceFound = false;
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          stopScan();
+          resolve();
+        }, 5000); // 5 second scan
+
+        startScan(
+          (foundDevice: BluetoothDevice) => {
+            if (foundDevice.id === device.id) {
+              console.log(
+                "✅ Device found during scan:",
+                foundDevice.name,
+                "RSSI:",
+                foundDevice.rssi,
+              );
+              deviceFound = true;
+              clearTimeout(timeout);
+              stopScan();
+              resolve();
+            }
+          },
+          { timeout: 5000 },
+        );
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (!deviceFound) {
+        console.warn(
+          "⚠️ Device not found during scan - may be out of range or not advertising",
+        );
+        console.log("� Attempting connection anyway...");
+      }
+
+      // Connect to the device
+      console.log("🔗 Attempting to connect...");
+      const result = await connect(device.id);
+      console.log("✅ Successfully connected to device");
+
+      // Get device info
+      const deviceInfo = getDeviceInfo();
+      console.log("📱 Device Information:", deviceInfo);
+
+      // Get device time and details
+      try {
+        const comprehensiveDetails =
+          await readComprehensiveDeviceDetails(result);
+        console.log("⏰ Comprehensive Device Details:", comprehensiveDetails);
+
+        // Store the serial number and other device info in the database
+        if (comprehensiveDetails.deviceInfo.serialNumber !== "unknown") {
+          console.log(
+            "💾 Storing device serial number:",
+            comprehensiveDetails.deviceInfo.serialNumber,
+          );
+
+          try {
+            // Check if we already have a device with this serial number
+            const existingDevice = await trpc.device.findBySerialNumber.query({
+              serialNumber: comprehensiveDetails.deviceInfo.serialNumber,
+            });
+
+            if (existingDevice && existingDevice.id !== device.id) {
+              Alert.alert(
+                "Device Conflict",
+                `This device's serial number (${comprehensiveDetails.deviceInfo.serialNumber}) is already associated with another device: "${existingDevice.title}". This might indicate a duplicate device entry.`,
+                [
+                  { text: "Continue Anyway", style: "destructive" },
+                  { text: "Cancel", style: "cancel" },
+                ],
+              );
+              return;
+            }
+
+            // Update the device with Bluetooth info
+            await trpc.device.updateFromBluetooth.mutate({
+              id: device.id,
+              serialNumber: comprehensiveDetails.deviceInfo.serialNumber,
+              batteryLevel: comprehensiveDetails.batteryLevel,
+              firmwareVersion: comprehensiveDetails.deviceInfo.firmwareVersion,
+            });
+
+            console.log("✅ Device info updated in database");
+
+            // Refresh the device data
+            await queryClient.invalidateQueries({
+              queryKey: ["device", "getById", { id: device.id }],
+            });
+
+            Alert.alert(
+              "Device Details Retrieved",
+              `✅ Successfully connected and updated device info!\n\nSerial Number: ${comprehensiveDetails.deviceInfo.serialNumber}\nFirmware: ${comprehensiveDetails.deviceInfo.firmwareVersion}\nBattery: ${comprehensiveDetails.batteryLevel}%\nDevice Time: ${comprehensiveDetails.deviceTime.toLocaleString()}`,
+              [{ text: "OK" }],
+            );
+          } catch (dbError) {
+            console.error("❌ Failed to update device in database:", dbError);
+
+            if (
+              dbError instanceof Error &&
+              dbError.message.includes("Serial number mismatch")
+            ) {
+              Alert.alert(
+                "Device Verification Failed",
+                `⚠️ ${dbError.message}\n\nPlease verify you're connecting to the correct device.`,
+                [{ text: "OK" }],
+              );
+            } else {
+              Alert.alert(
+                "Database Error",
+                "Failed to store device information in database, but device details were retrieved successfully.",
+                [{ text: "OK" }],
+              );
+            }
+          }
+        } else {
+          console.warn(
+            "⚠️ Device serial number is unknown - cannot verify device identity",
+          );
+          Alert.alert(
+            "Device Details Retrieved",
+            "✅ Connected to device but could not retrieve serial number for verification.\n\nThis is normal for some device firmware versions.",
+            [{ text: "OK" }],
+          );
+        }
+      } catch (timeError) {
+        console.error(
+          "❌ Failed to get comprehensive device details:",
+          timeError,
+        );
+        Alert.alert(
+          "Connection Error",
+          "Failed to retrieve device details. The device may not be responding properly.",
+          [{ text: "OK" }],
+        );
+      }
+
+      // Log current timestamp for comparison
+      const currentTime = new Date();
+      console.log("🕐 Current Time:", currentTime.toISOString());
+
+      // Disconnect after getting info
+      await disconnect();
+      console.log("🔌 Disconnected from device");
+    } catch (error) {
+      console.error("❌ Error getting device details:", error);
+
+      // Additional error information
+      if (error instanceof Error) {
+        console.error("❌ Error name:", error.name);
+        console.error("❌ Error message:", error.message);
+        console.error("❌ Error stack:", error.stack);
+      }
+
+      // Try to disconnect if there was a connection issue
+      try {
+        await disconnect();
+      } catch (disconnectError) {
+        console.error("❌ Error during cleanup disconnect:", disconnectError);
+      }
+    } finally {
+      setIsGettingDetails(false);
+    }
+  };
 
   const handleSyncDevice = async () => {
     if (!device?.id) return;
@@ -123,7 +322,7 @@ export default function DeviceDetailPage() {
 
       // Try to connect to the device
       const connectedDevice = await connect(device.id);
-      console.log("✅ Connected to device:", connectedDevice.name);
+      console.log("✅ Connected to device:", connectedDevice.device.name);
 
       // Check connection health
       const isConnected = await checkConnection();
@@ -276,6 +475,12 @@ export default function DeviceDetailPage() {
                 : "Never"}
             </Text>
           </View>
+          {device.serialNumber && (
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>Serial Number</Text>
+              <Text style={styles.statValue}>{device.serialNumber}</Text>
+            </View>
+          )}
         </View>
 
         {/* Alarms Section */}
@@ -286,12 +491,7 @@ export default function DeviceDetailPage() {
             </Text>
             <Pressable
               style={styles.addAlarmButton}
-              onPress={() =>
-                Alert.alert(
-                  "Coming Soon",
-                  "Alarm creation will be available soon!",
-                )
-              }
+              onPress={() => router.push(`/alarms/add/${device.id}`)}
             >
               <Text style={styles.addAlarmButtonText}>+ Add Alarm</Text>
             </Pressable>
@@ -327,6 +527,25 @@ export default function DeviceDetailPage() {
               </View>
             ) : (
               <Text style={styles.syncButtonText}>Sync Device</Text>
+            )}
+          </Pressable>
+          <Pressable
+            style={[
+              styles.detailsButton,
+              isGettingDetails && styles.buttonDisabled,
+            ]}
+            onPress={handleGetDeviceDetails}
+            disabled={isGettingDetails}
+          >
+            {isGettingDetails ? (
+              <View style={styles.syncingContainer}>
+                <ActivityIndicator size="small" color="white" />
+                <Text style={styles.detailsButtonText}>Getting Details...</Text>
+              </View>
+            ) : (
+              <Text style={styles.detailsButtonText}>
+                Get Device Details & Time
+              </Text>
             )}
           </Pressable>
           <Pressable
@@ -593,6 +812,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   syncButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  detailsButton: {
+    backgroundColor: "#10b981",
+    paddingVertical: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  detailsButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",

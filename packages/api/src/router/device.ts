@@ -93,6 +93,10 @@ export const deviceRouter = {
       z.object({
         title: z.string().min(1),
         description: z.string().min(1),
+        serialNumber: z.string().optional(),
+        batteryLevel: z.number().int().min(0).max(100).optional(),
+        // firmwareVersion is not stored in DB, only used for initial pairing info
+        firmwareVersion: z.string().optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -101,6 +105,8 @@ export const deviceRouter = {
         .values({
           title: input.title,
           description: input.description,
+          serialNumber: input.serialNumber,
+          batteryLevel: input.batteryLevel ?? 100,
           userId: ctx.session.user.id,
         })
         .returning();
@@ -115,6 +121,7 @@ export const deviceRouter = {
         id: z.string(),
         title: z.string().min(1).optional(),
         description: z.string().min(1).optional(),
+        serialNumber: z.string().optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -145,6 +152,94 @@ export const deviceRouter = {
       return result[0];
     }),
 
+  // Update device info from Bluetooth connection
+  updateFromBluetooth: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        serialNumber: z.string(),
+        batteryLevel: z.number().min(0).max(100).optional(),
+        firmwareVersion: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { id, serialNumber, batteryLevel, firmwareVersion } = input;
+
+      // First check if the device belongs to the current user
+      const existingDevice = await ctx.db
+        .select()
+        .from(Device)
+        .where(and(eq(Device.id, id), eq(Device.userId, ctx.session.user.id)))
+        .limit(1);
+
+      if (!existingDevice.length) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Device not found or you don't have permission to update it",
+        });
+      }
+
+      // Check if we already have this serial number stored and it matches
+      const currentDevice = existingDevice[0];
+      if (
+        currentDevice?.serialNumber &&
+        currentDevice.serialNumber !== serialNumber
+      ) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Serial number mismatch. Expected: ${currentDevice.serialNumber}, Got: ${serialNumber}. This might be a different device.`,
+        });
+      }
+
+      console.log("Updating device from Bluetooth connection:", {
+        id,
+        serialNumber,
+        batteryLevel,
+        firmwareVersion,
+      });
+
+      // Prepare update data
+      const updateData: any = {
+        serialNumber,
+        lastSync: new Date(),
+        syncStatus: "SYNCED" as const,
+      };
+
+      if (batteryLevel !== undefined) {
+        updateData.batteryLevel = batteryLevel;
+      }
+
+      const result = await ctx.db
+        .update(Device)
+        .set(updateData)
+        .where(eq(Device.id, id))
+        .returning();
+
+      return result[0];
+    }),
+
+  // Find device by serial number (for connection verification)
+  findBySerialNumber: protectedProcedure
+    .input(
+      z.object({
+        serialNumber: z.string(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const device = await ctx.db
+        .select()
+        .from(Device)
+        .where(
+          and(
+            eq(Device.serialNumber, input.serialNumber),
+            eq(Device.userId, ctx.session.user.id),
+          ),
+        )
+        .limit(1);
+
+      return device[0] ?? null;
+    }),
+
   // Delete device (only if it belongs to the current user)
   delete: protectedProcedure
     .input(
@@ -169,6 +264,7 @@ export const deviceRouter = {
         });
       }
 
+      // Delete the device - alarms will be cascade deleted automatically by the database
       await ctx.db.delete(Device).where(eq(Device.id, input.id));
 
       return { success: true };

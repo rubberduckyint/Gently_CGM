@@ -1,10 +1,27 @@
 // Bluetooth service types and interfaces
 import type { Device } from "react-native-ble-plx";
 
+import type {
+  AdvertisementData,
+  DeviceInformation,
+  GentlyBLEProtocol,
+} from "./protocol";
+
 export interface BluetoothDevice {
   id: string;
   name: string;
   rssi: number;
+  advertisementData?: AdvertisementData;
+  manufacturerData?: {
+    isGentlyDevice: boolean;
+    isFactoryMode?: boolean | null;
+    serialNumber?: string;
+    batteryLevel?: number;
+    charging?: boolean;
+    anyEventActive?: boolean;
+    decryptionFailed?: boolean;
+    [key: string]: unknown;
+  };
 }
 
 export type ConnectionStatus =
@@ -35,4 +52,6 @@ export interface BluetoothState {
   connectedDevice: Device | null;
   connectionStatus: ConnectionStatus;
   lastError: string | null;
+  protocol: GentlyBLEProtocol | null;
+  deviceInformation: DeviceInformation | null;
 }

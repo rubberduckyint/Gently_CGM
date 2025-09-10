@@ -29,6 +29,8 @@ import {
 import { authClient } from "~/utils/auth";
 
 export default function SettingsPage() {
+  console.log("📱 SettingsPage: Component loaded successfully");
+
   const { data: session } = authClient.useSession();
   const [name, setName] = useState(session?.user?.name || "");
   const [email, setEmail] = useState(session?.user?.email || "");

@@ -39,6 +39,20 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="settings"
+          options={{
+            title: "Settings",
+            headerShown: true,
+          }}
+        />
+        <Stack.Screen
+          name="add-device/index"
+          options={{
+            title: "Add Device",
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
           name="devices/[id]"
           options={{
             title: "Device Details",

@@ -1,8 +1,9 @@
 // React Hook for Bluetooth functionality
-import type { Device } from "react-native-ble-plx";
+import type { Device, State } from "react-native-ble-plx";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BleManager, State } from "react-native-ble-plx";
+import { BleManager } from "react-native-ble-plx";
 
+import type { SecureConnectionResult } from "./connection";
 import type {
   BluetoothDevice,
   BluetoothState,
@@ -10,12 +11,8 @@ import type {
   ScanCallbacks,
   ScanOptions,
 } from "./types";
-import {
-  connectToDevice,
-  disconnectDevice,
-  isDeviceConnected,
-} from "./connection";
-import { readDeviceInfo } from "./deviceData";
+import { connectToGentlyDevice } from "./connection";
+import { initializeBluetooth } from "./permissions";
 import { startDeviceScan, stopDeviceScan } from "./scanning";
 
 /**
@@ -25,20 +22,52 @@ import { startDeviceScan, stopDeviceScan } from "./scanning";
 export function useBluetooth() {
   const managerRef = useRef<BleManager | null>(null);
   const stopScanRef = useRef<(() => void) | null>(null);
+  const scannedDevicesRef = useRef<Map<string, BluetoothDevice>>(new Map());
+  const [isInitialized, setIsInitialized] = useState(false);
 
   const [state, setState] = useState<BluetoothState>({
     isScanning: false,
     connectedDevice: null,
     connectionStatus: "disconnected",
     lastError: null,
+    protocol: null,
+    deviceInformation: null,
   });
 
-  // Initialize manager
+  // Initialize manager and Bluetooth
   useEffect(() => {
-    managerRef.current = new BleManager();
+    const initManager = async () => {
+      managerRef.current = new BleManager();
+
+      try {
+        const initialized = await initializeBluetooth(managerRef.current);
+        setIsInitialized(initialized);
+
+        if (!initialized) {
+          const errorMsg =
+            "Failed to initialize Bluetooth. Please check permissions and enable Bluetooth.";
+          setState((prev) => ({
+            ...prev,
+            lastError: errorMsg,
+          }));
+        }
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Bluetooth initialization failed";
+        setState((prev) => ({
+          ...prev,
+          lastError: errorMessage,
+        }));
+      }
+    };
+
+    void initManager();
+
     return () => {
       if (managerRef.current) {
-        managerRef.current.destroy();
+        void managerRef.current.destroy();
       }
     };
   }, []);
@@ -53,12 +82,18 @@ export function useBluetooth() {
 
   // Start scanning for devices
   const startScan = useCallback(
-    async (
+    (
       onDeviceFound: (device: BluetoothDevice) => void,
       options?: ScanOptions,
-    ): Promise<void> => {
+    ) => {
       if (!managerRef.current) {
         throw new Error("Bluetooth manager not initialized");
+      }
+
+      if (!isInitialized) {
+        throw new Error(
+          "Bluetooth not initialized. Please check permissions and enable Bluetooth.",
+        );
       }
 
       // Stop any existing scan
@@ -66,10 +101,17 @@ export function useBluetooth() {
         stopScanRef.current();
       }
 
+      // Clear previously scanned devices
+      scannedDevicesRef.current.clear();
+
       setState((prev) => ({ ...prev, isScanning: true, lastError: null }));
 
       const callbacks: ScanCallbacks = {
-        onDeviceFound,
+        onDeviceFound: (device) => {
+          // Store the device with its advertisement data
+          scannedDevicesRef.current.set(device.id, device);
+          onDeviceFound(device);
+        },
         onError: (error) => {
           setState((prev) => ({
             ...prev,
@@ -84,13 +126,14 @@ export function useBluetooth() {
       };
 
       try {
-        const stopFunction = await startDeviceScan(
+        const stopFunction = startDeviceScan(
           managerRef.current,
           callbacks,
           options,
         );
         stopScanRef.current = stopFunction;
       } catch (error) {
+        console.error("❌ Failed to start device scan:", error);
         setState((prev) => ({
           ...prev,
           isScanning: false,
@@ -98,7 +141,7 @@ export function useBluetooth() {
         }));
       }
     },
-    [],
+    [isInitialized],
   );
 
   // Stop scanning
@@ -115,50 +158,75 @@ export function useBluetooth() {
     setState((prev) => ({ ...prev, isScanning: false }));
   }, []);
 
-  // Connect to device
-  const connect = useCallback(async (deviceId: string): Promise<Device> => {
-    if (!managerRef.current) {
-      throw new Error("Bluetooth manager not initialized");
-    }
+  // Connect to device using Gently protocol
+  const connect = useCallback(
+    async (deviceId: string): Promise<SecureConnectionResult> => {
+      if (!managerRef.current) {
+        throw new Error("Bluetooth manager not initialized");
+      }
 
-    setState((prev) => ({
-      ...prev,
-      connectionStatus: "connecting",
-      lastError: null,
-    }));
-
-    try {
-      const device = await connectToDevice(managerRef.current, deviceId);
       setState((prev) => ({
         ...prev,
-        connectedDevice: device,
-        connectionStatus: "connected",
+        connectionStatus: "connecting",
+        lastError: null,
       }));
-      return device;
-    } catch (error) {
-      setState((prev) => ({
-        ...prev,
-        connectionStatus: "error",
-        lastError: error instanceof Error ? error.message : "Unknown error",
-      }));
-      throw error;
-    }
-  }, []);
+
+      try {
+        // Get the stored device data including advertisement data
+        const scannedDevice = scannedDevicesRef.current.get(deviceId);
+        const advertisementData = scannedDevice?.advertisementData;
+
+        console.log(
+          "🔗 useBluetooth: Connecting with advertisement data:",
+          advertisementData ? "Available" : "Not available",
+        );
+
+        const result = await connectToGentlyDevice(
+          managerRef.current,
+          deviceId,
+          advertisementData,
+        );
+
+        setState((prev) => ({
+          ...prev,
+          connectedDevice: result.device,
+          protocol: result.protocol,
+          deviceInformation: result.deviceInfo,
+          connectionStatus: "connected",
+        }));
+
+        return result;
+      } catch (error) {
+        console.error("❌ useBluetooth: Failed to connect:", error);
+        setState((prev) => ({
+          ...prev,
+          connectionStatus: "error",
+          lastError: error instanceof Error ? error.message : "Unknown error",
+        }));
+        throw error;
+      }
+    },
+    [],
+  );
 
   // Disconnect from device
   const disconnect = useCallback(async (): Promise<void> => {
-    if (!managerRef.current || !state.connectedDevice) {
+    if (!state.connectedDevice) {
       return;
     }
 
     try {
-      await disconnectDevice(managerRef.current, state.connectedDevice);
+      await state.connectedDevice.cancelConnection();
+
       setState((prev) => ({
         ...prev,
         connectedDevice: null,
+        protocol: null,
+        deviceInformation: null,
         connectionStatus: "disconnected",
       }));
     } catch (error) {
+      console.error("❌ useBluetooth: Failed to disconnect:", error);
       setState((prev) => ({
         ...prev,
         lastError: error instanceof Error ? error.message : "Unknown error",
@@ -167,47 +235,64 @@ export function useBluetooth() {
     }
   }, [state.connectedDevice]);
 
-  // Get device info
+  // Get device info using stored device information
   const getDeviceInfo = useCallback(
-    async (device?: Device): Promise<DeviceInfo> => {
-      const targetDevice = device || state.connectedDevice;
-      if (!targetDevice) {
-        throw new Error("No device connected");
+    (device?: Device): DeviceInfo => {
+      const targetDevice = device ?? state.connectedDevice;
+      const deviceInfo = state.deviceInformation;
+
+      if (!targetDevice || !deviceInfo) {
+        throw new Error(
+          "No device connected or device information not available",
+        );
       }
 
-      try {
-        return await readDeviceInfo(targetDevice);
-      } catch (error) {
-        setState((prev) => ({
-          ...prev,
-          lastError: error instanceof Error ? error.message : "Unknown error",
-        }));
-        throw error;
-      }
+      // Convert protocol device info to our DeviceInfo format
+      // For now, using mock data since DeviceInformation doesn't have all fields
+      return {
+        serialNumber: `GNT-${deviceInfo.hardwareVersion}-${deviceInfo.firmwareBuildNumber}`,
+        firmwareVersion: `${deviceInfo.firmwareVersionMajor}.${deviceInfo.firmwareVersionMinor}.${deviceInfo.firmwareBuildNumber}`,
+        batteryLevel: 85, // Mock battery level - would need separate battery status command
+      };
     },
-    [state.connectedDevice],
+    [state.connectedDevice, state.deviceInformation],
   );
 
   // Check connection status
   const checkConnection = useCallback(async (): Promise<boolean> => {
+    console.log("🔍 useBluetooth: Checking connection status...");
+
     if (!state.connectedDevice) {
+      console.log("❌ useBluetooth: No connected device");
       return false;
     }
 
     try {
-      const connected = await isDeviceConnected(state.connectedDevice);
+      console.log("🔍 useBluetooth: Checking device connection status...");
+      const connected = await state.connectedDevice.isConnected();
+
+      console.log("🔍 useBluetooth: Connection status:", connected);
+
       if (!connected) {
+        console.log(
+          "❌ useBluetooth: Device is no longer connected, updating state",
+        );
         setState((prev) => ({
           ...prev,
           connectedDevice: null,
+          protocol: null,
+          deviceInformation: null,
           connectionStatus: "disconnected",
         }));
       }
       return connected;
-    } catch {
+    } catch (error) {
+      console.error("❌ useBluetooth: Error checking connection:", error);
       setState((prev) => ({
         ...prev,
         connectedDevice: null,
+        protocol: null,
+        deviceInformation: null,
         connectionStatus: "disconnected",
       }));
       return false;
@@ -217,6 +302,7 @@ export function useBluetooth() {
   return {
     // State
     ...state,
+    isInitialized,
 
     // Actions
     getBluetoothState,
