@@ -1,19 +1,20 @@
 /**
  * Design System Typography
- * 
+ *
  * Consistent text styles and typography scales
  */
 
-import type { TextStyle } from 'react-native';
-import { colors } from './colors';
+import type { TextStyle } from "react-native";
+
+import { colors } from "./colors";
 
 // Font weights
 export const fontWeights = {
-  normal: '400' as TextStyle['fontWeight'],
-  medium: '500' as TextStyle['fontWeight'],
-  semibold: '600' as TextStyle['fontWeight'],
-  bold: '700' as TextStyle['fontWeight'],
-  extrabold: '800' as TextStyle['fontWeight'],
+  normal: "400" as TextStyle["fontWeight"],
+  medium: "500" as TextStyle["fontWeight"],
+  semibold: "600" as TextStyle["fontWeight"],
+  bold: "700" as TextStyle["fontWeight"],
+  extrabold: "800" as TextStyle["fontWeight"],
 } as const;
 
 // Font sizes
@@ -23,10 +24,10 @@ export const fontSizes = {
   base: 16,
   lg: 18,
   xl: 20,
-  '2xl': 24,
-  '3xl': 30,
-  '4xl': 36,
-  '5xl': 48,
+  "2xl": 24,
+  "3xl": 30,
+  "4xl": 36,
+  "5xl": 48,
 } as const;
 
 // Line heights
@@ -40,23 +41,23 @@ export const lineHeights = {
 export const typography = {
   // Headings
   h1: {
-    fontSize: fontSizes['4xl'],
+    fontSize: fontSizes["4xl"],
     fontWeight: fontWeights.bold,
-    lineHeight: fontSizes['4xl'] * lineHeights.tight,
+    lineHeight: fontSizes["4xl"] * lineHeights.tight,
     color: colors.text.primary,
   } as TextStyle,
 
   h2: {
-    fontSize: fontSizes['3xl'],
+    fontSize: fontSizes["3xl"],
     fontWeight: fontWeights.bold,
-    lineHeight: fontSizes['3xl'] * lineHeights.tight,
+    lineHeight: fontSizes["3xl"] * lineHeights.tight,
     color: colors.text.primary,
   } as TextStyle,
 
   h3: {
-    fontSize: fontSizes['2xl'],
+    fontSize: fontSizes["2xl"],
     fontWeight: fontWeights.semibold,
-    lineHeight: fontSizes['2xl'] * lineHeights.tight,
+    lineHeight: fontSizes["2xl"] * lineHeights.tight,
     color: colors.text.primary,
   } as TextStyle,
 
@@ -189,7 +190,7 @@ export const textColors = {
 
 // Text alignment utilities
 export const textAlign = {
-  left: { textAlign: 'left' as const },
-  center: { textAlign: 'center' as const },
-  right: { textAlign: 'right' as const },
+  left: { textAlign: "left" as const },
+  center: { textAlign: "center" as const },
+  right: { textAlign: "right" as const },
 } as const;

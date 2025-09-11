@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
-import type { AlarmFormData } from "../[deviceId]";
+import type { AlarmFormData } from "../../app/alarms/add/[deviceId]";
 import {
   buttons,
   buttonText,

@@ -16,7 +16,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useMutation } from "@tanstack/react-query";
 
-import { NavigationBar } from "~/components/NavigationBar";
 import {
   buttons,
   buttonText,
@@ -29,14 +28,12 @@ import {
 import { authClient } from "~/utils/auth";
 
 export default function SettingsPage() {
-  console.log("📱 SettingsPage: Component loaded successfully");
-
   const { data: session } = authClient.useSession();
-  const [name, setName] = useState(session?.user?.name || "");
-  const [email, setEmail] = useState(session?.user?.email || "");
+  const [name, setName] = useState(session?.user.name ?? "");
+  const [_email] = useState(session?.user.email ?? "");
 
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: { name: string }) => {
+    mutationFn: async (_data: { name: string }) => {
       // Implement the actual update profile API call here
       // This is a placeholder for the actual implementation
       return await new Promise((resolve) => {
@@ -46,7 +43,7 @@ export default function SettingsPage() {
     onSuccess: () => {
       Alert.alert("Success", "Profile updated successfully!");
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       Alert.alert("Error", error.message || "Failed to update profile");
     },
   });
@@ -82,7 +79,7 @@ export default function SettingsPage() {
             <Text style={inputs.label}>Email Address</Text>
             <TextInput
               style={[inputs.base, { backgroundColor: colors.gray[100] }]}
-              value={email}
+              value={_email}
               placeholder="Email address"
               placeholderTextColor={colors.text.tertiary}
               editable={false}

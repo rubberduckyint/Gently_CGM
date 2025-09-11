@@ -18,9 +18,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@better-auth/expo": "1.3.4",
     "@gently/db": "workspace:*",
     "@gently/email": "workspace:*",
-    "@better-auth/expo": "1.3.4",
     "@t3-oss/env-nextjs": "^0.13.8",
     "better-auth": "1.3.4",
     "next": "^15.4.4",
@@ -29,10 +29,10 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@better-auth/cli": "1.3.3",
     "@gently/eslint-config": "workspace:*",
     "@gently/prettier-config": "workspace:*",
     "@gently/tsconfig": "workspace:*",
-    "@better-auth/cli": "1.3.3",
     "@types/react": "catalog:react19",
     "eslint": "catalog:",
     "prettier": "catalog:",

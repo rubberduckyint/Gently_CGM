@@ -1,6 +1,6 @@
 /**
  * Design System Spacing
- * 
+ *
  * Consistent spacing scale based on a 4px grid system
  */
 
@@ -33,8 +33,8 @@ export const semanticSpacing = {
   md: spacing[4], // 16px
   lg: spacing[6], // 24px
   xl: spacing[8], // 32px
-  '2xl': spacing[12], // 48px
-  '3xl': spacing[16], // 64px
+  "2xl": spacing[12], // 48px
+  "3xl": spacing[16], // 64px
 } as const;
 
 // Margin utilities
@@ -44,13 +44,13 @@ export const margin = {
   mb: (value: keyof typeof spacing) => ({ marginBottom: spacing[value] }),
   ml: (value: keyof typeof spacing) => ({ marginLeft: spacing[value] }),
   mr: (value: keyof typeof spacing) => ({ marginRight: spacing[value] }),
-  mx: (value: keyof typeof spacing) => ({ 
-    marginLeft: spacing[value], 
-    marginRight: spacing[value] 
+  mx: (value: keyof typeof spacing) => ({
+    marginLeft: spacing[value],
+    marginRight: spacing[value],
   }),
-  my: (value: keyof typeof spacing) => ({ 
-    marginTop: spacing[value], 
-    marginBottom: spacing[value] 
+  my: (value: keyof typeof spacing) => ({
+    marginTop: spacing[value],
+    marginBottom: spacing[value],
   }),
 } as const;
 
@@ -61,13 +61,13 @@ export const padding = {
   pb: (value: keyof typeof spacing) => ({ paddingBottom: spacing[value] }),
   pl: (value: keyof typeof spacing) => ({ paddingLeft: spacing[value] }),
   pr: (value: keyof typeof spacing) => ({ paddingRight: spacing[value] }),
-  px: (value: keyof typeof spacing) => ({ 
-    paddingLeft: spacing[value], 
-    paddingRight: spacing[value] 
+  px: (value: keyof typeof spacing) => ({
+    paddingLeft: spacing[value],
+    paddingRight: spacing[value],
   }),
-  py: (value: keyof typeof spacing) => ({ 
-    paddingTop: spacing[value], 
-    paddingBottom: spacing[value] 
+  py: (value: keyof typeof spacing) => ({
+    paddingTop: spacing[value],
+    paddingBottom: spacing[value],
   }),
 } as const;
 
@@ -85,14 +85,16 @@ export const borderRadius = {
   md: 6,
   lg: 8,
   xl: 12,
-  '2xl': 16,
-  '3xl': 24,
+  "2xl": 16,
+  "3xl": 24,
   full: 9999,
 } as const;
 
 // Border utilities
 export const border = {
-  radius: (value: keyof typeof borderRadius) => ({ borderRadius: borderRadius[value] }),
+  radius: (value: keyof typeof borderRadius) => ({
+    borderRadius: borderRadius[value],
+  }),
   radiusTop: (value: keyof typeof borderRadius) => ({
     borderTopLeftRadius: borderRadius[value],
     borderTopRightRadius: borderRadius[value],

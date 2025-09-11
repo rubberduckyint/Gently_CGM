@@ -199,7 +199,7 @@ export const deviceRouter = {
       });
 
       // Prepare update data
-      const updateData: any = {
+      const updateData: Partial<typeof Device.$inferInsert> = {
         serialNumber,
         lastSync: new Date(),
         syncStatus: "SYNCED" as const,

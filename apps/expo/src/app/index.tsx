@@ -12,19 +12,19 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
-import { authClient } from "~/utils/auth";
 import {
-  colors,
-  typography,
-  spacing,
-  containers,
-  flex,
   buttons,
   buttonText,
-  inputs,
+  colors,
   commonStyles,
+  containers,
   dividers,
+  flex,
+  inputs,
+  spacing,
+  typography,
 } from "~/styles";
+import { authClient } from "~/utils/auth";
 
 export default function LoginPage() {
   const { data: session, isPending } = authClient.useSession();
@@ -100,7 +100,12 @@ export default function LoginPage() {
       <SafeAreaView style={containers.safeArea}>
         <View style={commonStyles.fullScreenLoading}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
-          <Text style={[typography.body, { marginTop: spacing[4], color: colors.text.secondary }]}>
+          <Text
+            style={[
+              typography.body,
+              { marginTop: spacing[4], color: colors.text.secondary },
+            ]}
+          >
             Loading...
           </Text>
         </View>
@@ -118,7 +123,7 @@ export default function LoginPage() {
           {/* Header */}
           <View style={commonStyles.headerSection}>
             <Text style={typography.h1}>Welcome to Gently</Text>
-            <Text style={[typography.subtitle, { textAlign: 'center' }]}>
+            <Text style={[typography.subtitle, { textAlign: "center" }]}>
               {emailSent
                 ? "Check your email for a sign-in link"
                 : "Sign in to your account"}
@@ -149,7 +154,7 @@ export default function LoginPage() {
                   buttons.base,
                   buttons.large,
                   buttons.primary,
-                  isLoading && buttons.disabled
+                  isLoading && buttons.disabled,
                 ]}
                 onPress={handleEmailAuth}
                 disabled={isLoading}
@@ -157,16 +162,26 @@ export default function LoginPage() {
                 {isLoading ? (
                   <ActivityIndicator color={colors.text.inverse} />
                 ) : (
-                  <Text style={buttonText.primary}>
-                    Send Sign-In Link
-                  </Text>
+                  <Text style={buttonText.primary}>Send Sign-In Link</Text>
                 )}
               </Pressable>
 
               {/* Divider */}
-              <View style={[commonStyles.dividerWithText, { marginVertical: spacing[6] }]}>
+              <View
+                style={[
+                  commonStyles.dividerWithText,
+                  { marginVertical: spacing[6] },
+                ]}
+              >
                 <View style={dividers.line} />
-                <Text style={[typography.caption, { paddingHorizontal: spacing[4] }]}>or</Text>
+                <Text
+                  style={[
+                    typography.caption,
+                    { paddingHorizontal: spacing[4] },
+                  ]}
+                >
+                  or
+                </Text>
                 <View style={dividers.line} />
               </View>
 
@@ -176,7 +191,7 @@ export default function LoginPage() {
                   buttons.base,
                   buttons.large,
                   buttons.secondary,
-                  isLoading && buttons.disabled
+                  isLoading && buttons.disabled,
                 ]}
                 onPress={handleGoogleAuth}
                 disabled={isLoading}
@@ -188,10 +203,29 @@ export default function LoginPage() {
 
           {emailSent && (
             <View style={[flex.itemsCenter, { paddingVertical: spacing[8] }]}>
-              <Text style={[typography.h5, { color: colors.success[600], textAlign: 'center', marginBottom: spacing[3] }]}>
+              <Text
+                style={[
+                  typography.h5,
+                  {
+                    color: colors.success[600],
+                    textAlign: "center",
+                    marginBottom: spacing[3],
+                  },
+                ]}
+              >
                 A sign-in link has been sent to {email}
               </Text>
-              <Text style={[typography.body, { color: colors.text.secondary, textAlign: 'center', lineHeight: 24, marginBottom: spacing[6] }]}>
+              <Text
+                style={[
+                  typography.body,
+                  {
+                    color: colors.text.secondary,
+                    textAlign: "center",
+                    lineHeight: 24,
+                    marginBottom: spacing[6],
+                  },
+                ]}
+              >
                 Click the link in your email to complete sign-in. You can close
                 this screen.
               </Text>
@@ -202,16 +236,19 @@ export default function LoginPage() {
                   setEmail("");
                 }}
               >
-                <Text style={buttonText.ghost}>
-                  Try with different email
-                </Text>
+                <Text style={buttonText.ghost}>Try with different email</Text>
               </Pressable>
             </View>
           )}
 
           {/* Footer */}
           <View style={[flex.itemsCenter, { marginTop: spacing[12] }]}>
-            <Text style={[typography.caption, { textAlign: 'center', color: colors.text.tertiary }]}>
+            <Text
+              style={[
+                typography.caption,
+                { textAlign: "center", color: colors.text.tertiary },
+              ]}
+            >
               Manage your devices and gentle alarms with ease
             </Text>
           </View>
@@ -220,4 +257,3 @@ export default function LoginPage() {
     </SafeAreaView>
   );
 }
-

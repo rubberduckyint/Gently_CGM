@@ -160,14 +160,16 @@ async function seedUsers() {
   return users;
 }
 
-async function seedDevices(users: { id: string; name: string; isAdmin?: boolean }[]) {
+async function seedDevices(
+  users: { id: string; name: string; isAdmin?: boolean }[],
+) {
   console.log("🖥️ Seeding devices...");
 
   const devices = [];
 
   for (const currentUser of users) {
     // Admin users get at least 1 device, regular users get random amount
-    const deviceCount = currentUser.isAdmin 
+    const deviceCount = currentUser.isAdmin
       ? Math.max(1, randomBetween(1, SEED_CONFIG.devicesPerUser))
       : randomBetween(1, SEED_CONFIG.devicesPerUser);
 
@@ -214,11 +216,11 @@ async function seedAlarms(
 
   for (const device of devices) {
     // Find the user for this device to check if they're admin
-    const deviceOwner = users.find(user => user.id === device.userId);
+    const deviceOwner = users.find((user) => user.id === device.userId);
     const isAdminDevice = deviceOwner?.isAdmin ?? false;
-    
+
     // Admin users get more alarms (3-8), regular users get the configured amount (2-8)
-    const alarmCount = isAdminDevice 
+    const alarmCount = isAdminDevice
       ? randomBetween(3, SEED_CONFIG.alarmsPerDevice)
       : randomBetween(2, SEED_CONFIG.alarmsPerDevice);
 

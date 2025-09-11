@@ -41,10 +41,10 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@faker-js/faker": "^9.9.0",
     "@gently/eslint-config": "workspace:*",
     "@gently/prettier-config": "workspace:*",
     "@gently/tsconfig": "workspace:*",
-    "@faker-js/faker": "^9.9.0",
     "@types/pg": "^8.15.4",
     "dotenv-cli": "^8.0.0",
     "drizzle-kit": "^0.31.4",

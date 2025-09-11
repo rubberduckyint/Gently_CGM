@@ -1,13 +1,14 @@
 /**
  * Design System Components
- * 
+ *
  * Reusable component styles for buttons, inputs, cards, etc.
  */
 
-import type { ViewStyle, TextStyle } from 'react-native';
-import { colors } from './colors';
-import { typography, fontWeights } from './typography';
-import { spacing, borderRadius } from './spacing';
+import type { TextStyle, ViewStyle } from "react-native";
+
+import { colors } from "./colors";
+import { borderRadius, spacing } from "./spacing";
+import { fontWeights, typography } from "./typography";
 
 // Button styles
 export const buttons = {
@@ -16,9 +17,9 @@ export const buttons = {
     paddingVertical: spacing[3], // 12px
     paddingHorizontal: spacing[4], // 16px
     borderRadius: borderRadius.lg, // 8px
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
   } as ViewStyle,
 
   // Button sizes
@@ -64,13 +65,13 @@ export const buttons = {
   } as ViewStyle,
 
   outline: {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: colors.border.medium,
   } as ViewStyle,
 
   ghost: {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   } as ViewStyle,
 
   // Button states
@@ -189,7 +190,7 @@ export const cards = {
     borderRadius: borderRadius.lg, // 8px
     padding: spacing[4], // 16px
     marginBottom: spacing[4], // 16px
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
@@ -232,8 +233,8 @@ export const cards = {
 // Avatar styles
 export const avatars = {
   base: {
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     borderRadius: borderRadius.full,
   } as ViewStyle,
 
@@ -276,8 +277,8 @@ export const badges = {
     paddingHorizontal: spacing[2], // 8px
     paddingVertical: spacing[1], // 4px
     borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   } as ViewStyle,
 
   primary: {
@@ -336,8 +337,8 @@ export const listItems = {
   } as ViewStyle,
 
   content: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   } as ViewStyle,
 
   title: {
@@ -352,7 +353,7 @@ export const listItems = {
   } as TextStyle,
 
   trailing: {
-    marginLeft: 'auto',
+    marginLeft: "auto",
   } as ViewStyle,
 
   interactive: {
