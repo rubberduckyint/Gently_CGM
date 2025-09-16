@@ -4,6 +4,6 @@ export * from "./permissions";
 export * from "./scanning";
 export * from "./connection";
 export * from "./commands";
-export * from "./useBluetooth";
 export * from "./protocol";
 export * from "./encryption";
+export * from "./BluetoothContext";

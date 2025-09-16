@@ -221,16 +221,16 @@ export function decryptData(
 }
 
 /**
- * Generate dynamic key from bracelet key, uptime, and serial number
+ * Generate dynamic key from bracelet key, uptime, and bluetooth device ID
  * @param braceletKey - 16-byte bracelet key
  * @param uptime - 8-byte uptime from device
- * @param serialNumber - 8-byte serial number
+ * @param bluetoothDeviceId - 8-byte bluetooth device ID
  * @returns 16-byte dynamic key
  */
 export function generateDynamicKey(
   braceletKey: Uint8Array,
   uptime: Uint8Array,
-  serialNumber: Uint8Array,
+  bluetoothDeviceId: Uint8Array,
 ): Uint8Array {
   if (braceletKey.length !== 16) {
     throw new Error("Bracelet key must be 16 bytes");
@@ -238,20 +238,20 @@ export function generateDynamicKey(
   if (uptime.length !== 8) {
     throw new Error("Uptime must be 8 bytes");
   }
-  if (serialNumber.length !== 8) {
-    throw new Error("Serial number must be 8 bytes");
+  if (bluetoothDeviceId.length !== 8) {
+    throw new Error("Bluetooth device ID must be 8 bytes");
   }
 
-  // Create the second part: uptime XOR serialNumber
-  const uptimeXorSerial = new Uint8Array(8);
+  // Create the second part: uptime XOR bluetoothDeviceId
+  const uptimeXorDeviceId = new Uint8Array(8);
   for (let i = 0; i < 8; i++) {
-    uptimeXorSerial[i] = (uptime[i] ?? 0) ^ (serialNumber[i] ?? 0);
+    uptimeXorDeviceId[i] = (uptime[i] ?? 0) ^ (bluetoothDeviceId[i] ?? 0);
   }
 
-  // Concatenate uptime and (uptime XOR serialNumber) to form 16 bytes
+  // Concatenate uptime and (uptime XOR bluetoothDeviceId) to form 16 bytes
   const combinedBytes = new Uint8Array(16);
   combinedBytes.set(uptime, 0);
-  combinedBytes.set(uptimeXorSerial, 8);
+  combinedBytes.set(uptimeXorDeviceId, 8);
 
   // XOR bracelet key with combined bytes
   const dynamicKey = new Uint8Array(16);

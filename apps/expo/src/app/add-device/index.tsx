@@ -12,7 +12,7 @@ import {
   ScanningStep,
   SuccessStep,
 } from "~/components/add-device";
-import { useBluetooth } from "~/services/bluetooth";
+import { useBluetoothContext } from "~/services/bluetooth/BluetoothContext";
 import {
   buttons,
   buttonText,
@@ -46,16 +46,15 @@ export default function AddDevicePage() {
   const foundDeviceIds = useRef(new Set<string>());
   const hasStartedInitialScan = useRef(false);
 
-  console.log("🔧 AddDevicePage: Setting up useBluetooth hook...");
+  console.log("🔧 AddDevicePage: Setting up useBluetoothContext hook...");
   const {
     startScan: bluetoothStartScan,
     stopScan,
     connect,
-    disconnect,
     connectedDevice,
-    isInitialized,
     lastError: bluetoothError,
-  } = useBluetooth();
+    isInitialized,
+  } = useBluetoothContext();
 
   const addDeviceMutation = useMutation({
     mutationFn: async (params: {
@@ -141,7 +140,7 @@ export default function AddDevicePage() {
     }
   }, []);
 
-  const startScan = useCallback(() => {
+  const startScan = useCallback(async () => {
     console.log("🔍 AddDevicePage: startScan called");
 
     try {
@@ -167,23 +166,31 @@ export default function AddDevicePage() {
       setErrorMessage("");
 
       console.log("🔍 AddDevicePage: Calling bluetoothStartScan...");
-      bluetoothStartScan(handleDeviceFound, { timeout: 10000 });
+      await bluetoothStartScan(
+        { timeout: 10000 },
+        {
+          onDeviceFound: handleDeviceFound,
+          onError: (error) => {
+            console.error("❌ AddDevicePage: Scan error:", error);
+            setErrorMessage(error);
+            setStep("error");
+          },
+          onComplete: () => {
+            console.log("✅ AddDevicePage: Scan completed");
+            console.log(
+              "📊 AddDevicePage: Found device IDs:",
+              Array.from(foundDeviceIds.current),
+            );
+            console.log(
+              "📊 AddDevicePage: Found devices count:",
+              foundDeviceIds.current.size,
+            );
+            setStep("found");
+          },
+        },
+      );
 
       console.log("✅ AddDevicePage: Scan started");
-
-      // Set a timeout to move to found step
-      setTimeout(() => {
-        console.log("⏰ AddDevicePage: Scan timeout reached");
-        console.log(
-          "📊 AddDevicePage: Found device IDs:",
-          Array.from(foundDeviceIds.current),
-        );
-        console.log(
-          "📊 AddDevicePage: Found devices count:",
-          foundDeviceIds.current.size,
-        );
-        setStep("found");
-      }, 10000);
     } catch (error) {
       console.error("❌ AddDevicePage: Scan failed:", error);
       setErrorMessage(
@@ -212,9 +219,9 @@ export default function AddDevicePage() {
 
       console.log("✅ AddDevicePage: GENTLY PAIRING completed successfully");
 
-      // Convert protocol device info to our DeviceInfo format
+      // Convert protocol device info to our DeviceInfo format using the REAL serial number
       const info: DeviceInfo = {
-        serialNumber: `GNT-${connectionResult.deviceInfo.hardwareVersion}-${connectionResult.deviceInfo.firmwareBuildNumber}`,
+        serialNumber: connectionResult.serialNumber, // Use the actual serial number from advertisement data
         firmwareVersion: `${connectionResult.deviceInfo.firmwareVersionMajor}.${connectionResult.deviceInfo.firmwareVersionMinor}.${connectionResult.deviceInfo.firmwareBuildNumber}`,
         batteryLevel: 85, // Mock battery level - would need separate battery status command
       };
@@ -224,13 +231,16 @@ export default function AddDevicePage() {
       console.log(
         "💾 AddDevicePage: Automatically saving device after successful connection",
       );
+      console.log(
+        `💾 AddDevicePage: Using REAL serial number from advertisement data: ${connectionResult.serialNumber}`,
+      );
       const deviceTitle = device.name || "Unknown Device";
       const deviceDescription = `Bluetooth device (${device.id.slice(-6)})`;
 
       addDeviceMutation.mutate({
         title: deviceTitle,
         description: deviceDescription,
-        serialNumber: info.serialNumber,
+        serialNumber: info.serialNumber, // This will now be the real serial number from advertisement data
         bluetoothDeviceId: device.id, // Store the BLE device ID for future connections
         firmwareVersion: info.firmwareVersion,
         batteryLevel: info.batteryLevel,
@@ -312,13 +322,10 @@ export default function AddDevicePage() {
   // Cleanup effect that runs on unmount
   useEffect(() => {
     return () => {
-      console.log("🧹 AddDevicePage: Cleaning up...");
+      console.log("🧹 AddDevicePage: Cleaning up and stopping scan...");
       stopScan();
-      if (connectedDevice) {
-        void disconnect();
-      }
     };
-  }, [stopScan, connectedDevice, disconnect]);
+  }, [stopScan, connectedDevice]);
 
   const renderStep = () => {
     switch (step) {

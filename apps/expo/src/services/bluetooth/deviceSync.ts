@@ -1,5 +1,5 @@
 import type { SecureConnectionResult } from "./connection";
-import { readComprehensiveDeviceDetails } from "./deviceData";
+import { readComprehensiveDeviceDetails } from "./commands";
 
 export interface SyncResult {
   success: boolean;

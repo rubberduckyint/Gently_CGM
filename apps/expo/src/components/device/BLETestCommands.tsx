@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -13,8 +13,10 @@ import { State } from "react-native-ble-plx";
 
 import type { SecureConnectionResult } from "~/services/bluetooth/connection";
 import type { DeviceInfo } from "~/services/bluetooth/types";
-import { useBluetooth } from "~/services/bluetooth";
+import { useBluetoothContext } from "~/services/bluetooth/BluetoothContext";
 import { readComprehensiveDeviceDetails } from "~/services/bluetooth/commands/comprehensive";
+import { sendSecureCommand } from "~/services/bluetooth/commands/core";
+import { CommandCode } from "~/services/bluetooth/protocol";
 import { colors, spacing, typography } from "~/styles";
 
 // Temporary type extension until database schema is migrated
@@ -47,13 +49,59 @@ export function BLETestCommands({
   const [isTesting, setIsTesting] = useState(false);
   const [lastResult, setLastResult] = useState<string>("");
   const [testingCommand, setTestingCommand] = useState<string>("");
+  const [logs, setLogs] = useState<string[]>([]);
   const [deviceDetails, setDeviceDetails] = useState<{
     deviceInfo: DeviceInfo;
     deviceTime: Date;
     batteryLevel: number;
     timestamp: Date;
   } | null>(null);
-  const { connectById, disconnect, getBluetoothState } = useBluetooth();
+  const isTestingActiveRef = useRef(false);
+  const { connectBySerialNumber, disconnect, getBluetoothState, stopScan } =
+    useBluetoothContext();
+
+  // Cleanup any ongoing operations when modal closes
+  useEffect(() => {
+    if (!visible && isTestingActiveRef.current) {
+      console.log(
+        "🛑 BLETestCommands: Modal closed, cancelling ongoing operations",
+      );
+      isTestingActiveRef.current = false;
+      stopScan();
+    }
+  }, [visible, stopScan]);
+
+  const addLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const logMessage = `[${timestamp}] ${message}`;
+    setLogs((prev) => [...prev, logMessage]);
+  };
+
+  // Override console.log temporarily during tests to capture logs
+  const originalConsoleLog = console.log;
+  const originalConsoleError = console.error;
+
+  const captureConsoleLogs = () => {
+    console.log = (...args) => {
+      const message = args.join(" ");
+      addLog(message);
+      originalConsoleLog(...args);
+    };
+    console.error = (...args) => {
+      const message = args.join(" ");
+      addLog(`ERROR: ${message}`);
+      originalConsoleError(...args);
+    };
+  };
+
+  const restoreConsoleLogs = () => {
+    console.log = originalConsoleLog;
+    console.error = originalConsoleError;
+  };
+
+  const clearLogs = () => {
+    setLogs([]);
+  };
 
   const executeTest = async (command: TestCommand) => {
     if (!device.id) {
@@ -61,19 +109,22 @@ export function BLETestCommands({
       return;
     }
 
-    if (!device.bluetoothDeviceId) {
-      Alert.alert(
-        "Error",
-        "Device has no stored bluetooth device ID for connection",
-      );
-      return;
-    }
-
+    // Mark testing as active
+    isTestingActiveRef.current = true;
     setIsTesting(true);
     setTestingCommand(command.name);
     setLastResult("");
+    clearLogs();
+    captureConsoleLogs();
 
     try {
+      // Check if operation was cancelled
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (!isTestingActiveRef.current) {
+        console.log("🛑 Test cancelled before execution");
+        return;
+      }
+
       // Check Bluetooth state
       const bluetoothState = await getBluetoothState();
       if (bluetoothState !== State.PoweredOn) {
@@ -105,11 +156,13 @@ export function BLETestCommands({
       if (!existingConnection) {
         try {
           await disconnect();
-        } catch (disconnectError) {
-          console.error("❌ Error during cleanup disconnect:", disconnectError);
+        } catch {
+          console.error("❌ Error during cleanup disconnect");
         }
       }
     } finally {
+      restoreConsoleLogs();
+      isTestingActiveRef.current = false;
       setIsTesting(false);
       setTestingCommand("");
     }
@@ -118,12 +171,8 @@ export function BLETestCommands({
   const testCommands: TestCommand[] = [
     {
       name: "Basic Connection Test",
-      description:
-        "Test basic BLE connection to device by scanning and matching serial number",
+      description: "Test basic BLE connection to device using serial number",
       action: async (connection?: SecureConnectionResult) => {
-        if (!device.serialNumber)
-          throw new Error("Device serial number is required");
-
         if (connection) {
           console.log(`🔗 Using existing connection for basic test`);
           console.log(`🔗 Protocol established:`, !!connection.protocol);
@@ -131,7 +180,12 @@ export function BLETestCommands({
           await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
           console.log("✅ Test completed using existing connection");
         } else {
-          const connectionResult = await connectById(device.bluetoothDeviceId!);
+          if (!device.serialNumber) {
+            throw new Error("Device serial number is required for connection");
+          }
+          const connectionResult = await connectBySerialNumber(
+            device.serialNumber,
+          );
           console.log(`🔗 Connected to device successfully`);
           console.log(`🔗 Protocol established:`, !!connectionResult.protocol);
           console.log(
@@ -156,7 +210,9 @@ export function BLETestCommands({
           console.log(`📱 Using existing connection for device info test`);
           deviceInfo = connection.deviceInfo;
         } else {
-          const connectionResult = await connectById(device.bluetoothDeviceId!);
+          const connectionResult = await connectBySerialNumber(
+            device.serialNumber,
+          );
           deviceInfo = connectionResult.deviceInfo;
         }
 
@@ -183,7 +239,9 @@ export function BLETestCommands({
           console.log(`🔐 Using existing connection for protocol test`);
           protocol = connection.protocol;
         } else {
-          const connectionResult = await connectById(device.bluetoothDeviceId!);
+          const connectionResult = await connectBySerialNumber(
+            device.serialNumber,
+          );
           protocol = connectionResult.protocol;
         }
 
@@ -202,14 +260,8 @@ export function BLETestCommands({
       description:
         "Get comprehensive device details including info, time, and battery level",
       action: async (connection?: SecureConnectionResult) => {
-        if (!device.bluetoothDeviceId)
-          throw new Error("Device bluetooth device ID is required");
-
-        let connectionToUse = connection;
-        connectionToUse ??= await connectById(device.bluetoothDeviceId);
-
         console.log(`📋 Getting comprehensive device details...`);
-        const details = await readComprehensiveDeviceDetails(connectionToUse);
+        const details = await readComprehensiveDeviceDetails(connection!);
 
         setDeviceDetails(details);
 
@@ -244,7 +296,10 @@ export function BLETestCommands({
         } else {
           for (let i = 1; i <= 3; i++) {
             console.log(`🔄 Connection cycle ${i}/3`);
-            await connectById(device.bluetoothDeviceId!);
+            if (!device.serialNumber) {
+              throw new Error("Device serial number is required");
+            }
+            await connectBySerialNumber(device.serialNumber);
             console.log(`✅ Connected (cycle ${i})`);
             await new Promise((resolve) => setTimeout(resolve, 500));
             await disconnect();
@@ -262,15 +317,17 @@ export function BLETestCommands({
       description:
         "Check device connection state and properties by scanning for device",
       action: async (connection?: SecureConnectionResult) => {
-        if (!device.bluetoothDeviceId)
-          throw new Error("Device bluetooth device ID is required");
+        if (!device.serialNumber)
+          throw new Error("Device serial number is required");
 
         let bleDevice;
         if (connection) {
           console.log(`🔗 Using existing connection for device state test`);
           bleDevice = connection.device;
         } else {
-          const connectionResult = await connectById(device.bluetoothDeviceId);
+          const connectionResult = await connectBySerialNumber(
+            device.serialNumber,
+          );
           bleDevice = connectionResult.device;
         }
 
@@ -286,6 +343,76 @@ export function BLETestCommands({
 
         if (!connection) {
           await disconnect();
+        }
+      },
+    },
+    {
+      name: "Find Me Test",
+      description: "Trigger 15-second audio pattern on device (Command 0x10)",
+      action: async (connection?: SecureConnectionResult) => {
+        if (!device.serialNumber)
+          throw new Error("Device serial number is required");
+
+        let connectionResult;
+        if (connection) {
+          console.log(`🔗 Using existing connection for Find Me test`);
+          connectionResult = connection;
+        } else {
+          connectionResult = await connectBySerialNumber(device.serialNumber);
+          console.log(`🔗 Connected to device for Find Me test`);
+        }
+
+        console.log(`🔊 Sending Find Me command (0x10) to device...`);
+
+        // Create Find Me command payload (audio pattern 0x01)
+        const payload = new Uint8Array(6);
+        payload[0] = 0x01; // Audio pattern byte
+        // Remaining bytes (1-5) are reserved (0 padded)
+
+        console.log(
+          `📤 Find Me request payload:`,
+          Array.from(payload)
+            .map((b) => `0x${b.toString(16).padStart(2, "0")}`)
+            .join(" "),
+        );
+
+        // Send the command and wait for response
+        const response = await sendSecureCommand(
+          connectionResult,
+          CommandCode.FIND_ME,
+          payload,
+        );
+
+        console.log(
+          `📥 Find Me response:`,
+          Array.from(response)
+            .map((b) => `0x${b.toString(16).padStart(2, "0")}`)
+            .join(" "),
+        );
+
+        // Check response status (first byte in response payload)
+        if (response.length >= 1) {
+          const responseStatus = response[0]!;
+          if (responseStatus === 0x00) {
+            console.log(
+              `✅ Find Me command successful - device should now be playing audio pattern for 15 seconds`,
+            );
+            console.log(`🔊 Listen for audio pattern from the device...`);
+          } else {
+            console.log(
+              `❌ Find Me command failed with status: 0x${responseStatus.toString(16).padStart(2, "0")}`,
+            );
+            throw new Error(
+              `Find Me command failed with status: 0x${responseStatus.toString(16).padStart(2, "0")}`,
+            );
+          }
+        } else {
+          throw new Error("Invalid response length for Find Me command");
+        }
+
+        if (!connection) {
+          await disconnect();
+          console.log(`🔌 Disconnected from device`);
         }
       },
     },
@@ -344,6 +471,22 @@ export function BLETestCommands({
             <View style={styles.resultContainer}>
               <Text style={styles.resultTitle}>Last Test Result:</Text>
               <Text style={styles.resultText}>{lastResult}</Text>
+            </View>
+          )}
+
+          {logs.length > 0 && (
+            <View style={styles.resultContainer}>
+              <Text style={styles.resultTitle}>Test Logs:</Text>
+              <ScrollView
+                style={styles.logsContainer}
+                showsVerticalScrollIndicator={false}
+              >
+                {logs.map((log, index) => (
+                  <Text key={index} style={styles.logText}>
+                    {log}
+                  </Text>
+                ))}
+              </ScrollView>
             </View>
           )}
 
@@ -479,5 +622,19 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     marginBottom: spacing[1],
     fontSize: 14,
+  },
+  logsContainer: {
+    maxHeight: 200,
+    backgroundColor: colors.gray[50],
+    borderRadius: 8,
+    padding: spacing[2],
+    marginTop: spacing[2],
+  },
+  logText: {
+    ...typography.body,
+    color: colors.text.secondary,
+    fontFamily: "monospace",
+    fontSize: 12,
+    marginBottom: spacing[1],
   },
 });

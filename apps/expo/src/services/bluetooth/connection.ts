@@ -1,5 +1,6 @@
 // Device connection functionality with Gently BLE Protocol support
 import type { BleManager, Device } from "react-native-ble-plx";
+import { State } from "react-native-ble-plx";
 
 import type { AdvertisementData, DeviceInformation } from "./protocol";
 import { base64ToUint8Array, uint8ArrayToBase64 } from "../../utils/base64";
@@ -18,6 +19,7 @@ export interface SecureConnectionResult {
   protocol: GentlyBLEProtocol;
   deviceInfo: DeviceInformation;
   uptime: Uint8Array;
+  serialNumber: string; // Hex string representation of the serial number from advertisement data
 }
 
 /**
@@ -35,6 +37,40 @@ export async function connectToGentlyDevice(
   try {
     console.log(`${logPrefix}: ========== STARTING PAIRING PROCESS ==========`);
     console.log(`${logPrefix}: Device ID: ${deviceId}`);
+    console.log(
+      `${logPrefix}: Advertisement Data:`,
+      advertisementData ? "PROVIDED" : "NOT PROVIDED",
+    );
+    if (advertisementData) {
+      console.log(
+        `${logPrefix}: Advertisement Serial Number:`,
+        Array.from(advertisementData.serialNumber)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(""),
+      );
+    }
+
+    // STEP 0 - Verify Bluetooth is powered on before attempting connection
+    console.log(`${logPrefix}: STEP 0 - Verifying Bluetooth state`);
+    let bluetoothState: State;
+    try {
+      bluetoothState = await manager.state();
+      console.log(`${logPrefix}: Current Bluetooth state: ${bluetoothState}`);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("destroyed")) {
+        throw new Error("Bluetooth manager was destroyed");
+      }
+      throw new Error(
+        `Failed to check Bluetooth state: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    }
+
+    if (bluetoothState !== State.PoweredOn) {
+      const errorMessage = `Bluetooth is not powered on. Current state: ${bluetoothState}. Please enable Bluetooth and try again.`;
+      console.log(`${logPrefix}: ❌ ${errorMessage}`);
+      throw new Error(errorMessage);
+    }
+    console.log(`${logPrefix}: ✅ Bluetooth is powered on and ready`);
 
     // Log advertisement data details if available
     if (advertisementData) {
@@ -71,7 +107,17 @@ export async function connectToGentlyDevice(
     console.log(`${logPrefix}: STEP 1 - Establishing BLE connection session`);
 
     // Connect to the device
-    const device = await manager.connectToDevice(deviceId);
+    let device: Device;
+    try {
+      device = await manager.connectToDevice(deviceId);
+    } catch (error) {
+      console.log("ERROR", error);
+      if (error instanceof Error && error.message.includes("destroyed")) {
+        throw new Error("Bluetooth manager was destroyed during connection");
+      }
+      throw error;
+    }
+
     console.log(
       `${logPrefix}: ✅ BLE connection established with device: ${device.name ?? "Unknown"}`,
     );
@@ -225,6 +271,57 @@ export async function connectToGentlyDevice(
               .join("")}`,
           );
 
+          // IMMEDIATELY DECRYPT AND LOG THE NOTIFICATION
+          try {
+            const encryptedData = base64ToUint8Array(characteristic.value);
+            const decryptedResponse = protocol.parseResponse(encryptedData);
+
+            console.log(`${logPrefix}: 🔓 DECRYPTED NOTIFICATION:`);
+            console.log(
+              `${logPrefix}: 🔓   API Version: ${decryptedResponse.apiVersion}`,
+            );
+            console.log(
+              `${logPrefix}: 🔓   Command: 0x${decryptedResponse.command.toString(16).padStart(2, "0")} (${decryptedResponse.command})`,
+            );
+            console.log(
+              `${logPrefix}: 🔓   Status: 0x${decryptedResponse.status.toString(16).padStart(2, "0")} (${decryptedResponse.status})`,
+            );
+            console.log(
+              `${logPrefix}: 🔓   Payload length: ${decryptedResponse.payload.length} bytes`,
+            );
+            console.log(
+              `${logPrefix}: 🔓   Payload data: ${Array.from(
+                decryptedResponse.payload,
+              )
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join("")}`,
+            );
+
+            // Log human-readable interpretation for common commands
+            if (
+              decryptedResponse.command === CommandCode.GET_UPTIME &&
+              decryptedResponse.payload.length >= 8
+            ) {
+              const uptimeMs = new DataView(
+                decryptedResponse.payload.buffer,
+              ).getBigUint64(0, true);
+              console.log(
+                `${logPrefix}: 🔓   ⏰ UPTIME: ${uptimeMs}ms (${Number(uptimeMs / 1000n)} seconds)`,
+              );
+            } else if (
+              decryptedResponse.command === CommandCode.GET_DEVICE_INFO
+            ) {
+              console.log(
+                `${logPrefix}: 🔓   ℹ️  DEVICE INFO response received`,
+              );
+            }
+          } catch (decryptError) {
+            console.error(
+              `${logPrefix}: ❌ Failed to decrypt notification:`,
+              decryptError,
+            );
+          }
+
           if (waitingForResponse && currentResponseResolver) {
             // Someone is waiting for this response
             console.log(
@@ -246,12 +343,50 @@ export async function connectToGentlyDevice(
     );
     console.log(`${logPrefix}: ✅ Notifications enabled on UUID 0xF024`);
 
+    // Debug advertisement data before extracting serial number
+    console.log(`${logPrefix}: 🔍 DEBUG: Advertisement data check:`);
+    console.log(
+      `${logPrefix}: 🔍 DEBUG: advertisementData object:`,
+      advertisementData,
+    );
+    console.log(
+      `${logPrefix}: 🔍 DEBUG: advertisementData is null/undefined:`,
+      advertisementData == null,
+    );
+    if (advertisementData) {
+      console.log(
+        `${logPrefix}: 🔍 DEBUG: advertisementData.serialNumber exists:`,
+        !!advertisementData.serialNumber,
+      );
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (advertisementData.serialNumber) {
+        console.log(
+          `${logPrefix}: 🔍 DEBUG: advertisementData.serialNumber length:`,
+          advertisementData.serialNumber.length,
+        );
+        console.log(
+          `${logPrefix}: 🔍 DEBUG: advertisementData.serialNumber hex:`,
+          Array.from(advertisementData.serialNumber)
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join(""),
+        );
+      } else {
+        console.log(
+          `${logPrefix}: 🔍 DEBUG: advertisementData.serialNumber is null/undefined`,
+        );
+      }
+    }
+
     // Extract serial number from advertisement data
     const serialNumber = advertisementData?.serialNumber ?? new Uint8Array(8);
     console.log(
       `${logPrefix}: Using serial number: ${Array.from(serialNumber)
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("")}`,
+    );
+    console.log(
+      `${logPrefix}: 🔍 DEBUG: Serial number is all zeros:`,
+      serialNumber.every((b) => b === 0),
     );
 
     console.log(
@@ -425,11 +560,20 @@ export async function connectToGentlyDevice(
       `${logPrefix}: ✅ Both devices now using Dynamic Key for future communications`,
     );
 
+    // Convert serial number bytes to hex string for consistent usage
+    const serialNumberHex = Array.from(serialNumber)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase();
+
+    console.log(`${logPrefix}: 📝 Final serial number: ${serialNumberHex}`);
+
     return {
       device,
       protocol,
       deviceInfo,
       uptime,
+      serialNumber: serialNumberHex,
     };
   } catch (error) {
     console.error(`${logPrefix}: ❌ PAIRING FAILED:`, error);

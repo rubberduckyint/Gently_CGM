@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,8 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { SecureConnectionResult } from "~/services/bluetooth/connection";
 import type { RouterOutputs } from "~/utils/api";
-import { BLETestCommands } from "~/components/device/BLETestCommands";
-import { useBluetooth } from "~/services/bluetooth";
+import { useBluetoothContext } from "~/services/bluetooth/BluetoothContext";
 import { syncDeviceAlarms } from "~/services/bluetooth/commands";
 import { cards, colors, spacing, typography } from "~/styles";
 import {
@@ -233,13 +232,20 @@ function AlarmCard({
 export default function DeviceDetailPage() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const { connectById, disconnect, getBluetoothState } = useBluetooth();
+  const {
+    connectBySerialNumber,
+    disconnect,
+    getBluetoothState,
+    isDeviceIdConnected,
+    stopScan,
+  } = useBluetoothContext();
 
   // State for BLE connection management
   const [deviceConnection, setDeviceConnection] =
     useState<SecureConnectionResult | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionTime, setConnectionTime] = useState<Date | null>(null);
+  const isConnectionAttemptActiveRef = useRef(false);
 
   const {
     data: device,
@@ -303,94 +309,165 @@ export default function DeviceDetailPage() {
     }
   }, [error]);
 
-  // Establish and maintain BLE connection when device is available
+  // Establish BLE connection when device is available (only try once)
   useEffect(() => {
     const establishConnection = async () => {
-      if (!device?.id || isConnecting) return;
+      if (!device?.id || isConnecting || deviceConnection) return;
 
-      // Check if device has a stored bluetoothDeviceId for direct connection
-      const deviceWithBleId = device as DeviceWithBluetooth;
-      if (!deviceWithBleId.bluetoothDeviceId) {
-        console.log(
-          "⚠️ Device has no stored bluetoothDeviceId, cannot connect directly",
-        );
+      // Check if device has a serial number for connection
+      if (!device.serialNumber) {
+        console.log("⚠️ Device has no serial number, cannot connect");
         return;
       }
 
-      // Always try to connect if no connection exists or if previous connection is lost
-      if (!deviceConnection) {
-        setIsConnecting(true);
+      // For checking existing connection, we need to use the stored bluetoothDeviceId if available
+      // but we'll connect using serial number for robustness
+      const deviceWithBleId = device as DeviceWithBluetooth;
+      const checkDeviceId = deviceWithBleId.bluetoothDeviceId;
+
+      console.log(
+        "🔍 Checking if device is already connected by device ID:",
+        checkDeviceId,
+        "for serial:",
+        device.serialNumber,
+      );
+
+      // First, check if this device is already connected (if we have a bluetooth device ID)
+      if (checkDeviceId) {
         try {
-          console.log(
-            "🔗 Establishing persistent connection to device:",
-            device.title,
-            "using stored device ID:",
-            deviceWithBleId.bluetoothDeviceId,
-          );
-          const connection = await connectById(
-            deviceWithBleId.bluetoothDeviceId,
-          );
-          setDeviceConnection(connection);
-          setConnectionTime(new Date());
-          console.log("✅ Persistent connection established");
+          const existingConnection = await isDeviceIdConnected(checkDeviceId);
+
+          if (existingConnection.isConnected) {
+            console.log(
+              "✅ Device is already connected! Reusing existing connection with custom key.",
+            );
+
+            // Create a mock SecureConnectionResult to maintain compatibility
+            // Note: We don't have the uptime from the existing connection, but that's OK
+            // for reusing the connection since the key is already established
+            const mockUptime = new Uint8Array([0, 0, 0, 0]); // Mock uptime
+            const reuseConnection: SecureConnectionResult = {
+              device: existingConnection.device,
+              protocol: existingConnection.protocol,
+              deviceInfo: existingConnection.deviceInformation ?? {
+                hardwareVersion: 1,
+                firmwareVersionMajor: 1,
+                firmwareVersionMinor: 0,
+                firmwareBuildNumber: 1,
+              },
+              uptime: mockUptime,
+              serialNumber: device.serialNumber ?? "UNKNOWN",
+            };
+
+            setDeviceConnection(reuseConnection);
+            setConnectionTime(new Date());
+            console.log(
+              "✅ Reusing existing connection - no pairing process needed, custom key already established",
+            );
+            return;
+          }
         } catch (error) {
-          console.error("❌ Failed to establish persistent connection:", error);
+          console.log("⚠️ Error checking existing connection:", error);
+          // Continue with new connection attempt
+        }
+      }
+
+      // Mark connection attempt as active
+      isConnectionAttemptActiveRef.current = true;
+
+      // Try to connect only once when device is first loaded
+      setIsConnecting(true);
+      try {
+        console.log(
+          "🔗 No existing connection found. Establishing new connection to device:",
+          device.title,
+          "using serial number:",
+          device.serialNumber,
+        );
+        console.log(
+          "🔐 This will go through the full pairing process to generate a new custom key",
+        );
+
+        // Check if component was unmounted during async work
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (!isConnectionAttemptActiveRef.current) {
+          console.log(
+            "🛑 Connection attempt cancelled due to component unmount",
+          );
+          return;
+        }
+
+        const connection = await connectBySerialNumber(device.serialNumber);
+
+        // Check again after async operation
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (!isConnectionAttemptActiveRef.current) {
+          console.log(
+            "🛑 Connection established but component unmounted, cleaning up",
+          );
+          connection.device.cancelConnection().catch(console.error);
+          return;
+        }
+
+        setDeviceConnection(connection);
+        setConnectionTime(new Date());
+        console.log("✅ New connection established with fresh custom key");
+      } catch (error) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (isConnectionAttemptActiveRef.current) {
+          console.error("❌ Failed to establish connection:", error);
           setConnectionTime(null);
-        } finally {
+        } else {
+          console.log("🛑 Connection attempt was cancelled");
+        }
+      } finally {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (isConnectionAttemptActiveRef.current) {
           setIsConnecting(false);
         }
-      } else {
-        // Check if connection is still valid
-        try {
-          const stillConnected = await deviceConnection.device.isConnected();
-          if (!stillConnected) {
-            console.log("🔌 Previous connection lost, reconnecting...");
-            setIsConnecting(true);
-            const connection = await connectById(
-              deviceWithBleId.bluetoothDeviceId,
-            );
-            setDeviceConnection(connection);
-            setConnectionTime(new Date());
-            console.log("✅ Persistent connection re-established");
-          }
-        } catch (error) {
-          console.error("❌ Error checking connection, reconnecting:", error);
-          setIsConnecting(true);
-          try {
-            const connection = await connectById(
-              deviceWithBleId.bluetoothDeviceId,
-            );
-            setDeviceConnection(connection);
-            setConnectionTime(new Date());
-            console.log("✅ Persistent connection re-established after error");
-          } catch (connError) {
-            console.error("❌ Failed to re-establish connection:", connError);
-            setConnectionTime(null);
-          } finally {
-            setIsConnecting(false);
-          }
-        }
+        isConnectionAttemptActiveRef.current = false;
       }
     };
 
     void establishConnection();
-  }, [device, deviceConnection, isConnecting, connectById]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [device, connectBySerialNumber, isDeviceIdConnected]); // Intentionally exclude deviceConnection and isConnecting to prevent loop
 
-  // Cleanup connection when component unmounts
+  // Cleanup connection and stop any ongoing scans when component unmounts
   useEffect(() => {
     return () => {
+      console.log("🧹 DeviceDetailPage: Starting cleanup on component unmount");
+
+      // Cancel any ongoing connection attempt
+      if (isConnectionAttemptActiveRef.current) {
+        console.log("🛑 Cancelling ongoing connection attempt due to unmount");
+        isConnectionAttemptActiveRef.current = false;
+      }
+
+      // Always stop any ongoing scans when navigating away from device detail page
+      console.log(
+        "🛑 Stopping any ongoing device scans due to page navigation",
+      );
+      stopScan();
+
       if (deviceConnection) {
-        console.log("🔌 Cleaning up persistent connection...");
+        console.log("🔌 Cleaning up connection...");
         setConnectionTime(null);
         deviceConnection.device.cancelConnection().catch((error) => {
-          console.error("❌ Error cleaning up connection:", error);
+          // Ignore BleManager destroyed errors during cleanup
+          if (error instanceof Error && error.message.includes("destroyed")) {
+            console.log("🔌 BleManager was already destroyed during cleanup");
+          } else {
+            console.error("❌ Error cleaning up connection:", error);
+          }
         });
       }
+
+      console.log("✅ DeviceDetailPage: Cleanup completed");
     };
-  }, [deviceConnection]);
+  }, [deviceConnection, stopScan]);
 
   const [isSyncing, setIsSyncing] = React.useState(false);
-  const [showBLETest, setShowBLETest] = useState(false);
   const [connectionDurationTick, setConnectionDurationTick] = useState(0);
 
   // Update connection duration every second
@@ -482,20 +559,15 @@ export default function DeviceDetailPage() {
           device.alarms,
         );
       } else {
-        // Fall back to creating a new connection using stored device ID
-        const deviceWithBt = device as DeviceWithBluetooth;
-        if (!deviceWithBt.bluetoothDeviceId) {
-          throw new Error(
-            "Device has no stored bluetoothDeviceId for connection",
-          );
+        // Fall back to creating a new connection using serial number
+        if (!device.serialNumber) {
+          throw new Error("Device has no serial number for connection");
         }
-        console.log(
-          "🔗 Creating new connection for sync using stored device ID",
-        );
+        console.log("🔗 Creating new connection for sync using serial number");
         syncResponse = await syncDeviceAlarms(
-          connectById,
-          deviceWithBt.bluetoothDeviceId,
-          device.serialNumber ?? "unknown",
+          connectBySerialNumber,
+          device.serialNumber,
+          device.serialNumber,
           device.alarms,
         );
       }
@@ -827,7 +899,7 @@ export default function DeviceDetailPage() {
           </Pressable>
           <Pressable
             style={styles.testButton}
-            onPress={() => setShowBLETest(true)}
+            onPress={() => router.push(`/ble-test?deviceId=${device.id}`)}
           >
             <Text style={styles.testButtonText}>Test BLE Connection</Text>
           </Pressable>
@@ -845,18 +917,6 @@ export default function DeviceDetailPage() {
           </Pressable>
         </View>
       </ScrollView>
-
-      {/* BLE Test Modal */}
-      <BLETestCommands
-        device={{
-          id: device.id,
-          serialNumber: device.serialNumber,
-          title: device.title,
-        }}
-        visible={showBLETest}
-        onClose={() => setShowBLETest(false)}
-        existingConnection={deviceConnection}
-      />
     </SafeAreaView>
   );
 }

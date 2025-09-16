@@ -246,6 +246,167 @@ export class GentlyBLEProtocol {
   }
 
   /**
+   * Get human-readable command name
+   */
+  private getCommandName(command: CommandCode): string {
+    const commandNames: Partial<Record<CommandCode, string>> = {
+      [CommandCode.GET_UPTIME]: "GET_UPTIME",
+      [CommandCode.GET_DEVICE_INFO]: "GET_DEVICE_INFO",
+      [CommandCode.GET_EVENT]: "GET_EVENT",
+      [CommandCode.ADD_EVENT]: "ADD_EVENT",
+      [CommandCode.SET_EVENT_ON_OFF]: "SET_EVENT_ON_OFF",
+      [CommandCode.GET_ALL_EVENTS]: "GET_ALL_EVENTS",
+      [CommandCode.REMOVE_EVENT]: "REMOVE_EVENT",
+      [CommandCode.REMOVE_ALL_EVENTS]: "REMOVE_ALL_EVENTS",
+      [CommandCode.GET_NUMBER_OF_EVENTS]: "GET_NUMBER_OF_EVENTS",
+      [CommandCode.GET_TIME]: "GET_TIME",
+      [CommandCode.SET_TIME]: "SET_TIME",
+      [CommandCode.GET_DEVICE_STATUS]: "GET_DEVICE_STATUS",
+      [CommandCode.ACKNOWLEDGE_EVENT]: "ACKNOWLEDGE_EVENT",
+      [CommandCode.SET_BRACELET_KEY]: "SET_BRACELET_KEY",
+      [CommandCode.GET_BRACELET_KEY]: "GET_BRACELET_KEY",
+      [CommandCode.FIND_ME]: "FIND_ME",
+      [CommandCode.ENTER_DFU_MODE]: "ENTER_DFU_MODE",
+      [CommandCode.REBOOT_BRACELET]: "REBOOT_BRACELET",
+      [CommandCode.BATTERY_STATUS_NOTIFY]: "BATTERY_STATUS_NOTIFY",
+      [CommandCode.ACTIVE_EVENT_NOTIFY]: "ACTIVE_EVENT_NOTIFY",
+      [CommandCode.TIME_NOTIFY]: "TIME_NOTIFY",
+    };
+    return commandNames[command] ?? `UNKNOWN_COMMAND_${command}`;
+  }
+
+  /**
+   * Get human-readable status name
+   */
+  private getStatusName(status: ResponseStatus): string {
+    const statusNames: Partial<Record<ResponseStatus, string>> = {
+      [ResponseStatus.OK]: "OK",
+      [ResponseStatus.ERROR]: "ERROR",
+    };
+    return statusNames[status] ?? `UNKNOWN_STATUS_${status}`;
+  }
+
+  /**
+   * Log human-readable payload details based on command type
+   */
+  private logPayloadDetails(command: CommandCode, payload: Uint8Array): void {
+    if (payload.length === 0) {
+      console.log("🔓 PROTOCOL:   - Payload: (empty)");
+      return;
+    }
+
+    console.log("🔓 PROTOCOL:   - Payload interpretation:");
+
+    switch (command) {
+      case CommandCode.GET_UPTIME:
+        if (payload.length >= 8) {
+          const uptimeMs = new DataView(
+            payload.buffer,
+            payload.byteOffset,
+          ).getBigUint64(0, true);
+          const uptimeSeconds = Number(uptimeMs / 1000n);
+          const days = Math.floor(uptimeSeconds / 86400);
+          const hours = Math.floor((uptimeSeconds % 86400) / 3600);
+          const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+          const seconds = uptimeSeconds % 60;
+          console.log(
+            `🔓 PROTOCOL:     📊 Uptime: ${uptimeMs}ms (${days}d ${hours}h ${minutes}m ${seconds}s)`,
+          );
+        }
+        break;
+
+      case CommandCode.GET_DEVICE_INFO:
+        if (payload.length >= 8) {
+          const hwVersion = payload[0] ?? 0;
+          const swVersionMajor = payload[1] ?? 0;
+          const swVersionMinor = payload[2] ?? 0;
+          const buildNumber = new DataView(
+            payload.buffer,
+            payload.byteOffset + 4,
+          ).getUint32(0, true);
+          console.log(`🔓 PROTOCOL:     💾 Hardware Version: ${hwVersion}`);
+          console.log(
+            `🔓 PROTOCOL:     🔢 Software Version: ${swVersionMajor}.${swVersionMinor}`,
+          );
+          console.log(`🔓 PROTOCOL:     🏗️  Build Number: ${buildNumber}`);
+        }
+        break;
+
+      case CommandCode.GET_TIME:
+        if (payload.length >= 7) {
+          const hour = this.fromBCD(payload[0] ?? 0);
+          const minute = this.fromBCD(payload[1] ?? 0);
+          const seconds = this.fromBCD(payload[2] ?? 0);
+          const year = this.fromBCD(payload[3] ?? 0) + 2000;
+          const month = this.fromBCD(payload[4] ?? 0);
+          const date = this.fromBCD(payload[5] ?? 0);
+          const weekDay = payload[6] ?? 0;
+          console.log(
+            `🔓 PROTOCOL:     🕐 Time: ${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`,
+          );
+          console.log(
+            `🔓 PROTOCOL:     📅 Date: ${year}-${month.toString().padStart(2, "0")}-${date.toString().padStart(2, "0")} (Day ${weekDay})`,
+          );
+        }
+        break;
+
+      case CommandCode.GET_DEVICE_STATUS:
+        if (payload.length >= 3) {
+          const batteryVoltage = new DataView(
+            payload.buffer,
+            payload.byteOffset,
+          ).getUint16(0, true);
+          const flags = payload[2] ?? 0;
+          const charging = !!(flags & 0x04);
+          const batteryLevel = (flags >> 3) & 0x07;
+          console.log(
+            `🔓 PROTOCOL:     🔋 Battery: ${batteryVoltage}mV (Level: ${batteryLevel}/7)`,
+          );
+          console.log(
+            `🔓 PROTOCOL:     ⚡ Charging: ${charging ? "Yes" : "No"}`,
+          );
+        }
+        break;
+
+      case CommandCode.GET_NUMBER_OF_EVENTS:
+        if (payload.length >= 1) {
+          const eventCount = payload[0] ?? 0;
+          console.log(`🔓 PROTOCOL:     📋 Event Count: ${eventCount}`);
+        }
+        break;
+
+      case CommandCode.SET_BRACELET_KEY:
+        console.log(`🔓 PROTOCOL:     🔑 Dynamic Key Set Response`);
+        break;
+
+      case CommandCode.FIND_ME:
+        console.log(`🔓 PROTOCOL:     🔍 Find Me Command Response`);
+        break;
+
+      case CommandCode.REBOOT_BRACELET:
+        console.log(`🔓 PROTOCOL:     🔄 Reboot Command Response`);
+        break;
+
+      case CommandCode.ENTER_DFU_MODE:
+        console.log(`🔓 PROTOCOL:     ⬆️  DFU Mode Entry Response`);
+        break;
+
+      case CommandCode.REMOVE_ALL_EVENTS:
+        console.log(`🔓 PROTOCOL:     🗑️  Remove All Events Response`);
+        break;
+
+      default:
+        console.log(
+          `🔓 PROTOCOL:     📦 Raw payload (${payload.length} bytes):`,
+          Array.from(payload)
+            .map((b) => `0x${b.toString(16).padStart(2, "0")}`)
+            .join(" "),
+        );
+        break;
+    }
+  }
+
+  /**
    * Decrypt and parse a response packet
    */
   parseResponse(encryptedData: Uint8Array): {
@@ -298,13 +459,18 @@ export class GentlyBLEProtocol {
         "🔓 PROTOCOL:   - Command:",
         command,
         `(0x${command.toString(16).padStart(2, "0")})`,
+        this.getCommandName(command),
       );
       console.log(
         "🔓 PROTOCOL:   - Status:",
         status,
         `(0x${status.toString(16).padStart(2, "0")})`,
+        this.getStatusName(status),
       );
       console.log("🔓 PROTOCOL:   - Payload length:", payload.length);
+
+      // Log human-readable payload interpretation
+      this.logPayloadDetails(command, payload);
 
       return { apiVersion, command, status, payload };
     } catch (error) {
@@ -460,10 +626,34 @@ export class GentlyBLEProtocol {
 
       // Generate dynamic key
       console.log("🔓 PROTOCOL: Generating dynamic key...");
+      console.log(
+        "🔓 PROTOCOL: Bracelet key:",
+        Array.from(this.braceletKey)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(""),
+      );
+      console.log(
+        "🔓 PROTOCOL: Uptime:",
+        Array.from(uptime)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(""),
+      );
+      console.log(
+        "🔓 PROTOCOL: Serial number:",
+        Array.from(serialNumber)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(""),
+      );
       this.dynamicKey = generateDynamicKey(
         this.braceletKey,
         uptime,
         serialNumber,
+      );
+      console.log(
+        "🔓 PROTOCOL: Generated dynamic key:",
+        Array.from(this.dynamicKey)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(""),
       );
       this.dynamicTea = new Tea(this.dynamicKey);
 
@@ -527,9 +717,12 @@ export class GentlyBLEProtocol {
 
   /**
    * Create find me request (Command 0x10)
+   * @param audioPattern Audio pattern (0x00-0xFF), defaults to 0x01 for standard pattern
    */
-  createFindMeRequest(): Uint8Array {
-    const payload = new Uint8Array(6); // 6 bytes of padding
+  createFindMeRequest(audioPattern = 0x01): Uint8Array {
+    const payload = new Uint8Array(6);
+    payload[0] = audioPattern & 0xff; // Audio pattern byte
+    // Remaining bytes (1-5) are reserved (0 padded)
     return this.createRequest(CommandCode.FIND_ME, payload);
   }
 

@@ -1,0 +1,91 @@
+/**
+ * Get Uptime Command
+ *
+ * Retrieves the device's uptime information showing how long
+ * the device has been running since last reboot.
+ */
+
+import type { BLECommandExecutionContext, BLECommandMetadata } from "./base";
+import { CommandCode } from "../protocol";
+import { BLECommand } from "./base";
+import { sendSecureCommand } from "./core";
+
+export interface UptimeResponse {
+  uptimeMs: number;
+  uptimeFormatted: string;
+  connectionUsed: boolean;
+}
+
+export class GetUptimeCommand extends BLECommand<UptimeResponse> {
+  readonly metadata: BLECommandMetadata = {
+    id: "get-uptime",
+    name: "Get Device Uptime",
+    description: "Retrieve device uptime since last reboot",
+    category: "device-status",
+    version: "1.0.0",
+    requiresConnection: true,
+    estimatedDuration: 1500,
+    tags: ["uptime", "status", "system"],
+  };
+
+  protected async executeImpl(
+    context: BLECommandExecutionContext,
+  ): Promise<UptimeResponse> {
+    this.log("info", "Getting device uptime");
+
+    let connection = context.connection;
+    let shouldDisconnect = false;
+
+    if (!connection) {
+      this.log("info", "Establishing connection for uptime request...");
+      connection = await context.connect();
+      shouldDisconnect = true;
+    } else {
+      this.log("info", "Using existing connection");
+    }
+
+    try {
+      const response = await sendSecureCommand(
+        connection,
+        CommandCode.GET_UPTIME,
+      );
+
+      if (response.length < 4) {
+        throw new Error("Invalid uptime response length");
+      }
+
+      // Parse uptime (4 bytes, little endian)
+      const uptimeMs = new DataView(response.buffer).getUint32(0, true);
+      const uptimeFormatted = this.formatUptime(uptimeMs);
+
+      this.log("info", `Device uptime: ${uptimeFormatted} (${uptimeMs}ms)`);
+
+      return {
+        uptimeMs,
+        uptimeFormatted,
+        connectionUsed: !shouldDisconnect,
+      };
+    } finally {
+      if (shouldDisconnect) {
+        await context.disconnect();
+      }
+    }
+  }
+
+  private formatUptime(uptimeMs: number): string {
+    const seconds = Math.floor(uptimeMs / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 0) {
+      return `${days}d ${hours % 24}h ${minutes % 60}m ${seconds % 60}s`;
+    } else if (hours > 0) {
+      return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds % 60}s`;
+    } else {
+      return `${seconds}s`;
+    }
+  }
+}
