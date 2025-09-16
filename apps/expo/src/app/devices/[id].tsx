@@ -27,6 +27,11 @@ import { trpc } from "~/utils/api";
 
 type DeviceWithAlarms = RouterOutputs["device"]["getById"];
 
+// Temporary type extension until database schema is migrated
+type DeviceWithBluetooth = DeviceWithAlarms & {
+  bluetoothDeviceId?: string;
+};
+
 function AlarmCard({
   alarm,
 }: {
@@ -228,12 +233,13 @@ function AlarmCard({
 export default function DeviceDetailPage() {
   const { id } = useGlobalSearchParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const { connect, disconnect, getBluetoothState } = useBluetooth();
+  const { connectById, disconnect, getBluetoothState } = useBluetooth();
 
   // State for BLE connection management
   const [deviceConnection, setDeviceConnection] =
     useState<SecureConnectionResult | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionTime, setConnectionTime] = useState<Date | null>(null);
 
   const {
     data: device,
@@ -300,32 +306,82 @@ export default function DeviceDetailPage() {
   // Establish and maintain BLE connection when device is available
   useEffect(() => {
     const establishConnection = async () => {
-      if (!device?.id || deviceConnection || isConnecting) return;
+      if (!device?.id || isConnecting) return;
 
-      setIsConnecting(true);
-      try {
+      // Check if device has a stored bluetoothDeviceId for direct connection
+      const deviceWithBleId = device as DeviceWithBluetooth;
+      if (!deviceWithBleId.bluetoothDeviceId) {
         console.log(
-          "🔗 Establishing persistent connection to device:",
-          device.title,
+          "⚠️ Device has no stored bluetoothDeviceId, cannot connect directly",
         );
-        const connection = await connect(device.id);
-        setDeviceConnection(connection);
-        console.log("✅ Persistent connection established");
-      } catch (error) {
-        console.error("❌ Failed to establish persistent connection:", error);
-      } finally {
-        setIsConnecting(false);
+        return;
+      }
+
+      // Always try to connect if no connection exists or if previous connection is lost
+      if (!deviceConnection) {
+        setIsConnecting(true);
+        try {
+          console.log(
+            "🔗 Establishing persistent connection to device:",
+            device.title,
+            "using stored device ID:",
+            deviceWithBleId.bluetoothDeviceId,
+          );
+          const connection = await connectById(
+            deviceWithBleId.bluetoothDeviceId,
+          );
+          setDeviceConnection(connection);
+          setConnectionTime(new Date());
+          console.log("✅ Persistent connection established");
+        } catch (error) {
+          console.error("❌ Failed to establish persistent connection:", error);
+          setConnectionTime(null);
+        } finally {
+          setIsConnecting(false);
+        }
+      } else {
+        // Check if connection is still valid
+        try {
+          const stillConnected = await deviceConnection.device.isConnected();
+          if (!stillConnected) {
+            console.log("🔌 Previous connection lost, reconnecting...");
+            setIsConnecting(true);
+            const connection = await connectById(
+              deviceWithBleId.bluetoothDeviceId,
+            );
+            setDeviceConnection(connection);
+            setConnectionTime(new Date());
+            console.log("✅ Persistent connection re-established");
+          }
+        } catch (error) {
+          console.error("❌ Error checking connection, reconnecting:", error);
+          setIsConnecting(true);
+          try {
+            const connection = await connectById(
+              deviceWithBleId.bluetoothDeviceId,
+            );
+            setDeviceConnection(connection);
+            setConnectionTime(new Date());
+            console.log("✅ Persistent connection re-established after error");
+          } catch (connError) {
+            console.error("❌ Failed to re-establish connection:", connError);
+            setConnectionTime(null);
+          } finally {
+            setIsConnecting(false);
+          }
+        }
       }
     };
 
     void establishConnection();
-  }, [device?.id, device?.title, deviceConnection, isConnecting, connect]);
+  }, [device, deviceConnection, isConnecting, connectById]);
 
   // Cleanup connection when component unmounts
   useEffect(() => {
     return () => {
       if (deviceConnection) {
         console.log("🔌 Cleaning up persistent connection...");
+        setConnectionTime(null);
         deviceConnection.device.cancelConnection().catch((error) => {
           console.error("❌ Error cleaning up connection:", error);
         });
@@ -335,6 +391,18 @@ export default function DeviceDetailPage() {
 
   const [isSyncing, setIsSyncing] = React.useState(false);
   const [showBLETest, setShowBLETest] = useState(false);
+  const [connectionDurationTick, setConnectionDurationTick] = useState(0);
+
+  // Update connection duration every second
+  useEffect(() => {
+    if (!deviceConnection || !connectionTime) return;
+
+    const interval = setInterval(() => {
+      setConnectionDurationTick((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [deviceConnection, connectionTime]);
 
   // Helper function to sync device alarms using an existing connection
   const syncDeviceAlarmsWithConnection = async (
@@ -414,11 +482,19 @@ export default function DeviceDetailPage() {
           device.alarms,
         );
       } else {
-        // Fall back to creating a new connection
-        console.log("🔗 Creating new connection for sync");
+        // Fall back to creating a new connection using stored device ID
+        const deviceWithBt = device as DeviceWithBluetooth;
+        if (!deviceWithBt.bluetoothDeviceId) {
+          throw new Error(
+            "Device has no stored bluetoothDeviceId for connection",
+          );
+        }
+        console.log(
+          "🔗 Creating new connection for sync using stored device ID",
+        );
         syncResponse = await syncDeviceAlarms(
-          connect,
-          device.id,
+          connectById,
+          deviceWithBt.bluetoothDeviceId,
           device.serialNumber ?? "unknown",
           device.alarms,
         );
@@ -560,6 +636,31 @@ export default function DeviceDetailPage() {
     }
   };
 
+  const getConnectionStatusText = () => {
+    if (deviceConnection) {
+      return "🟢 Connected";
+    } else if (isConnecting) {
+      return "🟡 Connecting";
+    } else {
+      return "🔴 Disconnected";
+    }
+  };
+
+  const getConnectionDuration = () => {
+    if (!connectionTime || !deviceConnection) return "Not connected";
+    // Force re-render by using connectionDurationTick in calculation
+    const now = new Date(Date.now() + connectionDurationTick * 0);
+    const diffMs = now.getTime() - connectionTime.getTime();
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+
+    if (diffMinutes > 0) {
+      return `${diffMinutes}m ${diffSeconds % 60}s`;
+    } else {
+      return `${diffSeconds}s`;
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -581,6 +682,10 @@ export default function DeviceDetailPage() {
 
         {/* Device Stats */}
         <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Connection</Text>
+            <Text style={styles.statValue}>{getConnectionStatusText()}</Text>
+          </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Battery Level</Text>
             <Text
@@ -624,7 +729,9 @@ export default function DeviceDetailPage() {
                   styles.connectionIndicator,
                   deviceConnection
                     ? styles.connectionIndicatorConnected
-                    : styles.connectionIndicatorDisconnected,
+                    : isConnecting
+                      ? styles.connectionIndicatorConnecting
+                      : styles.connectionIndicatorDisconnected,
                 ]}
               >
                 <Text
@@ -632,7 +739,9 @@ export default function DeviceDetailPage() {
                     styles.connectionIndicatorText,
                     deviceConnection
                       ? styles.connectionIndicatorTextConnected
-                      : styles.connectionIndicatorTextDisconnected,
+                      : isConnecting
+                        ? styles.connectionIndicatorTextConnecting
+                        : styles.connectionIndicatorTextDisconnected,
                   ]}
                 >
                   {deviceConnection
@@ -644,17 +753,28 @@ export default function DeviceDetailPage() {
               </View>
             </View>
             {deviceConnection && (
-              <Text style={styles.connectionStatusDescription}>
-                🔗 Persistent connection active - operations will be faster
-              </Text>
+              <View>
+                <Text style={styles.connectionStatusDescription}>
+                  🔗 Persistent connection active - operations will be faster
+                </Text>
+                <Text style={styles.connectionStatusDescription}>
+                  📡 Connected for: {getConnectionDuration()}
+                </Text>
+              </View>
             )}
             {isConnecting && (
               <View style={styles.connectingContainer}>
                 <ActivityIndicator size="small" color={colors.primary[500]} />
                 <Text style={styles.connectingText}>
-                  Establishing connection...
+                  Establishing secure connection to {device.title}...
                 </Text>
               </View>
+            )}
+            {!deviceConnection && !isConnecting && (
+              <Text style={styles.connectionStatusDescription}>
+                ⚠️ Device connection will be established automatically when
+                needed
+              </Text>
             )}
           </View>
         </View>
@@ -833,6 +953,7 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     marginBottom: 24,
   },
@@ -841,8 +962,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: "center",
-    flex: 1,
-    marginHorizontal: 4,
+    minWidth: "48%",
+    marginHorizontal: "1%",
+    marginBottom: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -1049,6 +1171,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#dcfce7",
     borderColor: "#16a34a",
   },
+  connectionIndicatorConnecting: {
+    backgroundColor: "#fef3c7",
+    borderColor: "#f59e0b",
+  },
   connectionIndicatorDisconnected: {
     backgroundColor: "#fee2e2",
     borderColor: "#dc2626",
@@ -1059,6 +1185,9 @@ const styles = StyleSheet.create({
   },
   connectionIndicatorTextConnected: {
     color: "#16a34a",
+  },
+  connectionIndicatorTextConnecting: {
+    color: "#f59e0b",
   },
   connectionIndicatorTextDisconnected: {
     color: "#dc2626",

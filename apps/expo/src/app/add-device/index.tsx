@@ -57,19 +57,12 @@ export default function AddDevicePage() {
     lastError: bluetoothError,
   } = useBluetooth();
 
-  console.log("📊 HOOK RESULT: useBluetooth returned values:");
-  console.log("📊   - isInitialized:", isInitialized);
-  console.log("📊   - bluetoothError:", bluetoothError);
-  console.log("📊   - connectedDevice:", connectedDevice);
-  console.log("📊   - startScan function:", !!bluetoothStartScan);
-  console.log("📊   - stopScan function:", !!stopScan);
-  console.log("📊   - connect function:", !!connect);
-
   const addDeviceMutation = useMutation({
     mutationFn: async (params: {
       title: string;
       description: string;
       serialNumber: string;
+      bluetoothDeviceId: string;
       firmwareVersion: string;
       batteryLevel: number;
     }) => {
@@ -238,6 +231,7 @@ export default function AddDevicePage() {
         title: deviceTitle,
         description: deviceDescription,
         serialNumber: info.serialNumber,
+        bluetoothDeviceId: device.id, // Store the BLE device ID for future connections
         firmwareVersion: info.firmwareVersion,
         batteryLevel: info.batteryLevel,
       });

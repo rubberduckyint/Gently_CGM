@@ -96,23 +96,32 @@ export function useBluetooth() {
         );
       }
 
+      console.log("🔍 useBluetooth: Starting device scan...");
+      console.log("🔍 useBluetooth: Scan options:", options);
+
       // Stop any existing scan
       if (stopScanRef.current) {
+        console.log("🔍 useBluetooth: Stopping existing scan first");
         stopScanRef.current();
       }
 
       // Clear previously scanned devices
       scannedDevicesRef.current.clear();
+      console.log("🔍 useBluetooth: Cleared previous scan results");
 
       setState((prev) => ({ ...prev, isScanning: true, lastError: null }));
 
       const callbacks: ScanCallbacks = {
         onDeviceFound: (device) => {
+          console.log(
+            `🔍 useBluetooth: Device found callback - ${device.name} (${device.id})`,
+          );
           // Store the device with its advertisement data
           scannedDevicesRef.current.set(device.id, device);
           onDeviceFound(device);
         },
         onError: (error) => {
+          console.error("🔍 useBluetooth: Scan error callback:", error);
           setState((prev) => ({
             ...prev,
             isScanning: false,
@@ -120,6 +129,7 @@ export function useBluetooth() {
           }));
         },
         onComplete: () => {
+          console.log("🔍 useBluetooth: Scan complete callback");
           setState((prev) => ({ ...prev, isScanning: false }));
           stopScanRef.current = null;
         },
@@ -132,8 +142,9 @@ export function useBluetooth() {
           options,
         );
         stopScanRef.current = stopFunction;
+        console.log("🔍 useBluetooth: Scan started successfully");
       } catch (error) {
-        console.error("❌ Failed to start device scan:", error);
+        console.error("❌ useBluetooth: Failed to start device scan:", error);
         setState((prev) => ({
           ...prev,
           isScanning: false,
@@ -146,16 +157,21 @@ export function useBluetooth() {
 
   // Stop scanning
   const stopScan = useCallback((): void => {
+    console.log("🔍 useBluetooth: Stopping device scan...");
+
     if (stopScanRef.current) {
       stopScanRef.current();
       stopScanRef.current = null;
+      console.log("🔍 useBluetooth: Scan stopped via stop function");
     }
 
     if (managerRef.current) {
       stopDeviceScan(managerRef.current);
+      console.log("🔍 useBluetooth: Scan stopped via manager");
     }
 
     setState((prev) => ({ ...prev, isScanning: false }));
+    console.log("🔍 useBluetooth: Scan state updated to stopped");
   }, []);
 
   // Connect to device using Gently protocol
@@ -164,6 +180,11 @@ export function useBluetooth() {
       if (!managerRef.current) {
         throw new Error("Bluetooth manager not initialized");
       }
+
+      console.log(`🔗 useBluetooth: Connecting to device with ID: ${deviceId}`);
+      console.log(
+        `📖 Device ID usage: https://github.com/dotintent/react-native-ble-plx/wiki/Device-Connecting`,
+      );
 
       setState((prev) => ({
         ...prev,
@@ -207,6 +228,64 @@ export function useBluetooth() {
       }
     },
     [],
+  );
+
+  // Connect to device by device ID (stored from previous scan)
+  const connectById = useCallback(
+    async (deviceId: string): Promise<SecureConnectionResult> => {
+      if (!managerRef.current) {
+        throw new Error("Bluetooth manager not initialized");
+      }
+
+      if (!isInitialized) {
+        throw new Error(
+          "Bluetooth not initialized. Please check permissions and enable Bluetooth.",
+        );
+      }
+
+      console.log(`� useBluetooth: Connecting to device with ID: ${deviceId}`);
+
+      setState((prev) => ({
+        ...prev,
+        connectionStatus: "connecting",
+        lastError: null,
+      }));
+
+      try {
+        // Connect directly using the stored device ID
+        // See: https://github.com/dotintent/react-native-ble-plx/wiki/Device-Connecting
+        const result = await connectToGentlyDevice(
+          managerRef.current,
+          deviceId,
+          undefined, // No advertisement data available for direct connection
+        );
+
+        console.log(
+          `✅ connectById: Successfully connected to device ${deviceId}`,
+        );
+        setState((prev) => ({
+          ...prev,
+          connectedDevice: result.device,
+          protocol: result.protocol,
+          deviceInformation: result.deviceInfo,
+          connectionStatus: "connected",
+        }));
+
+        return result;
+      } catch (error) {
+        console.error(
+          `❌ connectById: Failed to connect to device ${deviceId}:`,
+          error,
+        );
+        setState((prev) => ({
+          ...prev,
+          connectionStatus: "error",
+          lastError: error instanceof Error ? error.message : "Unknown error",
+        }));
+        throw error;
+      }
+    },
+    [isInitialized],
   );
 
   // Disconnect from device
@@ -309,6 +388,7 @@ export function useBluetooth() {
     startScan,
     stopScan,
     connect,
+    connectById,
     disconnect,
     getDeviceInfo,
     checkConnection,

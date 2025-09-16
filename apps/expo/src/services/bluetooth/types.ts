@@ -11,6 +11,8 @@ export interface BluetoothDevice {
   id: string;
   name: string;
   rssi: number;
+  serviceUUIDs?: string[];
+  localName?: string;
   advertisementData?: AdvertisementData;
   manufacturerData?: {
     isGentlyDevice: boolean;

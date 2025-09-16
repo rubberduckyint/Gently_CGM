@@ -94,6 +94,7 @@ export const deviceRouter = {
         title: z.string().min(1),
         description: z.string().min(1),
         serialNumber: z.string().optional(),
+        bluetoothDeviceId: z.string().optional(),
         batteryLevel: z.number().int().min(0).max(100).optional(),
         // firmwareVersion is not stored in DB, only used for initial pairing info
         firmwareVersion: z.string().optional(),
@@ -106,6 +107,7 @@ export const deviceRouter = {
           title: input.title,
           description: input.description,
           serialNumber: input.serialNumber,
+          bluetoothDeviceId: input.bluetoothDeviceId,
           batteryLevel: input.batteryLevel ?? 100,
           userId: ctx.session.user.id,
         })
@@ -122,6 +124,7 @@ export const deviceRouter = {
         title: z.string().min(1).optional(),
         description: z.string().min(1).optional(),
         serialNumber: z.string().optional(),
+        bluetoothDeviceId: z.string().optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {

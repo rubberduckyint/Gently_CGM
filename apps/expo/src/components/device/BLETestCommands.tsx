@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import React, { useState } from "react";
 import {
   Alert,
@@ -16,12 +17,16 @@ import { useBluetooth } from "~/services/bluetooth";
 import { readComprehensiveDeviceDetails } from "~/services/bluetooth/commands/comprehensive";
 import { colors, spacing, typography } from "~/styles";
 
+// Temporary type extension until database schema is migrated
+interface DeviceWithBluetooth {
+  id: string | undefined;
+  serialNumber: string | null | undefined;
+  title: string | undefined;
+  bluetoothDeviceId?: string;
+}
+
 interface BLETestCommandsProps {
-  device: {
-    id: string | undefined;
-    serialNumber: string | null | undefined;
-    title: string | undefined;
-  };
+  device: DeviceWithBluetooth;
   visible: boolean;
   onClose: () => void;
   existingConnection?: SecureConnectionResult | null;
@@ -48,7 +53,7 @@ export function BLETestCommands({
     batteryLevel: number;
     timestamp: Date;
   } | null>(null);
-  const { connect, disconnect, getBluetoothState } = useBluetooth();
+  const { connectById, disconnect, getBluetoothState } = useBluetooth();
 
   const executeTest = async (command: TestCommand) => {
     if (!device.id) {
@@ -56,8 +61,11 @@ export function BLETestCommands({
       return;
     }
 
-    if (!device.serialNumber) {
-      Alert.alert("Error", "Device serial number is required for BLE commands");
+    if (!device.bluetoothDeviceId) {
+      Alert.alert(
+        "Error",
+        "Device has no stored bluetooth device ID for connection",
+      );
       return;
     }
 
@@ -110,9 +118,11 @@ export function BLETestCommands({
   const testCommands: TestCommand[] = [
     {
       name: "Basic Connection Test",
-      description: "Test basic BLE connection to device",
+      description:
+        "Test basic BLE connection to device by scanning and matching serial number",
       action: async (connection?: SecureConnectionResult) => {
-        if (!device.id) throw new Error("Device ID is required");
+        if (!device.serialNumber)
+          throw new Error("Device serial number is required");
 
         if (connection) {
           console.log(`🔗 Using existing connection for basic test`);
@@ -121,7 +131,7 @@ export function BLETestCommands({
           await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
           console.log("✅ Test completed using existing connection");
         } else {
-          const connectionResult = await connect(device.id);
+          const connectionResult = await connectById(device.bluetoothDeviceId!);
           console.log(`🔗 Connected to device successfully`);
           console.log(`🔗 Protocol established:`, !!connectionResult.protocol);
           console.log(
@@ -138,14 +148,15 @@ export function BLETestCommands({
       name: "Device Information Test",
       description: "Test getting device information through secure protocol",
       action: async (connection?: SecureConnectionResult) => {
-        if (!device.id) throw new Error("Device ID is required");
+        if (!device.serialNumber)
+          throw new Error("Device serial number is required");
 
         let deviceInfo;
         if (connection) {
           console.log(`📱 Using existing connection for device info test`);
           deviceInfo = connection.deviceInfo;
         } else {
-          const connectionResult = await connect(device.id);
+          const connectionResult = await connectById(device.bluetoothDeviceId!);
           deviceInfo = connectionResult.deviceInfo;
         }
 
@@ -164,14 +175,15 @@ export function BLETestCommands({
       name: "Protocol Test",
       description: "Test if secure protocol is established correctly",
       action: async (connection?: SecureConnectionResult) => {
-        if (!device.id) throw new Error("Device ID is required");
+        if (!device.serialNumber)
+          throw new Error("Device serial number is required");
 
         let protocol;
         if (connection) {
           console.log(`🔐 Using existing connection for protocol test`);
           protocol = connection.protocol;
         } else {
-          const connectionResult = await connect(device.id);
+          const connectionResult = await connectById(device.bluetoothDeviceId!);
           protocol = connectionResult.protocol;
         }
 
@@ -190,10 +202,11 @@ export function BLETestCommands({
       description:
         "Get comprehensive device details including info, time, and battery level",
       action: async (connection?: SecureConnectionResult) => {
-        if (!device.id) throw new Error("Device ID is required");
+        if (!device.bluetoothDeviceId)
+          throw new Error("Device bluetooth device ID is required");
 
         let connectionToUse = connection;
-        connectionToUse ??= await connect(device.id);
+        connectionToUse ??= await connectById(device.bluetoothDeviceId);
 
         console.log(`📋 Getting comprehensive device details...`);
         const details = await readComprehensiveDeviceDetails(connectionToUse);
@@ -212,9 +225,11 @@ export function BLETestCommands({
     },
     {
       name: "Connection Stability Test",
-      description: "Test multiple connect/disconnect cycles",
+      description:
+        "Test multiple connect/disconnect cycles by scanning for device",
       action: async (connection?: SecureConnectionResult) => {
-        if (!device.id) throw new Error("Device ID is required");
+        if (!device.serialNumber)
+          throw new Error("Device serial number is required");
 
         if (connection) {
           console.log(
@@ -229,7 +244,7 @@ export function BLETestCommands({
         } else {
           for (let i = 1; i <= 3; i++) {
             console.log(`🔄 Connection cycle ${i}/3`);
-            await connect(device.id);
+            await connectById(device.bluetoothDeviceId!);
             console.log(`✅ Connected (cycle ${i})`);
             await new Promise((resolve) => setTimeout(resolve, 500));
             await disconnect();
@@ -244,16 +259,18 @@ export function BLETestCommands({
     },
     {
       name: "Device State Test",
-      description: "Check device connection state and properties",
+      description:
+        "Check device connection state and properties by scanning for device",
       action: async (connection?: SecureConnectionResult) => {
-        if (!device.id) throw new Error("Device ID is required");
+        if (!device.bluetoothDeviceId)
+          throw new Error("Device bluetooth device ID is required");
 
         let bleDevice;
         if (connection) {
           console.log(`🔗 Using existing connection for device state test`);
           bleDevice = connection.device;
         } else {
-          const connectionResult = await connect(device.id);
+          const connectionResult = await connectById(device.bluetoothDeviceId);
           bleDevice = connectionResult.device;
         }
 
