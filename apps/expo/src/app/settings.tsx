@@ -14,8 +14,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 
+import { Header } from "~/components/ui/Header";
 import {
   buttons,
   buttonText,
@@ -59,6 +61,15 @@ export default function SettingsPage() {
 
   return (
     <SafeAreaView style={containers.safeArea}>
+      <Header
+        title="Settings"
+        showBackButton={true}
+        rightButton={{
+          icon: "home",
+          onPress: () => router.push("/dashboard"),
+          accessibilityLabel: "Go to dashboard",
+        }}
+      />
       <View style={containers.content}>
         <View style={{ paddingVertical: spacing[6] }}>
           {/* Name Field */}

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { BleManager } from "react-native-ble-plx";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
@@ -12,7 +13,12 @@ import {
   ScanningStep,
   SuccessStep,
 } from "~/components/add-device";
-import { useBluetoothContext } from "~/services/bluetooth/BluetoothContext";
+import {
+  connectToGentlyDevice,
+  getStoredDeviceKey,
+  initializeBluetooth,
+  startDeviceScan,
+} from "~/services/bluetooth";
 import {
   buttons,
   buttonText,
@@ -42,26 +48,55 @@ export default function AddDevicePage() {
   } | null>(null);
   const [createdDeviceId, setCreatedDeviceId] = useState<string | null>(null);
 
+  // BLE state management
+  const [bleManager, setBleManager] = useState<BleManager | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const scanStopFunctionRef = useRef<(() => void) | null>(null);
+
   // Keep track of found device IDs to prevent duplicates
   const foundDeviceIds = useRef(new Set<string>());
   const hasStartedInitialScan = useRef(false);
 
-  console.log("🔧 AddDevicePage: Setting up useBluetoothContext hook...");
-  const {
-    startScan: bluetoothStartScan,
-    stopScan,
-    connect,
-    connectedDevice,
-    lastError: bluetoothError,
-    isInitialized,
-  } = useBluetoothContext();
+  // Initialize Bluetooth
+  useEffect(() => {
+    console.log("🔧 AddDevicePage: Initializing Bluetooth...");
+
+    const initBluetooth = async () => {
+      try {
+        const manager = new BleManager();
+        setBleManager(manager);
+
+        await initializeBluetooth(manager);
+        setIsInitialized(true);
+        console.log("✅ AddDevicePage: Bluetooth initialized successfully");
+      } catch (error) {
+        console.error(
+          "❌ AddDevicePage: Failed to initialize Bluetooth:",
+          error,
+        );
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to initialize Bluetooth",
+        );
+        setStep("error");
+      }
+    };
+
+    void initBluetooth();
+
+    return () => {
+      if (scanStopFunctionRef.current) {
+        scanStopFunctionRef.current();
+      }
+    };
+  }, []);
 
   const addDeviceMutation = useMutation({
     mutationFn: async (params: {
       title: string;
       description: string;
       serialNumber: string;
-      bluetoothDeviceId: string;
       firmwareVersion: string;
       batteryLevel: number;
     }) => {
@@ -140,18 +175,23 @@ export default function AddDevicePage() {
     }
   }, []);
 
-  const startScan = useCallback(async () => {
+  const startScan = useCallback(() => {
     console.log("🔍 AddDevicePage: startScan called");
 
+    if (!bleManager) {
+      console.log("❌ AddDevicePage: BLE manager not initialized");
+      setErrorMessage("Bluetooth not initialized");
+      setStep("error");
+      return;
+    }
+
     try {
-      // Check if Bluetooth is initialized
       console.log(
         "🔍 AddDevicePage: Checking initialization status:",
         isInitialized,
       );
       if (!isInitialized) {
         const errorMsg =
-          bluetoothError ??
           "Bluetooth is still initializing. Please wait a moment and try again.";
         console.log("❌ AddDevicePage: Bluetooth not ready:", errorMsg);
         setErrorMessage(errorMsg);
@@ -165,12 +205,12 @@ export default function AddDevicePage() {
       foundDeviceIds.current.clear();
       setErrorMessage("");
 
-      console.log("🔍 AddDevicePage: Calling bluetoothStartScan...");
-      await bluetoothStartScan(
-        { timeout: 10000 },
+      console.log("🔍 AddDevicePage: Calling startDeviceScan...");
+      const stopFunction = startDeviceScan(
+        bleManager,
         {
           onDeviceFound: handleDeviceFound,
-          onError: (error) => {
+          onError: (error: string) => {
             console.error("❌ AddDevicePage: Scan error:", error);
             setErrorMessage(error);
             setStep("error");
@@ -188,8 +228,10 @@ export default function AddDevicePage() {
             setStep("found");
           },
         },
+        { timeout: 10000 },
       );
 
+      scanStopFunctionRef.current = stopFunction;
       console.log("✅ AddDevicePage: Scan started");
     } catch (error) {
       console.error("❌ AddDevicePage: Scan failed:", error);
@@ -198,13 +240,28 @@ export default function AddDevicePage() {
       );
       setStep("error");
     }
-  }, [bluetoothStartScan, handleDeviceFound, isInitialized, bluetoothError]);
+  }, [bleManager, handleDeviceFound, isInitialized]);
+
+  const stopScan = useCallback(() => {
+    console.log("🛑 AddDevicePage: Stopping scan...");
+    if (scanStopFunctionRef.current) {
+      scanStopFunctionRef.current();
+      scanStopFunctionRef.current = null;
+    }
+  }, []);
 
   const handleDeviceSelect = async (device: BluetoothDevice) => {
     console.log(
       "🔗 AddDevicePage: Starting connection process for device:",
       device.name,
     );
+
+    if (!bleManager) {
+      console.log("❌ AddDevicePage: BLE manager not initialized");
+      setErrorMessage("Bluetooth not initialized");
+      setStep("error");
+      return;
+    }
 
     // Stop scanning immediately to prevent interference with pairing
     console.log("🛑 AddDevicePage: Stopping scan before pairing...");
@@ -215,9 +272,21 @@ export default function AddDevicePage() {
 
     try {
       console.log("🔗 AddDevicePage: Initiating GENTLY PAIRING process...");
-      const connectionResult = await connect(device.id);
+
+      // Try to get a stored device key first
+      const storedKey = await getStoredDeviceKey(device.id);
+
+      const connectionResult = await connectToGentlyDevice(
+        bleManager,
+        device.id,
+        device.advertisementData,
+        storedKey ?? undefined,
+      );
 
       console.log("✅ AddDevicePage: GENTLY PAIRING completed successfully");
+
+      // The connection was established successfully
+      console.log("🔑 AddDevicePage: Connection established with device key");
 
       // Convert protocol device info to our DeviceInfo format using the REAL serial number
       const info: DeviceInfo = {
@@ -241,7 +310,6 @@ export default function AddDevicePage() {
         title: deviceTitle,
         description: deviceDescription,
         serialNumber: info.serialNumber, // This will now be the real serial number from advertisement data
-        bluetoothDeviceId: device.id, // Store the BLE device ID for future connections
         firmwareVersion: info.firmwareVersion,
         batteryLevel: info.batteryLevel,
       });
@@ -257,7 +325,6 @@ export default function AddDevicePage() {
   const handleRetry = () => {
     console.log("🔄 AddDevicePage: handleRetry called");
     console.log("🔄 AddDevicePage: Current isInitialized:", isInitialized);
-    console.log("🔄 AddDevicePage: Current bluetoothError:", bluetoothError);
 
     setErrorMessage("");
 
@@ -273,7 +340,7 @@ export default function AddDevicePage() {
         "✅ AddDevicePage: Bluetooth is ready, starting scan directly",
       );
       setStep("scanning");
-      void startScan();
+      startScan();
     } else {
       console.log(
         "⏳ AddDevicePage: Bluetooth not ready, setting to scanning and waiting",
@@ -291,7 +358,6 @@ export default function AddDevicePage() {
   useEffect(() => {
     console.log("📱 AddDevicePage: Initialization useEffect triggered");
     console.log("📱 AddDevicePage: isInitialized:", isInitialized);
-    console.log("📱 AddDevicePage: bluetoothError:", bluetoothError);
     console.log("📱 AddDevicePage: current step:", step);
 
     // Only start scan if we're in scanning step and bluetooth is ready
@@ -304,20 +370,13 @@ export default function AddDevicePage() {
         "✅ AddDevicePage: Bluetooth is initialized and step is scanning, starting scan...",
       );
       hasStartedInitialScan.current = true;
-      void startScan();
-    } else if (bluetoothError && step === "scanning") {
-      console.log(
-        "❌ AddDevicePage: Bluetooth error detected:",
-        bluetoothError,
-      );
-      setErrorMessage(bluetoothError);
-      setStep("error");
+      startScan();
     } else {
       console.log(
         "⏳ AddDevicePage: Waiting for conditions or not in scanning step",
       );
     }
-  }, [isInitialized, bluetoothError, step, startScan]);
+  }, [isInitialized, step, startScan]);
 
   // Cleanup effect that runs on unmount
   useEffect(() => {
@@ -325,7 +384,7 @@ export default function AddDevicePage() {
       console.log("🧹 AddDevicePage: Cleaning up and stopping scan...");
       stopScan();
     };
-  }, [stopScan, connectedDevice]);
+  }, [stopScan]);
 
   const renderStep = () => {
     switch (step) {

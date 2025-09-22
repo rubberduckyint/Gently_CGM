@@ -6,4 +6,5 @@ export * from "./connection";
 export * from "./commands";
 export * from "./protocol";
 export * from "./encryption";
-export * from "./BluetoothContext";
+export * from "./deviceKeys";
+export * from "./simpleCommands";

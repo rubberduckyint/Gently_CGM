@@ -5,12 +5,11 @@
  * with improved consistency and maintainability
  */
 
-import React, { useState } from "react";
+import React from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
   Pressable,
   Text,
   View,
@@ -20,6 +19,8 @@ import { Link, router, useFocusEffect } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { RouterOutputs } from "~/utils/api";
+import { HamburgerMenu } from "~/components/ui/HamburgerMenu";
+import { Header } from "~/components/ui/Header";
 // Import the new design system
 import {
   avatars,
@@ -252,7 +253,6 @@ function DeviceCard({
 export default function DashboardPage() {
   const { data: session } = authClient.useSession();
   const queryClient = useQueryClient();
-  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const {
     data: devices,
@@ -308,7 +308,6 @@ export default function DashboardPage() {
   };
 
   const handleSignOut = () => {
-    setShowUserMenu(false);
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
       { text: "Sign Out", onPress: () => signOutMutation.mutate() },
@@ -319,12 +318,7 @@ export default function DashboardPage() {
     console.log(
       "🔧 Dashboard: Settings button pressed, navigating to /settings",
     );
-    setShowUserMenu(false);
     router.push("/settings");
-  };
-
-  const handleMenuToggle = () => {
-    setShowUserMenu(!showUserMenu);
   };
 
   // Loading state
@@ -380,109 +374,37 @@ export default function DashboardPage() {
 
   return (
     <SafeAreaView style={containers.safeArea}>
-      {/* Header */}
-      <View
-        style={[
-          flex.row,
-          flex.itemsCenter,
-          flex.justifyBetween,
-          {
-            paddingHorizontal: spacing[6],
-            paddingVertical: spacing[4],
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border.light,
-          },
-        ]}
-      >
-        <View>
-          <Text style={typography.h3}>Your Devices</Text>
-          <Text
-            style={[typography.bodySmall, { color: colors.text.secondary }]}
-          >
-            {devices?.length ?? 0} device{devices?.length !== 1 ? "s" : ""}{" "}
-            connected
-          </Text>
-        </View>
-        <View style={{ position: "relative" }}>
-          <Pressable
-            style={{
-              padding: spacing[3],
-            }}
-            onPress={handleMenuToggle}
-          >
-            <Text
-              style={{
-                fontSize: 28,
-                color: colors.text.primary,
-                lineHeight: 28,
-                fontWeight: "bold",
-              }}
-            >
-              ⋯
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-
-      {/* Menu Overlay to close menu when tapping outside */}
-      {showUserMenu && (
-        <Modal
-          transparent
-          visible={showUserMenu}
-          onRequestClose={() => setShowUserMenu(false)}
-        >
-          <Pressable
-            style={{
-              flex: 1,
-              backgroundColor: "transparent",
-            }}
-            onPress={() => setShowUserMenu(false)}
+      <Header
+        title="Your Devices"
+        showBackButton={false}
+        rightComponent={
+          <HamburgerMenu
+            options={[
+              {
+                label: "Settings",
+                onPress: handleUserProfile,
+                icon: "settings",
+              },
+              {
+                label: "Sign Out",
+                onPress: handleSignOut,
+                icon: "log-out",
+                destructive: true,
+              },
+            ]}
           />
+        }
+      />
 
-          {/* Dropdown Menu - moved inside modal for proper layering */}
-          <View
-            style={{
-              position: "absolute",
-              top: 80, // Adjust based on header height
-              right: spacing[6],
-              backgroundColor: colors.background.secondary,
-              borderRadius: 8,
-              minWidth: 150,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.1,
-              shadowRadius: 4,
-              elevation: 3,
-              zIndex: 1000,
-            }}
-          >
-            <Pressable
-              style={{
-                paddingHorizontal: spacing[4],
-                paddingVertical: spacing[3],
-                borderBottomWidth: 1,
-                borderBottomColor: colors.border.light,
-              }}
-              onPress={handleUserProfile}
-            >
-              <Text style={[typography.body, { color: colors.text.primary }]}>
-                Settings
-              </Text>
-            </Pressable>
-            <Pressable
-              style={{
-                paddingHorizontal: spacing[4],
-                paddingVertical: spacing[3],
-              }}
-              onPress={handleSignOut}
-            >
-              <Text style={[typography.body, { color: colors.error[600] }]}>
-                Sign Out
-              </Text>
-            </Pressable>
-          </View>
-        </Modal>
-      )}
+      {/* Device count subtitle */}
+      <View
+        style={{ paddingHorizontal: spacing[6], paddingVertical: spacing[2] }}
+      >
+        <Text style={[typography.bodySmall, { color: colors.text.secondary }]}>
+          {devices?.length ?? 0} device{devices?.length !== 1 ? "s" : ""}{" "}
+          connected
+        </Text>
+      </View>
 
       {/* Content */}
       <View style={containers.content}>

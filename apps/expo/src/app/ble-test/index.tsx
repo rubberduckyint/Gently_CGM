@@ -1,51 +1,146 @@
+/**
+ * BLE Test Page
+ *
+ * A minimal interface for testing BLE commands with connected devices.
+ * Uses the design system for consistent styling.
+ */
+
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
+  ActivityIndicator,
+  FlatList,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
-import { State } from "react-native-ble-plx";
+import { BleManager, State } from "react-native-ble-plx";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router, useGlobalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
+import type { SecureConnectionResult } from "~/services/bluetooth/connection";
+import type { AdvertisementData } from "~/services/bluetooth/protocol";
 import type {
-  BLECommandMetadata,
-  BLECommandResult,
-  RegistryExecutionContext,
-} from "~/services/bluetooth/commands";
-import { useBluetoothContext } from "~/services/bluetooth/BluetoothContext";
+  SimpleCommandMetadata,
+  SimpleCommandResult,
+} from "~/services/bluetooth/simpleCommands";
+import { Header } from "~/components/ui/Header";
 import {
-  BLECommandSeverity,
-  BLECommandStatus,
-  getBLECommandRegistry,
-} from "~/services/bluetooth/commands";
-import { colors, spacing, typography } from "~/styles";
+  connectToGentlyDevice,
+  getStoredDeviceKey,
+  initializeBluetooth,
+  startDeviceScan,
+} from "~/services/bluetooth";
+import {
+  executeSimpleCommand,
+  SIMPLE_COMMANDS,
+} from "~/services/bluetooth/simpleCommands";
+import { colors, containers, spacing, typography } from "~/styles";
 import { trpc } from "~/utils/api";
 
+/**
+ * Find a Gently device by serial number using BLE scanning
+ */
+async function findDeviceBySerialNumber(
+  manager: BleManager,
+  targetSerialNumber: string,
+  timeoutMs = 10000,
+): Promise<{ deviceId: string; advertisementData: AdvertisementData } | null> {
+  return new Promise((resolve) => {
+    let found = false;
+    const timeoutId = setTimeout(() => {
+      if (!found) {
+        console.log(`⏰ Scan timeout after ${timeoutMs}ms, device not found`);
+        cleanup();
+        resolve(null);
+      }
+    }, timeoutMs);
+    let stopScan: (() => void) | null = null;
+
+    const cleanup = () => {
+      if (stopScan) {
+        stopScan();
+      }
+      clearTimeout(timeoutId);
+    };
+
+    // Start scanning
+    console.log(
+      `🔍 Scanning for device with serial number: ${targetSerialNumber}`,
+    );
+
+    stopScan = startDeviceScan(manager, {
+      onDeviceFound: (device) => {
+        if (device.advertisementData) {
+          const deviceSerialHex = Array.from(
+            device.advertisementData.serialNumber,
+          )
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
+
+          console.log(`📱 Found device with serial: ${deviceSerialHex}`);
+
+          if (deviceSerialHex === targetSerialNumber) {
+            console.log(
+              `✅ Found matching device: ${device.name} (${device.id})`,
+            );
+            found = true;
+            cleanup();
+            resolve({
+              deviceId: device.id,
+              advertisementData: device.advertisementData,
+            });
+          }
+        }
+      },
+      onError: (error) => {
+        console.error("❌ Scan error:", error);
+        cleanup();
+        resolve(null);
+      },
+    });
+  });
+}
+
 export default function BLETestPage() {
-  const { deviceId } = useGlobalSearchParams<{ deviceId: string }>();
+  const { deviceId } = useLocalSearchParams<{ deviceId: string }>();
   const [isTesting, setIsTesting] = useState(false);
-  const [lastResult, setLastResult] = useState<BLECommandResult | null>(null);
-  const [testingCommand, setTestingCommand] = useState<string>("");
-  const [logs, setLogs] = useState<string[]>([]);
+  const [lastResult, setLastResult] = useState<SimpleCommandResult | null>(
+    null,
+  );
   const [availableCommands, setAvailableCommands] = useState<
-    BLECommandMetadata[]
+    SimpleCommandMetadata[]
   >([]);
   const isCommandExecutionActiveRef = useRef(false);
 
-  const {
-    connectBySerialNumber,
-    disconnect,
-    getBluetoothState,
-    stopScan,
-    getCurrentConnection,
-  } = useBluetoothContext();
+  // BLE state management
+  const [bleManager, setBleManager] = useState<BleManager | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [currentConnection, setCurrentConnection] =
+    useState<SecureConnectionResult | null>(null);
 
-  // Fetch device data
+  // Initialize Bluetooth
+  useEffect(() => {
+    console.log("🔧 BLETestPage: Initializing Bluetooth...");
+
+    const initBluetooth = async () => {
+      try {
+        const manager = new BleManager();
+        setBleManager(manager);
+
+        await initializeBluetooth(manager);
+        setIsInitialized(true);
+        console.log("✅ BLETestPage: Bluetooth initialized successfully");
+      } catch (error) {
+        console.error("❌ BLETestPage: Failed to initialize Bluetooth:", error);
+      }
+    };
+
+    void initBluetooth();
+  }, []);
+
+  // Fetch device information
   const {
     data: device,
     isLoading: deviceLoading,
@@ -59,596 +154,552 @@ export default function BLETestPage() {
     enabled: !!deviceId,
   });
 
-  // Load available commands from registry
+  // Initialize available commands
   useEffect(() => {
-    const registry = getBLECommandRegistry();
-    const commands = registry.getAllCommands();
-    setAvailableCommands(commands);
+    setAvailableCommands(SIMPLE_COMMANDS);
   }, []);
 
-  // Cleanup any ongoing operations when component unmounts
-  useEffect(() => {
-    return () => {
-      if (isCommandExecutionActiveRef.current) {
-        console.log(
-          "🛑 BLE Test Page: Component unmounting, cancelling ongoing operations",
-        );
-        isCommandExecutionActiveRef.current = false;
-        stopScan();
+  const resetConnection = async () => {
+    console.log("🔄 BLE Test: Resetting connection...");
+    setCurrentConnection(null);
+    setLastResult(null);
+
+    if (currentConnection?.device) {
+      try {
+        await currentConnection.device.cancelConnection();
+        console.log("✅ BLE Test: Disconnected from device");
+      } catch (error) {
+        console.warn("⚠️ BLE Test: Error disconnecting:", error);
       }
-    };
-  }, [stopScan]);
-
-  const addLog = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    const logMessage = `[${timestamp}] ${message}`;
-    setLogs((prev) => [...prev, logMessage]);
-  };
-
-  const clearLogs = () => {
-    setLogs([]);
-  };
-
-  const getDefaultParametersForCommand = (
-    commandMetadata: BLECommandMetadata,
-  ): Record<string, unknown> => {
-    const parameters: Record<string, unknown> = {};
-
-    // Use default values from command metadata parameters
-    commandMetadata.parameters?.forEach((param) => {
-      if (param.defaultValue !== undefined) {
-        parameters[param.name] = param.defaultValue;
-      }
-    });
-
-    // Add some specific defaults for testing
-    if (commandMetadata.id === "create-event") {
-      parameters.eventIndex = parameters.eventIndex ?? 0;
-      parameters.eventName = parameters.eventName ?? "Test Event";
-      parameters.minutesInFuture = parameters.minutesInFuture ?? 5;
-      parameters.severityLevel = parameters.severityLevel ?? 2; // Important
-      parameters.vibrationIntensity = parameters.vibrationIntensity ?? 1; // Medium
-      parameters.ledColor = parameters.ledColor ?? 4; // Red
     }
-
-    if (commandMetadata.id === "set-event-on-off") {
-      parameters.eventIndex = parameters.eventIndex ?? 0;
-      parameters.state = parameters.state ?? true; // Default to ON
-    }
-
-    return parameters;
   };
 
-  const executeCommand = async (commandMetadata: BLECommandMetadata) => {
-    if (!device?.id || !device.serialNumber) {
-      Alert.alert(
-        "Error",
-        "Device ID and serial number are required for BLE commands",
-      );
+  const executeCommand = async (commandMetadata: SimpleCommandMetadata) => {
+    if (isCommandExecutionActiveRef.current || isTesting) {
+      console.warn("Command execution already in progress");
       return;
     }
 
-    // Mark command execution as active
+    if (!bleManager || !isInitialized) {
+      console.warn("Bluetooth not initialized");
+      return;
+    }
+
     isCommandExecutionActiveRef.current = true;
     setIsTesting(true);
-    setTestingCommand(commandMetadata.id);
     setLastResult(null);
-    clearLogs();
 
     try {
-      // Check if operation was cancelled
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (!isCommandExecutionActiveRef.current) {
-        console.log("🛑 Command execution cancelled before execution");
-        return;
-      }
-
-      // Check Bluetooth state
-      const bluetoothState = await getBluetoothState();
+      // Verify Bluetooth is available
+      const bluetoothState = await bleManager.state();
       if (bluetoothState !== State.PoweredOn) {
-        Alert.alert(
-          "Bluetooth Required",
-          "Please enable Bluetooth to test commands.",
-        );
-        return;
+        throw new Error("Bluetooth is not powered on");
       }
 
-      addLog(`🧪 Executing BLE command: ${commandMetadata.name}`);
+      if (!device?.serialNumber) {
+        throw new Error("Device information not available");
+      }
 
-      // Get current connection if available
-      const currentConnection = getCurrentConnection();
-      if (currentConnection) {
-        addLog(`🔗 Using existing connection for command execution`);
+      // Get or establish connection
+      let connection = currentConnection;
+      if (!connection) {
+        console.log(
+          "🔄 BLE Test: No existing connection, establishing new one...",
+        );
+
+        // Try to establish a new connection using device discovery
+        if (!device.serialNumber) {
+          throw new Error("No serial number available for device discovery");
+        }
+
+        console.log(
+          `🔄 BLE Test: Discovering device with serial ${device.serialNumber}...`,
+        );
+
+        // Find the device by serial number
+        const discoveredDevice = await findDeviceBySerialNumber(
+          bleManager,
+          device.serialNumber,
+        );
+
+        if (!discoveredDevice) {
+          throw new Error("Device not found during scanning");
+        }
+
+        // Try to get stored device key using serial number
+        const storedKey = await getStoredDeviceKey(device.serialNumber);
+        console.log(
+          `🔄 BLE Test: ${storedKey ? "Found" : "No"} stored key for device`,
+        );
+
+        try {
+          connection = await connectToGentlyDevice(
+            bleManager,
+            discoveredDevice.deviceId,
+            discoveredDevice.advertisementData,
+            storedKey ?? undefined,
+          );
+
+          console.log("✅ BLE Test: Connection established successfully");
+          setCurrentConnection(connection);
+        } catch (connectionError) {
+          console.error("❌ BLE Test: Connection failed:", connectionError);
+
+          // If connection fails, clear any stored connection state and throw
+          setCurrentConnection(null);
+          throw connectionError;
+        }
       } else {
-        addLog(
-          `🔄 No existing connection, will establish new connection if needed`,
-        );
+        console.log("✅ BLE Test: Using existing connection");
       }
 
-      // Create execution context
-      const context: RegistryExecutionContext = {
-        deviceSerialNumber: device.serialNumber,
-        connection: currentConnection, // Pass existing connection if available
-        connect: () => connectBySerialNumber(device.serialNumber ?? ""),
-        disconnect,
-        parameters: getDefaultParametersForCommand(commandMetadata),
-        options: {
-          captureConsoleLogs: true,
-          logLevel: "info",
-        },
-      };
-
-      // Execute command via registry
-      const registry = getBLECommandRegistry();
-      const result = await registry.executeCommand(commandMetadata.id, context);
-
-      // Merge command logs with our logs
-      result.logs.forEach((log) => {
-        const timestamp = log.timestamp.toLocaleTimeString();
-        const logMessage = `[${timestamp}] ${log.message}`;
-        setLogs((prev) => [...prev, logMessage]);
-      });
+      // Execute the simple command
+      const result = await executeSimpleCommand(
+        commandMetadata.id,
+        connection.device,
+        connection.protocol,
+      );
 
       setLastResult(result);
-      addLog(`✅ Command completed: ${result.message}`);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
-      const errorText = `❌ ${commandMetadata.name} failed: ${errorMessage}`;
+      console.error("❌ BLE command execution error:", error);
 
-      const errorResult: BLECommandResult = {
-        status: BLECommandStatus.ERROR,
-        severity: BLECommandSeverity.ERROR,
-        message: errorText,
-        timestamp: new Date(),
-        logs: [],
+      let errorMessage = "Unknown error";
+
+      if (error instanceof Error) {
+        if (error.message.includes("Timeout waiting for")) {
+          errorMessage =
+            "Device did not respond to command. Try resetting the connection.";
+        } else if (error.message.includes("Bluetooth is not powered on")) {
+          errorMessage =
+            "Bluetooth is not enabled. Please enable Bluetooth and try again.";
+        } else if (error.message.includes("No Bluetooth device ID")) {
+          errorMessage =
+            "Device not properly configured. Check device settings.";
+        } else if (error.message.includes("Failed to connect")) {
+          errorMessage =
+            "Failed to connect to device. Make sure device is nearby and powered on.";
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      const result: SimpleCommandResult = {
+        success: false,
+        error: errorMessage,
+        duration: 0,
       };
 
-      setLastResult(errorResult);
-      addLog(errorText);
-
-      // Try to disconnect on error
-      try {
-        await disconnect();
-      } catch {
-        addLog("❌ Error during cleanup disconnect");
-      }
+      setLastResult(result);
     } finally {
       isCommandExecutionActiveRef.current = false;
       setIsTesting(false);
-      setTestingCommand("");
     }
   };
 
   if (deviceLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading device...</Text>
-        </View>
+      <SafeAreaView
+        style={[
+          containers.safeArea,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <ActivityIndicator size="large" color={colors.primary[500]} />
+        <Text style={[typography.body, { marginTop: spacing[3] }]}>
+          Loading device...
+        </Text>
       </SafeAreaView>
     );
   }
 
   if (deviceError || !device) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>
-            {deviceError?.message ?? "Device not found"}
+      <SafeAreaView style={containers.safeArea}>
+        <Header title="BLE Test" showBackButton />
+        <View
+          style={[containers.card, { margin: spacing[4], padding: spacing[6] }]}
+        >
+          <Text style={[typography.body, { color: colors.error[500] }]}>
+            Device not found
           </Text>
-          <Pressable style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </Pressable>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Group commands by category
-  const commandsByCategory = availableCommands.reduce(
-    (acc, command) => {
-      const category = command.category;
-      acc[category] ??= [];
-      acc[category].push(command);
-      return acc;
-    },
-    {} as Record<string, BLECommandMetadata[]>,
-  );
-
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>← Back</Text>
-        </Pressable>
-        <Text style={styles.title}>BLE Connection Test</Text>
-        <Text style={styles.subtitle}>Device: {device.title ?? "Unknown"}</Text>
-        {device.serialNumber && (
-          <Text style={styles.serialText}>Serial: {device.serialNumber}</Text>
-        )}
-      </View>
+    <SafeAreaView style={containers.safeArea}>
+      <Header title={`BLE Test - ${device.title}`} showBackButton />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {Object.entries(commandsByCategory).map(([category, commands]) => (
-          <View key={category} style={styles.categorySection}>
-            <Text style={styles.categoryTitle}>
-              {category
-                .replace("-", " ")
-                .replace(/\b\w/g, (l) => l.toUpperCase())}
+      <ScrollView style={{ flex: 1, padding: spacing[4] }}>
+        {/* Device Info */}
+        <View
+          style={[
+            containers.card,
+            {
+              marginBottom: spacing[5],
+              padding: spacing[5],
+              borderRadius: 12,
+              shadowColor: colors.gray[900],
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.05,
+              shadowRadius: 3,
+              elevation: 1,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              typography.subtitle,
+              {
+                marginBottom: spacing[3],
+                fontWeight: "600",
+              },
+            ]}
+          >
+            Device: {device.title}
+          </Text>
+          <View style={{ gap: spacing[1] }}>
+            <Text
+              style={[
+                typography.caption,
+                {
+                  color: colors.text.secondary,
+                  lineHeight: 16,
+                },
+              ]}
+            >
+              Serial: {device.serialNumber}
             </Text>
-
-            {commands.map((command) => (
-              <View key={command.id} style={styles.commandCard}>
-                <View style={styles.commandHeader}>
-                  <Text style={styles.commandName}>
-                    {command.name || "Unknown Command"}
-                  </Text>
-                  <Text style={styles.commandVersion}>
-                    v{command.version || "1.0.0"}
-                  </Text>
-                </View>
-                <Text style={styles.commandDescription}>
-                  {command.description || "No description available"}
-                </Text>
-
-                <View style={styles.commandMeta}>
-                  <Text style={styles.commandMetaText}>
-                    Est. Duration:{" "}
-                    {command.estimatedDuration
-                      ? `${command.estimatedDuration}ms`
-                      : "Unknown"}
-                  </Text>
-                  <Text style={styles.commandMetaText}>
-                    Requires Connection:{" "}
-                    {command.requiresConnection ? "Yes" : "No"}
-                  </Text>
-                </View>
-
-                <View style={styles.commandTags}>
-                  {command.tags.map((tag) => (
-                    <View key={tag} style={styles.tag}>
-                      <Text style={styles.tagText}>{tag}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                <Pressable
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Text
+                style={[
+                  typography.caption,
+                  {
+                    color: colors.text.secondary,
+                    marginRight: spacing[2],
+                  },
+                ]}
+              >
+                Status:
+              </Text>
+              <View
+                style={{
+                  backgroundColor: currentConnection
+                    ? colors.success[50]
+                    : colors.gray[50],
+                  borderColor: currentConnection
+                    ? colors.success[200]
+                    : colors.gray[200],
+                  borderWidth: 1,
+                  paddingHorizontal: spacing[2],
+                  paddingVertical: 2,
+                  borderRadius: 4,
+                }}
+              >
+                <Text
                   style={[
-                    styles.testButton,
-                    isTesting && styles.testButtonDisabled,
-                    testingCommand === command.id && styles.testButtonActive,
+                    typography.caption,
+                    {
+                      color: currentConnection
+                        ? colors.success[700]
+                        : colors.gray[600],
+                      fontSize: 11,
+                      fontWeight: "500",
+                    },
                   ]}
-                  onPress={() => void executeCommand(command)}
-                  disabled={isTesting}
+                >
+                  {currentConnection ? "Connected" : "Disconnected"}
+                </Text>
+              </View>
+              {currentConnection && (
+                <Pressable
+                  style={({ pressed }) => ({
+                    backgroundColor: pressed
+                      ? colors.gray[200]
+                      : colors.gray[100],
+                    paddingHorizontal: spacing[2],
+                    paddingVertical: spacing[1],
+                    borderRadius: 6,
+                    marginLeft: spacing[2],
+                  })}
+                  onPress={resetConnection}
                 >
                   <Text
                     style={[
-                      styles.testButtonText,
-                      testingCommand === command.id &&
-                        styles.testButtonTextActive,
+                      typography.caption,
+                      {
+                        color: colors.gray[700],
+                        fontSize: 11,
+                        fontWeight: "500",
+                      },
                     ]}
                   >
-                    {testingCommand === command.id ? "Testing..." : "Test"}
+                    Reset
                   </Text>
                 </Pressable>
-              </View>
-            ))}
-          </View>
-        ))}
-
-        {lastResult && (
-          <View style={styles.resultContainer}>
-            <Text style={styles.resultTitle}>Last Test Result:</Text>
-            <View
-              style={[
-                styles.resultHeader,
-                lastResult.severity === BLECommandSeverity.SUCCESS &&
-                  styles.resultHeaderSuccess,
-                lastResult.severity === BLECommandSeverity.ERROR &&
-                  styles.resultHeaderError,
-                lastResult.severity === BLECommandSeverity.WARNING &&
-                  styles.resultHeaderWarning,
-              ]}
-            >
-              <Text style={styles.resultStatus}>
-                {lastResult.status.toUpperCase()}
-              </Text>
-              {lastResult.duration && (
-                <Text style={styles.resultDuration}>
-                  {lastResult.duration}ms
-                </Text>
               )}
             </View>
-            <Text style={styles.resultText}>
-              {lastResult.message || "No message"}
-            </Text>
-            {!!lastResult.data && (
-              <View style={styles.resultDataContainer}>
-                <Text style={styles.resultDataTitle}>Response Data:</Text>
-                <Text style={styles.resultDataText}>
-                  {JSON.stringify(lastResult.data, null, 2)}
-                </Text>
-              </View>
-            )}
           </View>
-        )}
+        </View>
 
-        {logs.length > 0 && (
-          <View style={styles.resultContainer}>
-            <View style={styles.logsHeader}>
-              <Text style={styles.resultTitle}>Execution Logs:</Text>
-              <Pressable style={styles.clearLogsButton} onPress={clearLogs}>
-                <Text style={styles.clearLogsText}>Clear</Text>
+        {/* Available Commands */}
+        <Text
+          style={[
+            typography.subtitle,
+            {
+              marginBottom: spacing[3],
+              fontWeight: "600",
+              color: colors.text.primary,
+            },
+          ]}
+        >
+          Available Commands
+        </Text>
+        <FlatList
+          data={availableCommands}
+          keyExtractor={(item) => item.id}
+          scrollEnabled={false}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item: command }) => (
+            <View
+              style={[
+                containers.card,
+                {
+                  marginBottom: spacing[3],
+                  padding: spacing[5],
+                  borderRadius: 12,
+                  shadowColor: colors.gray[900],
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 3,
+                  elevation: 1,
+                },
+              ]}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  marginBottom: spacing[2],
+                }}
+              >
+                <Text
+                  style={[
+                    typography.body,
+                    {
+                      fontWeight: "600",
+                      flex: 1,
+                      marginRight: spacing[3],
+                    },
+                  ]}
+                >
+                  {command.name}
+                </Text>
+                <View
+                  style={{
+                    backgroundColor: colors.primary[50],
+                    borderColor: colors.primary[200],
+                    borderWidth: 1,
+                    paddingHorizontal: spacing[2],
+                    paddingVertical: spacing[1],
+                    borderRadius: 6,
+                  }}
+                >
+                  <Text
+                    style={[
+                      typography.caption,
+                      {
+                        color: colors.primary[700],
+                        fontWeight: "500",
+                        fontSize: 11,
+                      },
+                    ]}
+                  >
+                    {command.category}
+                  </Text>
+                </View>
+              </View>
+
+              <Text
+                style={[
+                  typography.caption,
+                  {
+                    marginBottom: spacing[4],
+                    lineHeight: 18,
+                    color: colors.text.secondary,
+                  },
+                ]}
+              >
+                {command.description}
+              </Text>
+
+              <Pressable
+                style={({ pressed }) => [
+                  {
+                    backgroundColor: isTesting
+                      ? colors.gray[300]
+                      : pressed
+                        ? colors.primary[600]
+                        : colors.primary[500],
+                    paddingHorizontal: spacing[4],
+                    paddingVertical: spacing[3],
+                    borderRadius: 8,
+                    minHeight: 48,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    shadowColor: colors.gray[900],
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 2,
+                    opacity: isTesting ? 0.6 : 1,
+                  },
+                ]}
+                onPress={() => executeCommand(command)}
+                disabled={isTesting}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  {isTesting && (
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.text.inverse}
+                      style={{ marginRight: spacing[2] }}
+                    />
+                  )}
+                  <Text
+                    style={[
+                      typography.body,
+                      {
+                        color: colors.text.inverse,
+                        fontWeight: "600",
+                      },
+                    ]}
+                  >
+                    {isTesting ? "Testing..." : "Run Test"}
+                  </Text>
+                </View>
               </Pressable>
             </View>
-            <ScrollView
-              style={styles.logsContainer}
-              showsVerticalScrollIndicator={false}
+          )}
+        />
+
+        {/* Last Result */}
+        {lastResult && (
+          <View style={{ marginTop: spacing[6] }}>
+            <Text
+              style={[
+                typography.subtitle,
+                {
+                  marginBottom: spacing[3],
+                  fontWeight: "600",
+                  color: colors.text.primary,
+                },
+              ]}
             >
-              {logs.map((log, index) => (
-                <Text key={index} style={styles.logText}>
-                  {log || ""}
+              Last Result
+            </Text>
+            <View
+              style={[
+                containers.card,
+                {
+                  padding: spacing[5],
+                  borderRadius: 12,
+                  shadowColor: colors.gray[900],
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 3,
+                  elevation: 1,
+                },
+              ]}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginBottom: spacing[2],
+                }}
+              >
+                <Text
+                  style={[
+                    typography.body,
+                    {
+                      color: lastResult.success
+                        ? colors.success[600]
+                        : colors.error[600],
+                      fontWeight: "600",
+                      marginRight: spacing[2],
+                    },
+                  ]}
+                >
+                  {lastResult.success ? "✅ Success" : "❌ Failed"}
                 </Text>
-              ))}
-            </ScrollView>
+                <Text
+                  style={[typography.caption, { color: colors.text.secondary }]}
+                >
+                  Duration: {lastResult.duration}ms
+                </Text>
+              </View>
+
+              <Text
+                style={[
+                  typography.body,
+                  {
+                    marginBottom: spacing[3],
+                    lineHeight: 20,
+                  },
+                ]}
+              >
+                {lastResult.success
+                  ? "Command executed successfully"
+                  : lastResult.error}
+              </Text>
+
+              {lastResult.data !== undefined && (
+                <View
+                  style={{
+                    marginTop: spacing[2],
+                    backgroundColor: colors.gray[50],
+                    padding: spacing[3],
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: colors.gray[200],
+                  }}
+                >
+                  <Text
+                    style={[
+                      typography.caption,
+                      {
+                        marginBottom: spacing[2],
+                        fontWeight: "600",
+                        color: colors.text.primary,
+                      },
+                    ]}
+                  >
+                    Data:
+                  </Text>
+                  <Text
+                    style={[
+                      typography.caption,
+                      {
+                        fontFamily: "monospace",
+                        lineHeight: 16,
+                        color: colors.text.secondary,
+                      },
+                    ]}
+                  >
+                    {typeof lastResult.data === "string"
+                      ? lastResult.data
+                      : JSON.stringify(lastResult.data, null, 2)}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background.primary,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    ...typography.body,
-    color: colors.text.secondary,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: spacing[4],
-  },
-  errorText: {
-    ...typography.body,
-    color: colors.status.error,
-    textAlign: "center",
-    marginBottom: spacing[4],
-  },
-  header: {
-    padding: spacing[4],
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.medium,
-    backgroundColor: colors.background.secondary,
-  },
-  title: {
-    ...typography.h2,
-    marginBottom: spacing[1],
-    marginTop: spacing[2],
-  },
-  subtitle: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing[1],
-  },
-  serialText: {
-    ...typography.bodySmall,
-    color: colors.text.tertiary,
-    fontFamily: "monospace",
-  },
-  backButton: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.gray[200],
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-    borderRadius: 8,
-  },
-  backButtonText: {
-    ...typography.body,
-    color: colors.text.primary,
-    fontWeight: "600",
-  },
-  content: {
-    flex: 1,
-    padding: spacing[4],
-  },
-  commandCard: {
-    backgroundColor: colors.background.secondary,
-    borderRadius: 12,
-    padding: spacing[4],
-    marginBottom: spacing[4],
-    borderWidth: 1,
-    borderColor: colors.border.light,
-  },
-  commandHeader: {
-    marginBottom: spacing[2],
-  },
-  commandName: {
-    ...typography.h4,
-    color: colors.text.primary,
-  },
-  commandDescription: {
-    ...typography.body,
-    color: colors.text.secondary,
-    marginBottom: spacing[3],
-  },
-  testButton: {
-    backgroundColor: colors.primary[500],
-    paddingVertical: spacing[3],
-    paddingHorizontal: spacing[4],
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  testButtonDisabled: {
-    backgroundColor: colors.gray[300],
-  },
-  testButtonActive: {
-    backgroundColor: colors.warning[500],
-  },
-  testButtonText: {
-    ...typography.body,
-    color: colors.text.inverse,
-    fontWeight: "600",
-  },
-  testButtonTextActive: {
-    color: colors.text.inverse,
-  },
-  resultContainer: {
-    backgroundColor: colors.background.secondary,
-    borderRadius: 12,
-    padding: spacing[4],
-    marginTop: spacing[4],
-    borderWidth: 1,
-    borderColor: colors.border.light,
-  },
-  resultTitle: {
-    ...typography.h5,
-    color: colors.text.primary,
-    marginBottom: spacing[2],
-  },
-  resultText: {
-    ...typography.body,
-    color: colors.text.secondary,
-    fontFamily: "monospace",
-  },
-  clearLogsButton: {
-    alignSelf: "flex-end",
-    backgroundColor: colors.gray[300],
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[1],
-    borderRadius: 6,
-    marginBottom: spacing[2],
-  },
-  clearLogsText: {
-    ...typography.bodySmall,
-    color: colors.text.primary,
-    fontWeight: "600",
-  },
-  deviceDetailsContainer: {
-    marginTop: spacing[2],
-  },
-  deviceDetailItem: {
-    ...typography.body,
-    color: colors.text.primary,
-    marginBottom: spacing[1],
-    fontSize: 14,
-  },
-  logsContainer: {
-    maxHeight: 200,
-    backgroundColor: colors.gray[50],
-    borderRadius: 8,
-    padding: spacing[2],
-    marginTop: spacing[2],
-  },
-  logText: {
-    ...typography.body,
-    color: colors.text.secondary,
-    fontFamily: "monospace",
-    fontSize: 12,
-    marginBottom: spacing[1],
-  },
-  categorySection: {
-    marginBottom: spacing[6],
-  },
-  categoryTitle: {
-    ...typography.h3,
-    color: colors.text.primary,
-    marginBottom: spacing[4],
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
-    paddingBottom: spacing[2],
-  },
-  commandVersion: {
-    ...typography.caption,
-    color: colors.text.tertiary,
-    fontWeight: "600",
-  },
-  commandMeta: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: spacing[3],
-  },
-  commandMetaText: {
-    ...typography.caption,
-    color: colors.text.secondary,
-  },
-  commandTags: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing[1],
-    marginBottom: spacing[3],
-  },
-  tag: {
-    backgroundColor: colors.primary[100],
-    paddingHorizontal: spacing[2],
-    paddingVertical: spacing[1],
-    borderRadius: 12,
-  },
-  tagText: {
-    ...typography.caption,
-    color: colors.primary[700],
-    fontWeight: "600",
-  },
-  resultHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: spacing[2],
-    paddingVertical: spacing[2],
-    paddingHorizontal: spacing[3],
-    borderRadius: 8,
-    backgroundColor: colors.gray[100],
-  },
-  resultHeaderSuccess: {
-    backgroundColor: colors.success[100],
-  },
-  resultHeaderError: {
-    backgroundColor: colors.error[100],
-  },
-  resultHeaderWarning: {
-    backgroundColor: colors.warning[100],
-  },
-  resultStatus: {
-    ...typography.bodySmall,
-    fontWeight: "700",
-    color: colors.text.primary,
-  },
-  resultDuration: {
-    ...typography.caption,
-    color: colors.text.secondary,
-    fontFamily: "monospace",
-  },
-  resultDataContainer: {
-    marginTop: spacing[3],
-    backgroundColor: colors.gray[50],
-    borderRadius: 8,
-    padding: spacing[3],
-  },
-  resultDataTitle: {
-    ...typography.bodySmall,
-    color: colors.text.primary,
-    fontWeight: "600",
-    marginBottom: spacing[2],
-  },
-  resultDataText: {
-    ...typography.caption,
-    color: colors.text.secondary,
-    fontFamily: "monospace",
-  },
-  logsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: spacing[2],
-  },
-});

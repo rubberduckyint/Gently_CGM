@@ -14,6 +14,7 @@ import { GetTimeCommand } from "./commands/GetTimeCommand";
 import { GetUptimeCommand } from "./commands/GetUptimeCommand";
 import { SetTimeCommand } from "./commands/SetTimeCommand";
 import { TimeNotifyCommand } from "./commands/TimeNotifyCommand";
+import { storeDeviceKey } from "./deviceKeys";
 import {
   CommandCode,
   DEFAULT_FACTORY_KEY,
@@ -30,6 +31,13 @@ export interface SecureConnectionResult {
   deviceInfo: DeviceInformation;
   uptime: Uint8Array;
   serialNumber: string; // Hex string representation of the serial number from advertisement data
+}
+
+/**
+ * Helper function to compare two Uint8Arrays for equality
+ */
+function arrayEquals(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((val, index) => val === b[index]);
 }
 
 /**
@@ -90,7 +98,7 @@ export async function connectToGentlyDevice(
     // Connect to the device
     let device: Device;
     try {
-      device = await manager.connectToDevice(deviceId);
+      device = await manager.connectToDevice(deviceId, { requestMTU: 512 });
     } catch (error) {
       console.log("ERROR", error);
       if (error instanceof Error && error.message.includes("destroyed")) {
@@ -142,6 +150,8 @@ export async function connectToGentlyDevice(
 
     const waitForNotification = (): Promise<string> => {
       return new Promise((resolve, reject) => {
+        console.log(`${logPrefix}: ⏳ Waiting for device notification...`);
+
         // Wait for the next response
         waitingForResponse = true;
         currentResponseResolver = resolve;
@@ -150,6 +160,9 @@ export async function connectToGentlyDevice(
         // Set a timeout for the response
         setTimeout(() => {
           if (currentResponseRejecter && waitingForResponse) {
+            console.log(
+              `${logPrefix}: ⏰ Timeout reached while waiting for response`,
+            );
             currentResponseRejecter(
               new Error("Timeout waiting for bracelet response"),
             );
@@ -160,6 +173,10 @@ export async function connectToGentlyDevice(
         }, 10000); // 10 second timeout
       });
     };
+
+    console.log(
+      `${logPrefix}: 🔔 Setting up notification monitoring for response characteristic...`,
+    );
 
     device.monitorCharacteristicForService(
       GENTLY_SERVICE_UUID,
@@ -176,10 +193,18 @@ export async function connectToGentlyDevice(
           return;
         }
         if (characteristic?.value) {
+          console.log(
+            `${logPrefix}: 📨 Raw notification received: ${characteristic.value} (length: ${characteristic.value.length})`,
+          );
+
           // IMMEDIATELY DECRYPT AND LOG THE NOTIFICATION
           try {
             const encryptedData = base64ToUint8Array(characteristic.value);
             const decryptedResponse = protocol.parseResponse(encryptedData);
+
+            console.log(
+              `${logPrefix}: 🔓 Decrypted response - Command: ${decryptedResponse.command}, Status: ${decryptedResponse.status}`,
+            );
 
             // Log human-readable interpretation for common commands
             if (
@@ -326,6 +351,17 @@ export async function connectToGentlyDevice(
 
     // Extract serial number from advertisement data
     const serialNumber = advertisementData?.serialNumber ?? new Uint8Array(8);
+    console.log(
+      `${logPrefix}: Using serial number: ${Array.from(serialNumber)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("")} (${serialNumber.length} bytes)`,
+    );
+
+    // Give a small delay to ensure notification monitoring is established
+    console.log(
+      `${logPrefix}: ⏳ Waiting for notification setup to stabilize...`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     // Step 1: Get uptime (encrypted with bracelet key)
     console.log(`${logPrefix}: Requesting device uptime...`);
@@ -337,13 +373,16 @@ export async function connectToGentlyDevice(
       uptimeRequestPayload,
     );
 
+    console.log(`${logPrefix}: 📤 Sending uptime command to device...`);
     await device.writeCharacteristicWithResponseForService(
       GENTLY_SERVICE_UUID,
       REQUEST_CHARACTERISTIC_UUID,
       uint8ArrayToBase64(uptimeRequest),
     );
+    console.log(`${logPrefix}: ✅ Uptime command sent successfully`);
 
     // Wait for the response via notification
+    console.log(`${logPrefix}: ⏳ Waiting for uptime response...`);
     const uptimeResponseValue = await waitForNotification();
 
     if (!uptimeResponseValue) {
@@ -405,6 +444,30 @@ export async function connectToGentlyDevice(
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("")
       .toUpperCase();
+
+    // Store the device key for future connections using serial number as identifier
+    // Only store if this was a successful pairing and we're not using factory key
+    const currentBraceletKey = protocol.getBraceletKey();
+    const isUsingFactoryKey = arrayEquals(
+      currentBraceletKey,
+      DEFAULT_FACTORY_KEY,
+    );
+
+    if (!isUsingFactoryKey) {
+      try {
+        await storeDeviceKey(serialNumberHex, currentBraceletKey);
+        console.log(
+          `${logPrefix}: 🔑 Custom device key stored for serial: ${serialNumberHex}`,
+        );
+      } catch (error) {
+        console.warn(`${logPrefix}: ⚠️ Failed to store device key:`, error);
+        // Don't fail the connection if key storage fails
+      }
+    } else {
+      console.log(
+        `${logPrefix}: 🔑 Using factory key, not storing for serial: ${serialNumberHex}`,
+      );
+    }
 
     return {
       device,
@@ -497,48 +560,82 @@ export async function sendCommand(
   command: CommandCode,
   payload?: Uint8Array,
 ): Promise<Uint8Array> {
+  const logPrefix = `[BLE sendCommand]`;
+  console.log(
+    `${logPrefix}: 🚀 Sending command ${command} to device ${device.id}`,
+  );
+
   try {
     if (
       !protocol.isDynamicKeyEstablished() &&
       command !== CommandCode.GET_UPTIME
     ) {
+      console.log(
+        `${logPrefix}: ❌ Dynamic key not established for command ${command}`,
+      );
       throw new Error(
         "Dynamic key not established. Call connectToGentlyDevice first.",
       );
     }
 
+    console.log(
+      `${logPrefix}: ✅ Dynamic key established, creating request...`,
+    );
+
     // Create the request
     const request = protocol.createRequest(command, payload);
+    console.log(
+      `${logPrefix}: 📦 Request created, size: ${request.length} bytes`,
+    );
 
     // Send the request
+    console.log(`${logPrefix}: 📤 Writing to request characteristic...`);
     await device.writeCharacteristicWithResponseForService(
       GENTLY_SERVICE_UUID,
       REQUEST_CHARACTERISTIC_UUID,
       uint8ArrayToBase64(request),
     );
+    console.log(`${logPrefix}: ✅ Request sent successfully`);
 
     // Read the response
+    console.log(`${logPrefix}: 📥 Reading response characteristic...`);
     const response = await device.readCharacteristicForService(
       GENTLY_SERVICE_UUID,
       RESPONSE_CHARACTERISTIC_UUID,
     );
 
     if (!response.value) {
+      console.log(`${logPrefix}: ❌ No response value received`);
       throw new Error("No response received");
     }
 
+    console.log(
+      `${logPrefix}: 📨 Response received: ${response.value} (length: ${response.value.length})`,
+    );
+
     // Parse the response
+    console.log(`${logPrefix}: 🔓 Parsing response...`);
     const parsedResponse = protocol.parseResponse(
       base64ToUint8Array(response.value),
     );
 
+    console.log(
+      `${logPrefix}: 📋 Response parsed - Status: ${parsedResponse.status}, Command: ${parsedResponse.command}`,
+    );
+
     if (parsedResponse.status !== ResponseStatus.OK) {
+      console.log(
+        `${logPrefix}: ❌ Command failed with status: ${parsedResponse.status}`,
+      );
       throw new Error(`Command failed with status: ${parsedResponse.status}`);
     }
 
+    console.log(
+      `${logPrefix}: ✅ Command completed successfully, payload size: ${parsedResponse.payload.length}`,
+    );
     return parsedResponse.payload;
   } catch (error) {
-    console.error("❌ Failed to send command:", error);
+    console.error(`${logPrefix}: ❌ Failed to send command:`, error);
     throw error;
   }
 }

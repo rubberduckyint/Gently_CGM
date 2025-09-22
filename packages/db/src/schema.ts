@@ -33,8 +33,7 @@ export const Device = pgTable("Device", (t) => ({
   id: pgCuid2("id").defaultRandom().primaryKey(),
   title: t.text().notNull(),
   description: t.text().notNull(),
-  serialNumber: t.text(), // Device serial number from BLE connection
-  bluetoothDeviceId: t.text(), // BLE device ID for direct connection
+  serialNumber: t.text(), // Device serial number from BLE connection - used for device discovery
   createdAt: t.timestamp({ withTimezone: true }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ withTimezone: true, mode: "string" })
@@ -79,7 +78,6 @@ export const CreateDeviceSchema = createInsertSchema(Device, {
   title: z.string().min(1),
   description: z.string().min(1),
   serialNumber: z.string().optional(),
-  bluetoothDeviceId: z.string().optional(),
 }).omit({
   id: true,
   createdAt: true,
@@ -91,7 +89,6 @@ export const UpdateDeviceSchema = createInsertSchema(Device, {
   title: z.string().min(1).optional(),
   description: z.string().min(1).optional(),
   serialNumber: z.string().optional(),
-  bluetoothDeviceId: z.string().optional(),
 })
   .omit({
     createdAt: true,
