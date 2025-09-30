@@ -5,7 +5,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   name: "Gently",
   slug: "gently",
   scheme: "gently",
-  version: "0.1.0",
+  version: "0.1.1",
   orientation: "portrait",
   icon: "./assets/gently-ios-blue.png",
   userInterfaceStyle: "automatic",
@@ -51,11 +51,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       "android.permission.ACCESS_COARSE_LOCATION",
     ],
   },
-  // extra: {
-  //   eas: {
-  //     projectId: "your-eas-project-id",
-  //   },
-  // },
+  extra: {
+    eas: {
+      projectId: "e881c3b6-0d21-4cc4-8933-176c9d6eb00e",
+    },
+  },
   experiments: {
     tsconfigPaths: true,
     typedRoutes: true,
