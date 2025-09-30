@@ -370,8 +370,8 @@ const AddDeviceScreen = () => {
       console.log(`✅ Device paired successfully: ${newDevice?.title}`);
       if (newDevice?.id) {
         router.push({
-          pathname: "/devices/[id]",
-          params: { id: newDevice.id },
+          pathname: "/devices/[deviceId]",
+          params: { deviceId: newDevice.id },
         });
       }
     } catch (error) {

@@ -1,50 +1,26 @@
 /**
  * Add Alarm Page
  *
- * Multi-step form for creating a new alarm for a specific device.
- * Steps:
- * 1. Basic Info - title, description, color
- * 2. Schedule - start time, repeat settings
- * 3. Advanced - priority, haptic feedback
- * 4. Review - confirm all settings before creation
- *
- * Modeled after the Next.js AlarmEditForm but adapted for React Native
- * with proper navigation and mobile-friendly form controls.
+ * Single-page form for creating a new alarm for a specific device.
+ * All settings are displayed on one scrollable page for better UX.
  */
 
 import React, { useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import type { AlarmFormData } from "~/components/alarms";
 import {
-  AdvancedStep,
-  BasicInfoStep,
-  ReviewStep,
-  ScheduleStep,
+  AdvancedSection,
+  BasicInfoSection,
+  ScheduleSection,
 } from "~/components/alarms";
-import { colors, containers, spacing, typography } from "~/styles";
+import { Header } from "~/components/ui/Header";
+import { buttons, buttonText, colors, containers, spacing } from "~/styles";
 import { trpc } from "~/utils/api";
-
-type AlarmStep = "basic" | "schedule" | "advanced" | "review";
-
-export interface AlarmFormData {
-  title: string;
-  description: string;
-  startDate: Date;
-  repeat: boolean;
-  repeatType: "minutes" | "hours" | "days" | "weeks";
-  repeatEvery: number;
-  daysOfWeek: string[];
-  ends: "never" | "on" | "after";
-  endsOnDate?: Date;
-  endsAfter?: number;
-  color: string;
-  priority: "LOW" | "MEDIUM" | "HIGH";
-  hapticChoice: "STANDARD" | "STRONG" | "SOFT" | "DOUBLE" | "PULSE" | "WAVE";
-}
 
 const getDefaultFormData = (): AlarmFormData => {
   const now = new Date();
@@ -98,8 +74,9 @@ const generateCronExpression = (formData: AlarmFormData): string => {
 
 export default function AddAlarmPage() {
   const { deviceId } = useLocalSearchParams<{ deviceId: string }>();
-  const [step, setStep] = useState<AlarmStep>("basic");
   const [formData, setFormData] = useState<AlarmFormData>(getDefaultFormData());
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const queryClient = useQueryClient();
 
   const createAlarmMutation = useMutation({
@@ -162,162 +139,106 @@ export default function AddAlarmPage() {
     setFormData((prev) => ({ ...prev, ...updates }));
   };
 
-  const handleNext = () => {
-    const steps: AlarmStep[] = ["basic", "schedule", "advanced", "review"];
-    const currentIndex = steps.indexOf(step);
-    if (currentIndex < steps.length - 1) {
-      const nextStep = steps[currentIndex + 1];
-      if (nextStep) {
-        setStep(nextStep);
-      }
-    }
-  };
-
-  const handlePrevious = () => {
-    const steps: AlarmStep[] = ["basic", "schedule", "advanced", "review"];
-    const currentIndex = steps.indexOf(step);
-    if (currentIndex > 0) {
-      const prevStep = steps[currentIndex - 1];
-      if (prevStep) {
-        setStep(prevStep);
-      }
-    } else {
-      router.back();
-    }
-  };
-
-  const handleFinish = () => {
+  const handleSave = () => {
     // Validate required fields
     if (!formData.title.trim()) {
       Alert.alert("Error", "Alarm title is required");
-      setStep("basic");
       return;
     }
 
     createAlarmMutation.mutate(formData);
   };
 
-  const getStepTitle = () => {
-    switch (step) {
-      case "basic":
-        return "Basic Information";
-      case "schedule":
-        return "Schedule";
-      case "advanced":
-        return "Advanced Settings";
-      case "review":
-        return "Review";
-      default:
-        return "Add Alarm";
-    }
-  };
-
-  const getStepNumber = () => {
-    const steps = ["basic", "schedule", "advanced", "review"];
-    return steps.indexOf(step) + 1;
-  };
-
-  const renderStep = () => {
-    switch (step) {
-      case "basic":
-        return (
-          <BasicInfoStep
-            formData={formData}
-            onUpdate={updateFormData}
-            onNext={handleNext}
-            onCancel={handlePrevious}
-          />
-        );
-      case "schedule":
-        return (
-          <ScheduleStep
-            formData={formData}
-            onUpdate={updateFormData}
-            onNext={handleNext}
-            onPrevious={handlePrevious}
-          />
-        );
-      case "advanced":
-        return (
-          <AdvancedStep
-            formData={formData}
-            onUpdate={updateFormData}
-            onNext={handleNext}
-            onPrevious={handlePrevious}
-          />
-        );
-      case "review":
-        return (
-          <ReviewStep
-            formData={formData}
-            onFinish={handleFinish}
-            onPrevious={handlePrevious}
-            isLoading={createAlarmMutation.isPending}
-          />
-        );
-      default:
-        return null;
-    }
-  };
-
   return (
     <SafeAreaView style={containers.safeArea}>
-      {/* Header */}
+      <Header title="Add New Alarm" showBackButton={true} />
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          padding: spacing[6],
+          paddingBottom: spacing[20],
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Basic Information Section */}
+        <BasicInfoSection
+          formData={formData}
+          onUpdateFormData={updateFormData}
+        />
+
+        {/* Schedule Section */}
+        <ScheduleSection
+          formData={formData}
+          onUpdateFormData={updateFormData}
+          showStartTimePicker={showStartTimePicker}
+          onToggleStartTimePicker={() =>
+            setShowStartTimePicker(!showStartTimePicker)
+          }
+          showEndDatePicker={showEndDatePicker}
+          onToggleEndDatePicker={() => setShowEndDatePicker(!showEndDatePicker)}
+        />
+
+        {/* Advanced Settings Section */}
+        <AdvancedSection
+          formData={formData}
+          onUpdateFormData={updateFormData}
+        />
+      </ScrollView>
+
+      {/* Fixed Save Button */}
       <View
         style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          paddingHorizontal: spacing[4],
-          paddingVertical: spacing[3],
+          padding: spacing[6],
+          paddingTop: spacing[4],
+          borderTopWidth: 1,
+          borderTopColor: colors.border.light,
           backgroundColor: colors.background.primary,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border.light,
         }}
       >
-        {/* Left side - Back button */}
-        <View style={{ width: 40 }}>
-          <Pressable
-            onPress={handlePrevious}
-            style={({ pressed }) => ({
-              opacity: pressed ? 0.7 : 1,
-              padding: spacing[2],
-              marginLeft: -spacing[2],
-            })}
-            accessibilityLabel="Go back"
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
-          </Pressable>
-        </View>
-
-        {/* Center - Title */}
-        <View style={{ flex: 1, alignItems: "center" }}>
-          <Text
-            style={[
-              typography.h3,
-              {
-                color: colors.text.primary,
-                textAlign: "center",
-              },
-            ]}
-          >
-            Add New Alarm
+        <Pressable
+          style={[
+            buttons.base,
+            buttons.primary,
+            createAlarmMutation.isPending && { opacity: 0.5 },
+          ]}
+          onPress={handleSave}
+          disabled={createAlarmMutation.isPending || !formData.title.trim()}
+        >
+          <Text style={[buttonText.primary]}>
+            {createAlarmMutation.isPending ? "Creating..." : "Create Alarm"}
           </Text>
-          <Text
-            style={[
-              typography.bodySmall,
-              { color: colors.text.secondary, textAlign: "center" },
-            ]}
-          >
-            Step {getStepNumber()} of 4: {getStepTitle()}
-          </Text>
-        </View>
-
-        {/* Right side - Empty space to match layout */}
-        <View style={{ width: 40 }} />
+        </Pressable>
       </View>
 
-      {renderStep()}
+      {/* Date/Time Pickers */}
+      {showStartTimePicker && (
+        <DateTimePicker
+          value={formData.startDate}
+          mode="time"
+          display="default"
+          onChange={(event, selectedDate) => {
+            setShowStartTimePicker(false);
+            if (selectedDate) {
+              updateFormData({ startDate: selectedDate });
+            }
+          }}
+        />
+      )}
+
+      {showEndDatePicker && (
+        <DateTimePicker
+          value={formData.endsOnDate ?? new Date()}
+          mode="date"
+          display="default"
+          onChange={(event, selectedDate) => {
+            setShowEndDatePicker(false);
+            if (selectedDate) {
+              updateFormData({ endsOnDate: selectedDate });
+            }
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

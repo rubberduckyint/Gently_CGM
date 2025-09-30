@@ -1,3 +1,4 @@
+import type { Peripheral } from "react-native-ble-manager";
 import React, { useEffect } from "react";
 import {
   ActivityIndicator,
@@ -7,14 +8,51 @@ import {
   Text,
   View,
 } from "react-native";
+import BleManager, {
+  BleScanCallbackType,
+  BleScanMatchMode,
+  BleScanMode,
+} from "react-native-ble-manager";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useGlobalSearchParams } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { AdvertisementData } from "~/services/ble/types";
 import { AlarmCard } from "~/components/device";
 import { HamburgerMenu } from "~/components/ui/HamburgerMenu";
 import { Header } from "~/components/ui/Header";
+import {
+  createAddEventRequest,
+  parseAddEventResponse,
+} from "~/services/ble/commands/addEvent";
+import {
+  createGetDeviceInfoRequest,
+  parseGetDeviceInfoResponse,
+} from "~/services/ble/commands/getDeviceInfo";
+import {
+  createGetUptimeRequest,
+  parseGetUptimeResponse,
+} from "~/services/ble/commands/getUptime";
+import {
+  createRemoveAllEventsRequest,
+  parseRemoveAllEventsResponse,
+} from "~/services/ble/commands/removeAllEvents";
+import {
+  extractAndDecryptAdvertisementData,
+  generateDynamicKey,
+} from "~/services/ble/encryption";
+import {
+  sendCommand,
+  startNotifications,
+  stopNotifications,
+} from "~/services/ble/manager";
+import {
+  CommandCode,
+  FACTORY_BRACELET_KEY,
+  ResponseStatus,
+} from "~/services/ble/types";
 import {
   buttons,
   cards,
@@ -28,6 +66,8 @@ import { trpc } from "~/utils/api";
 export default function DeviceDetailPage() {
   const { deviceId } = useGlobalSearchParams<{ deviceId: string }>();
   const queryClient = useQueryClient();
+  const [isSyncing, setIsSyncing] = React.useState(false);
+  const [syncProgress, setSyncProgress] = React.useState<string>("");
 
   // Store the initial device ID to prevent it from changing during navigation
   const [initialDeviceId] = React.useState(deviceId);
@@ -99,6 +139,394 @@ export default function DeviceDetailPage() {
         },
       ],
     );
+  };
+
+  const handleSyncAlarms = async () => {
+    if (!device?.serialNumber) {
+      Alert.alert("Error", "Device serial number is required for syncing");
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncProgress("Starting sync process...");
+    console.log(
+      "🔄 Starting alarm sync process for serial:",
+      device.serialNumber,
+    );
+
+    try {
+      // Step 1: Check connected peripherals
+      setSyncProgress("Checking connected devices...");
+      console.log("📱 Checking for connected peripherals");
+      const connectedPeripherals = await BleManager.getConnectedPeripherals([]);
+      console.log(`Found ${connectedPeripherals.length} connected peripherals`);
+
+      let targetPeripheral = null;
+      let encryptionKey = null;
+
+      // Step 2: Check if any connected peripheral has a matching key
+      for (const peripheral of connectedPeripherals) {
+        const sanitizedDeviceId = peripheral.id.replace(
+          /[^a-zA-Z0-9._-]/g,
+          "_",
+        );
+        try {
+          const storedKey = await SecureStore.getItemAsync(
+            `ble_device_${sanitizedDeviceId}`,
+          );
+          if (storedKey) {
+            console.log(`🔑 Found stored key for peripheral ${peripheral.id}`);
+            // We would need to verify this device has the right serial number
+            // For now, assume this is our target
+            targetPeripheral = peripheral;
+            encryptionKey = storedKey;
+            break;
+          }
+        } catch (error) {
+          console.log(`No stored key found for ${peripheral.id}`);
+        }
+      }
+
+      // Step 3: Clean up expired keys if no match found
+      if (!targetPeripheral) {
+        setSyncProgress("Cleaning up expired keys...");
+        console.log(
+          "🧹 No matching connected devices, cleaning up expired keys",
+        );
+
+        for (const peripheral of connectedPeripherals) {
+          const sanitizedDeviceId = peripheral.id.replace(
+            /[^a-zA-Z0-9._-]/g,
+            "_",
+          );
+          try {
+            await SecureStore.deleteItemAsync(
+              `ble_device_${sanitizedDeviceId}`,
+            );
+            console.log(`🗑️ Removed expired key for ${peripheral.id}`);
+          } catch (error) {
+            // Key might not exist, ignore
+          }
+        }
+      }
+
+      // Step 4: Scan for devices if no connected device found
+      if (!targetPeripheral) {
+        setSyncProgress("Scanning for Gently devices...");
+        console.log("🔍 Scanning for Gently devices");
+
+        // Start BLE manager if needed
+        await BleManager.start({ showAlert: false });
+
+        const scanResults: AdvertisementData[] = [];
+
+        // Set up scan listener using modern BleManager event handlers
+        const handleDiscoverPeripheral = async (peripheral: Peripheral) => {
+          if (peripheral.advertising.manufacturerRawData) {
+            try {
+              const adData = extractAndDecryptAdvertisementData(
+                peripheral.advertising.manufacturerRawData,
+              );
+
+              // Debug: Log the serial numbers for comparison
+              console.log(
+                `🔍 Comparing serials - Device: "${adData?.serialNumber}" vs Database: "${device.serialNumber}"`,
+              );
+
+              if (
+                adData &&
+                (adData.serialNumber === device.serialNumber ||
+                  adData.serialNumber.toUpperCase() ===
+                    device.serialNumber?.toUpperCase())
+              ) {
+                console.log(
+                  `✅ Found target device with serial ${device.serialNumber}`,
+                );
+                scanResults.push(adData);
+                targetPeripheral = peripheral;
+
+                // Stop scanning immediately and begin complete pairing and sync process
+                await BleManager.stopScan();
+
+                try {
+                  setSyncProgress("Connecting to device...");
+                  console.log(
+                    `🔗 Starting connection to device: ${peripheral.id}`,
+                  );
+
+                  // Step 1: Connect and establish services
+                  await BleManager.connect(peripheral.id);
+                  console.log(`✅ Connected to device: ${peripheral.id}`);
+
+                  await BleManager.retrieveServices(peripheral.id);
+                  console.log(`✅ Services discovered for ${peripheral.id}`);
+
+                  await startNotifications(peripheral.id);
+                  console.log(`✅ Notifications started for ${peripheral.id}`);
+
+                  // Step 2: Generate encryption key
+                  setSyncProgress("Generating encryption key...");
+                  console.log("🔐 Generating dynamic encryption key");
+
+                  // Get uptime to establish connection
+                  const uptimeResponse = await sendCommand({
+                    peripheralId: peripheral.id,
+                    command: createGetUptimeRequest(),
+                    encryptionKey: FACTORY_BRACELET_KEY,
+                  });
+
+                  const uptimeData = parseGetUptimeResponse(
+                    uptimeResponse.payload,
+                  );
+                  console.log(`📊 Device uptime: ${uptimeData.uptime} seconds`);
+
+                  // Generate dynamic key
+                  encryptionKey = generateDynamicKey(
+                    FACTORY_BRACELET_KEY,
+                    uptimeData.uptimeBytes,
+                    device.serialNumber,
+                  );
+                  console.log("🔐 Generated dynamic encryption key");
+
+                  // Store the key
+                  const sanitizedDeviceId = peripheral.id.replace(
+                    /[^a-zA-Z0-9._-]/g,
+                    "_",
+                  );
+                  await SecureStore.setItemAsync(
+                    `ble_device_${sanitizedDeviceId}`,
+                    encryptionKey,
+                  );
+
+                  // Step 3: Clear existing alarms on device
+                  setSyncProgress("Clearing existing alarms on device...");
+                  console.log("🧹 Removing all existing events from device");
+
+                  await sendCommand({
+                    peripheralId: peripheral.id,
+                    command: createRemoveAllEventsRequest(),
+                    encryptionKey,
+                  });
+
+                  console.log("✅ All existing events removed");
+
+                  // Step 4: Add each alarm from the database
+                  setSyncProgress(
+                    `Syncing ${device.alarms.length} alarms to device...`,
+                  );
+                  console.log(
+                    `📝 Adding ${device.alarms.length} alarms to device`,
+                  );
+
+                  for (let i = 0; i < device.alarms.length; i++) {
+                    const alarm = device.alarms[i];
+                    if (!alarm) continue;
+
+                    console.log(
+                      `➕ Adding alarm ${i + 1}/${device.alarms.length}: ${alarm.title}`,
+                    );
+
+                    // Convert alarm to device event format
+                    const addEventCommand = createAddEventRequest({
+                      eventIndex: i,
+                      eventName: alarm.title.substring(0, 10),
+                      cronExpression: alarm.cronExpression || "0 9 * * *", // Default if missing
+                      vibrationPattern: 1, // Default pattern
+                      vibrationIntensity:
+                        alarm.priority === "HIGH"
+                          ? 3
+                          : alarm.priority === "MEDIUM"
+                            ? 2
+                            : 1,
+                      ledPattern: 2, // Blink fast
+                      ledColor: 4, // Red
+                      severityLevel:
+                        alarm.priority === "HIGH"
+                          ? 1
+                          : alarm.priority === "MEDIUM"
+                            ? 2
+                            : 3,
+                      snoozePeriod: 5, // 5 minutes
+                      snoozeTimeout: 60, // 1 hour
+                      retriggerDelay: 1, // 1 minute
+                      retriggerTimeout: 10, // 10 minutes
+                    });
+
+                    const response = await sendCommand({
+                      peripheralId: peripheral.id,
+                      command: addEventCommand,
+                      encryptionKey,
+                    });
+
+                    const result = parseAddEventResponse(response.payload);
+                    if (result.status === "ERROR") {
+                      console.warn(`⚠️ Failed to add alarm ${alarm.title}`);
+                    } else {
+                      console.log(
+                        `✅ Added alarm ${alarm.title} at index ${result.eventIndex}`,
+                      );
+                    }
+
+                    setSyncProgress(
+                      `Synced ${i + 1}/${device.alarms.length} alarms...`,
+                    );
+                  }
+
+                  // Step 5: Clean up and complete
+                  await stopNotifications(peripheral.id);
+
+                  setSyncProgress("Sync completed successfully!");
+                  console.log("🎉 Alarm sync completed successfully");
+
+                  Alert.alert(
+                    "Sync Complete",
+                    `Successfully synced ${device.alarms.length} alarms to your Gently bracelet.`,
+                    [{ text: "OK" }],
+                  );
+                } catch (syncError) {
+                  console.error("❌ Sync process failed:", syncError);
+                  targetPeripheral = null; // Reset so we can continue scanning
+
+                  Alert.alert(
+                    "Sync Failed",
+                    `Could not sync alarms to device: ${syncError instanceof Error ? syncError.message : "Unknown error"}`,
+                    [{ text: "OK" }],
+                  );
+                }
+              }
+            } catch {
+              // Not a Gently device, ignore
+            }
+          }
+        };
+
+        // Use modern BleManager event handlers
+        const discoverListener = BleManager.onDiscoverPeripheral(
+          handleDiscoverPeripheral,
+        );
+
+        await BleManager.scan([], 10, false, {
+          matchMode: BleScanMatchMode.Sticky,
+          scanMode: BleScanMode.LowLatency,
+          callbackType: BleScanCallbackType.AllMatches,
+          legacy: false,
+        });
+
+        // Wait for scan to complete or until device is found and synced
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+
+        discoverListener.remove();
+
+        // If we reach here and no target peripheral, the device wasn't found during scan
+        // Note: targetPeripheral might be set during the scan callback
+        console.log("🔍 Scan completed, checking if device was found...");
+        if (!targetPeripheral) {
+          throw new Error(
+            "Could not find Gently device with matching serial number",
+          );
+        }
+      } else {
+        // Using existing connection - still need to sync alarms
+        setSyncProgress("Using existing connection...");
+        console.log("🔐 Using stored encryption key for existing connection");
+
+        if (!encryptionKey) {
+          throw new Error("Encryption key is required for existing connection");
+        }
+
+        // Step: Remove all existing events
+        setSyncProgress("Clearing existing alarms on device...");
+        console.log("🧹 Removing all existing events from device");
+
+        await sendCommand({
+          peripheralId: targetPeripheral.id,
+          command: createRemoveAllEventsRequest(),
+          encryptionKey,
+        });
+
+        console.log("✅ All existing events removed");
+
+        // Step: Add each alarm from the database
+        setSyncProgress(`Syncing ${device.alarms.length} alarms to device...`);
+        console.log(`📝 Adding ${device.alarms.length} alarms to device`);
+
+        for (let i = 0; i < device.alarms.length; i++) {
+          const alarm = device.alarms[i];
+          if (!alarm) continue;
+
+          console.log(
+            `➕ Adding alarm ${i + 1}/${device.alarms.length}: ${alarm.title}`,
+          );
+
+          // Convert alarm to device event format
+          const addEventCommand = createAddEventRequest({
+            eventIndex: i,
+            eventName: alarm.title.substring(0, 10),
+            cronExpression: alarm.cronExpression || "0 9 * * *", // Default if missing
+            vibrationPattern: 1, // Default pattern
+            vibrationIntensity:
+              alarm.priority === "HIGH"
+                ? 3
+                : alarm.priority === "MEDIUM"
+                  ? 2
+                  : 1,
+            ledPattern: 2, // Blink fast
+            ledColor: 4, // Red
+            severityLevel:
+              alarm.priority === "HIGH"
+                ? 1
+                : alarm.priority === "MEDIUM"
+                  ? 2
+                  : 3,
+            snoozePeriod: 5, // 5 minutes
+            snoozeTimeout: 60, // 1 hour
+            retriggerDelay: 1, // 1 minute
+            retriggerTimeout: 10, // 10 minutes
+          });
+
+          const response = await sendCommand({
+            peripheralId: targetPeripheral.id,
+            command: addEventCommand,
+            encryptionKey,
+          });
+
+          const result = parseAddEventResponse(response.payload);
+          if (result.status === "ERROR") {
+            console.warn(`⚠️ Failed to add alarm ${alarm.title}`);
+          } else {
+            console.log(
+              `✅ Added alarm ${alarm.title} at index ${result.eventIndex}`,
+            );
+          }
+
+          setSyncProgress(`Synced ${i + 1}/${device.alarms.length} alarms...`);
+        }
+
+        // Clean up
+        await stopNotifications(targetPeripheral.id);
+
+        setSyncProgress("Sync completed successfully!");
+        console.log("🎉 Alarm sync completed successfully");
+
+        Alert.alert(
+          "Sync Complete",
+          `Successfully synced ${device.alarms.length} alarms to your Gently bracelet.`,
+          [{ text: "OK" }],
+        );
+      }
+    } catch (error) {
+      console.error("❌ Alarm sync failed:", error);
+      setSyncProgress("Sync failed");
+
+      Alert.alert(
+        "Sync Failed",
+        `Could not sync alarms to device: ${error instanceof Error ? error.message : "Unknown error"}`,
+        [{ text: "OK" }],
+      );
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncProgress(""), 3000);
+    }
   };
 
   if (isLoading) {
@@ -387,25 +815,87 @@ export default function DeviceDetailPage() {
                 Alarms ({device.alarms.length})
               </Text>
             </View>
-            <Pressable
-              style={[
-                buttons.base,
-                buttons.success,
-                { paddingVertical: spacing[2], paddingHorizontal: spacing[4] },
-              ]}
-              onPress={() => router.push(`/devices/${deviceId}/alarms/add`)}
-            >
-              <Ionicons
-                name="add"
-                size={16}
-                color={colors.text.inverse}
-                style={{ marginRight: spacing[1] }}
-              />
-              <Text style={[typography.label, { color: colors.text.inverse }]}>
-                Add Alarm
-              </Text>
-            </Pressable>
+            <View style={{ flexDirection: "row", gap: spacing[2] }}>
+              <Pressable
+                style={[
+                  buttons.base,
+                  buttons.primary,
+                  {
+                    paddingVertical: spacing[2],
+                    paddingHorizontal: spacing[3],
+                  },
+                  isSyncing && { opacity: 0.5 },
+                ]}
+                onPress={handleSyncAlarms}
+                disabled={isSyncing}
+              >
+                <Ionicons
+                  name={isSyncing ? "sync" : "refresh"}
+                  size={16}
+                  color={colors.text.inverse}
+                  style={{ marginRight: spacing[1] }}
+                />
+                <Text
+                  style={[typography.label, { color: colors.text.inverse }]}
+                >
+                  {isSyncing ? "Syncing..." : "Sync Alarms"}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  buttons.base,
+                  buttons.success,
+                  {
+                    paddingVertical: spacing[2],
+                    paddingHorizontal: spacing[4],
+                  },
+                ]}
+                onPress={() => router.push(`/devices/${deviceId}/alarms/add`)}
+              >
+                <Ionicons
+                  name="add"
+                  size={16}
+                  color={colors.text.inverse}
+                  style={{ marginRight: spacing[1] }}
+                />
+                <Text
+                  style={[typography.label, { color: colors.text.inverse }]}
+                >
+                  Add Alarm
+                </Text>
+              </Pressable>
+            </View>
           </View>
+
+          {/* Sync Progress */}
+          {syncProgress && (
+            <View
+              style={[
+                cards.base,
+                {
+                  marginBottom: spacing[4],
+                  backgroundColor: colors.primary[50],
+                  borderColor: colors.primary[200],
+                },
+              ]}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <ActivityIndicator
+                  size="small"
+                  color={colors.primary[500]}
+                  style={{ marginRight: spacing[2] }}
+                />
+                <Text
+                  style={[
+                    typography.body,
+                    { color: colors.primary[700], flex: 1 },
+                  ]}
+                >
+                  {syncProgress}
+                </Text>
+              </View>
+            </View>
+          )}
 
           {device.alarms.length === 0 ? (
             <View

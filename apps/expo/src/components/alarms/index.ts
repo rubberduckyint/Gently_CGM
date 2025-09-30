@@ -1,5 +1,5 @@
-export { AdvancedStep } from "./AdvancedStep";
-export { BasicInfoStep } from "./BasicInfoStep";
-export { ReviewStep } from "./ReviewStep";
-export { ScheduleStep } from "./ScheduleStep";
-export { StepLayout as AlarmStepLayout } from "./StepLayout";
+// Shared components for alarm forms
+export { AdvancedSection } from "./AdvancedSection";
+export { BasicInfoSection } from "./BasicInfoSection";
+export { ScheduleSection } from "./ScheduleSection";
+export type { AlarmFormData } from "./BasicInfoSection";

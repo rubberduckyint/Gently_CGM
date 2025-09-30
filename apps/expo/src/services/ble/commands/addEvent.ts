@@ -1,0 +1,109 @@
+/**
+ * Add Event Command
+ * Adds a new event/alarm to the device
+ */
+
+import type { BLECommandRequest } from "../types";
+import { CommandCode } from "../types";
+
+export interface AddEventParams {
+  eventIndex: number; // 0-49
+  eventName: string; // Max 10 characters
+  cronExpression: string; // Max 42 characters
+  vibrationPattern: number; // 0-63
+  vibrationIntensity: number; // 0=LOW, 1=MEDIUM, 2=HIGH, 3=MAXIMUM
+  ledPattern: number; // 0=OFF, 1=blink_slow, 2=blink_fast, 3=solid
+  ledColor: number; // 0=OFF, 1=Blue, 2=Green, 3=Cyan, 4=Red, 5=Yellow, 6=Magenta, 7=White
+  severityLevel: number; // 1=Critical, 2=Important, 3=Informational
+  snoozePeriod: number; // minutes
+  snoozeTimeout: number; // minutes
+  retriggerDelay: number; // minutes
+  retriggerTimeout: number; // minutes
+}
+
+export function createAddEventRequest(
+  params: AddEventParams,
+): BLECommandRequest {
+  // Validate inputs
+  if (params.eventIndex < 0 || params.eventIndex > 49) {
+    throw new Error("Event index must be between 0-49");
+  }
+  if (params.eventName.length > 10) {
+    throw new Error("Event name must be 10 characters or less");
+  }
+  if (params.cronExpression.length > 42) {
+    throw new Error("Cron expression must be 42 characters or less");
+  }
+
+  // Create payload according to protocol
+  const payload = new Uint8Array(72); // Max size to accommodate all fields
+  let offset = 0;
+
+  // Byte #2: Event Index
+  payload[offset++] = params.eventIndex;
+
+  // Byte #3: Vibration Pattern (bits 0-5) + Vibration Intensity (bits 6-7)
+  payload[offset++] =
+    (params.vibrationPattern & 0x3f) |
+    ((params.vibrationIntensity & 0x03) << 6);
+
+  // Byte #4: LED Pattern (bits 0-4) + LED Color (bits 5-7)
+  payload[offset++] =
+    (params.ledPattern & 0x1f) | ((params.ledColor & 0x07) << 5);
+
+  // Byte #5: Severity Level
+  payload[offset++] = params.severityLevel;
+
+  // Byte #6: Snooze period
+  payload[offset++] = params.snoozePeriod;
+
+  // Byte #7: Snooze timeout
+  payload[offset++] = params.snoozeTimeout;
+
+  // Byte #8: Retrigger delay
+  payload[offset++] = params.retriggerDelay;
+
+  // Byte #9: Retrigger timeout
+  payload[offset++] = params.retriggerTimeout;
+
+  // Bytes #10-20: Event Name (max 10 chars + null terminator)
+  const nameBytes = new TextEncoder().encode(params.eventName.substring(0, 10));
+  payload.set(nameBytes, offset);
+  payload[offset + nameBytes.length] = 0; // null terminator
+  offset += 11; // 10 chars + null terminator
+
+  // Bytes #21-63: Cron expression (max 42 chars + null terminator)
+  const cronBytes = new TextEncoder().encode(
+    params.cronExpression.substring(0, 42),
+  );
+  payload.set(cronBytes, offset);
+  payload[offset + cronBytes.length] = 0; // null terminator
+  offset += 43; // 42 chars + null terminator
+
+  // Remaining bytes are reserved (0 padded - already done by Uint8Array constructor)
+
+  return {
+    command: CommandCode.ADD_EVENT,
+    apiVersion: 1,
+    payload: payload.slice(0, offset), // Trim to actual size
+  };
+}
+
+export interface AddEventResponse {
+  status: "OK" | "ERROR";
+  eventIndex: number;
+}
+
+export function parseAddEventResponse(payload: Uint8Array): AddEventResponse {
+  if (payload.length < 4) {
+    throw new Error("Invalid Add Event response payload length");
+  }
+
+  const status = payload[2] === 0x00 ? "OK" : "ERROR";
+  const eventIndex = payload[3] ?? 0;
+
+  return {
+    status,
+    eventIndex,
+  };
+}

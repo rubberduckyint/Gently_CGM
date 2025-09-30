@@ -1,59 +1,49 @@
 /**
  * Edit Alarm Page
  *
- * Multi-step form for editing an existing alarm within a device context.
- * Steps:
- * 1. Basic Info - title, description, color
- * 2. Schedule - start time, repeat settings
- * 3. Advanced - priority, haptic feedback
- * 4. Review - confirm all settings before update
- *
- * Reuses the same form components as the Add Alarm page but pre-populates
- * with existing alarm data and uses update mutation instead of create.
- * Now has access to both deviceId and alarmId for better data context.
+ * Single-page form for editing an existing alarm for a specific device.
+ * All settings are displayed on one scrollable page for better UX.
  */
 
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { AlarmFormData } from "~/components/alarms";
 import {
-  AdvancedStep,
-  BasicInfoStep,
-  ReviewStep,
-  ScheduleStep,
+  AdvancedSection,
+  BasicInfoSection,
+  ScheduleSection,
 } from "~/components/alarms";
-import { buttons, colors, containers, spacing, typography } from "~/styles";
+import { Header } from "~/components/ui/Header";
+import {
+  buttons,
+  buttonText,
+  colors,
+  containers,
+  spacing,
+  typography,
+} from "~/styles";
 import { trpc } from "~/utils/api";
-
-type AlarmStep = "basic" | "schedule" | "advanced" | "review";
-
-export interface AlarmFormData {
-  title: string;
-  description: string;
-  startDate: Date;
-  repeat: boolean;
-  repeatType: "minutes" | "hours" | "days" | "weeks";
-  repeatEvery: number;
-  daysOfWeek: string[];
-  ends: "never" | "on" | "after";
-  endsOnDate?: Date;
-  endsAfter?: number;
-  color: string;
-  priority: "LOW" | "MEDIUM" | "HIGH";
-  hapticChoice: "STANDARD" | "STRONG" | "SOFT" | "DOUBLE" | "PULSE" | "WAVE";
-}
 
 export default function EditAlarmPage() {
   const { deviceId, alarmId } = useLocalSearchParams<{
     deviceId: string;
     alarmId: string;
   }>();
-  const [step, setStep] = useState<AlarmStep>("basic");
   const [formData, setFormData] = useState<AlarmFormData | null>(null);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const queryClient = useQueryClient();
 
   const {
@@ -203,7 +193,7 @@ export default function EditAlarmPage() {
       repeatType: "days", // Default - could be parsed from cron if needed
       repeatEvery: 1,
       daysOfWeek: [],
-      ends: "never",
+      ends: endsOnDate ? "on" : "never",
       endsOnDate,
       endsAfter: undefined,
       color: alarm.color,
@@ -248,42 +238,17 @@ export default function EditAlarmPage() {
   }
 
   const updateFormData = (updates: Partial<AlarmFormData>) => {
-    if (formData) {
-      setFormData((prev) => (prev ? { ...prev, ...updates } : null));
-    }
+    setFormData((prev: AlarmFormData | null) =>
+      prev ? { ...prev, ...updates } : null,
+    );
   };
 
-  const handleNext = () => {
-    const steps: AlarmStep[] = ["basic", "schedule", "advanced", "review"];
-    const currentIndex = steps.indexOf(step);
-    if (currentIndex < steps.length - 1) {
-      const nextStep = steps[currentIndex + 1];
-      if (nextStep) {
-        setStep(nextStep);
-      }
-    }
-  };
-
-  const handlePrevious = () => {
-    const steps: AlarmStep[] = ["basic", "schedule", "advanced", "review"];
-    const currentIndex = steps.indexOf(step);
-    if (currentIndex > 0) {
-      const prevStep = steps[currentIndex - 1];
-      if (prevStep) {
-        setStep(prevStep);
-      }
-    } else {
-      router.back();
-    }
-  };
-
-  const handleFinish = () => {
+  const handleSave = () => {
     if (!formData) return;
 
     // Validate required fields
     if (!formData.title.trim()) {
       Alert.alert("Error", "Alarm title is required");
-      setStep("basic");
       return;
     }
 
@@ -295,7 +260,10 @@ export default function EditAlarmPage() {
       "Delete Alarm",
       "Are you sure you want to delete this alarm? This action cannot be undone.",
       [
-        { text: "Cancel", style: "cancel" },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
         {
           text: "Delete",
           style: "destructive",
@@ -305,74 +273,10 @@ export default function EditAlarmPage() {
     );
   };
 
-  const getStepTitle = () => {
-    switch (step) {
-      case "basic":
-        return "Basic Information";
-      case "schedule":
-        return "Schedule";
-      case "advanced":
-        return "Advanced Settings";
-      case "review":
-        return "Review";
-      default:
-        return "Edit Alarm";
-    }
-  };
-
-  const getStepNumber = () => {
-    const steps = ["basic", "schedule", "advanced", "review"];
-    return steps.indexOf(step) + 1;
-  };
-
-  const renderStep = () => {
-    if (!formData) return null;
-
-    switch (step) {
-      case "basic":
-        return (
-          <BasicInfoStep
-            formData={formData}
-            onUpdate={updateFormData}
-            onNext={handleNext}
-            onCancel={handlePrevious}
-          />
-        );
-      case "schedule":
-        return (
-          <ScheduleStep
-            formData={formData}
-            onUpdate={updateFormData}
-            onNext={handleNext}
-            onPrevious={handlePrevious}
-          />
-        );
-      case "advanced":
-        return (
-          <AdvancedStep
-            formData={formData}
-            onUpdate={updateFormData}
-            onNext={handleNext}
-            onPrevious={handlePrevious}
-          />
-        );
-      case "review":
-        return (
-          <ReviewStep
-            formData={formData}
-            onFinish={handleFinish}
-            onPrevious={handlePrevious}
-            isLoading={updateAlarmMutation.isPending}
-          />
-        );
-      default:
-        return null;
-    }
-  };
-
   if (isLoading || !formData) {
     return (
       <SafeAreaView style={containers.safeArea}>
+        <Header title="Edit Alarm" showBackButton={true} />
         <View style={containers.contentCentered}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
           <Text
@@ -391,6 +295,7 @@ export default function EditAlarmPage() {
   if (error || !alarm) {
     return (
       <SafeAreaView style={containers.safeArea}>
+        <Header title="Edit Alarm" showBackButton={true} />
         <View
           style={[
             containers.contentCentered,
@@ -412,25 +317,11 @@ export default function EditAlarmPage() {
           <Text
             style={[
               typography.body,
-              {
-                color: colors.gray[500],
-                textAlign: "center",
-                marginBottom: spacing[6],
-              },
+              { color: colors.text.secondary, textAlign: "center" },
             ]}
           >
-            {error?.message ?? "Alarm not found"}
+            {error?.message ?? "Unknown error occurred"}
           </Text>
-          <Pressable
-            style={[buttons.base, buttons.primary]}
-            onPress={() => router.back()}
-          >
-            <Text
-              style={[typography.labelLarge, { color: colors.text.inverse }]}
-            >
-              Go Back
-            </Text>
-          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -438,33 +329,29 @@ export default function EditAlarmPage() {
 
   return (
     <SafeAreaView style={containers.safeArea}>
-      {/* Header */}
+      {/* Custom header with delete button */}
       <View
         style={{
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-between",
-          paddingHorizontal: spacing[4],
-          paddingVertical: spacing[3],
-          backgroundColor: colors.background.primary,
+          paddingHorizontal: spacing[6],
+          paddingVertical: spacing[4],
           borderBottomWidth: 1,
           borderBottomColor: colors.border.light,
+          backgroundColor: colors.background.primary,
         }}
       >
         {/* Left side - Back button */}
-        <View style={{ width: 40 }}>
-          <Pressable
-            onPress={handlePrevious}
-            style={({ pressed }) => ({
-              opacity: pressed ? 0.7 : 1,
-              padding: spacing[2],
-              marginLeft: -spacing[2],
-            })}
-            accessibilityLabel="Go back"
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
-          </Pressable>
-        </View>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => ({
+            opacity: pressed ? 0.7 : 1,
+            padding: spacing[2],
+            marginLeft: -spacing[2],
+          })}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+        </Pressable>
 
         {/* Center - Title */}
         <View style={{ flex: 1, alignItems: "center" }}>
@@ -479,37 +366,78 @@ export default function EditAlarmPage() {
           >
             Edit Alarm
           </Text>
-          <Text
-            style={[
-              typography.bodySmall,
-              { color: colors.text.secondary, textAlign: "center" },
-            ]}
-          >
-            Step {getStepNumber()} of 4: {getStepTitle()}
-          </Text>
         </View>
 
         {/* Right side - Delete button */}
-        <View style={{ width: 40, alignItems: "flex-end" }}>
-          <Pressable
-            onPress={handleDeleteAlarm}
-            style={({ pressed }) => ({
-              opacity: pressed ? 0.7 : 1,
-              padding: spacing[2],
-              marginRight: -spacing[2],
-            })}
-            accessibilityLabel="Delete alarm"
-          >
-            <Ionicons
-              name="trash-outline"
-              size={24}
-              color={colors.error[500]}
-            />
-          </Pressable>
-        </View>
+        <Pressable
+          onPress={handleDeleteAlarm}
+          style={({ pressed }) => ({
+            opacity: pressed ? 0.7 : 1,
+            padding: spacing[2],
+            marginRight: -spacing[2],
+          })}
+        >
+          <Ionicons name="trash-outline" size={24} color={colors.error[500]} />
+        </Pressable>
       </View>
 
-      {renderStep()}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          padding: spacing[6],
+          paddingBottom: spacing[20],
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Basic Information Section */}
+        <BasicInfoSection
+          formData={formData}
+          onUpdateFormData={updateFormData}
+        />
+
+        {/* Schedule Section */}
+        <ScheduleSection
+          formData={formData}
+          onUpdateFormData={updateFormData}
+          showStartTimePicker={showStartTimePicker}
+          onToggleStartTimePicker={() =>
+            setShowStartTimePicker(!showStartTimePicker)
+          }
+          showEndDatePicker={showEndDatePicker}
+          onToggleEndDatePicker={() => setShowEndDatePicker(!showEndDatePicker)}
+        />
+
+        {/* Advanced Settings Section */}
+        <AdvancedSection
+          formData={formData}
+          onUpdateFormData={updateFormData}
+        />
+      </ScrollView>
+
+      {/* Fixed Save Button */}
+      <View
+        style={{
+          padding: spacing[6],
+          paddingTop: spacing[4],
+          borderTopWidth: 1,
+          borderTopColor: colors.border.light,
+          backgroundColor: colors.background.primary,
+        }}
+      >
+        <Pressable
+          style={[
+            buttons.base,
+            buttons.primary,
+            updateAlarmMutation.isPending && { opacity: 0.5 },
+          ]}
+          onPress={handleSave}
+          disabled={updateAlarmMutation.isPending || !formData.title.trim()}
+        >
+          <Text style={[buttonText.primary]}>
+            {updateAlarmMutation.isPending ? "Updating..." : "Update Alarm"}
+          </Text>
+        </Pressable>
+      </View>
     </SafeAreaView>
   );
 }

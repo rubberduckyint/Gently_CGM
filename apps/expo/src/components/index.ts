@@ -2,7 +2,7 @@
 export { NavigationBar } from "./NavigationBar";
 
 // Add Device Components
-export * from "./add-device";
+// add-device components removed - functionality implemented inline
 
 // Alarm Components
 export * from "./alarms";
