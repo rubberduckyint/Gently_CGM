@@ -60,12 +60,6 @@ export default function LoginPage() {
 
       console.log("✅ OTP send result:", result);
       setOtpSent(true);
-
-      Alert.alert(
-        "Check Your Email",
-        `We've sent a verification code to ${email.trim()}. \n\n📧 Check your email inbox (and spam folder) for the 6-digit code.\n\n🔧 For development: Check MailHog at http://localhost:8025`,
-        [{ text: "OK" }],
-      );
     } catch (error: unknown) {
       console.error("❌ Failed to send OTP:", error);
       const errorMessage =
@@ -95,11 +89,6 @@ export default function LoginPage() {
       return;
     }
 
-    if (otpString.length !== 6) {
-      setOtpError("Please enter all 6 digits");
-      return;
-    }
-
     setOtpLoading(true);
     console.log("🔐 Verifying OTP:", {
       email: email.trim(),
@@ -107,28 +96,40 @@ export default function LoginPage() {
     });
 
     try {
-      const result = await authClient.signIn.emailOtp({
+      const { data, error } = await authClient.signIn.emailOtp({
         email: email.trim(),
         otp: otpString,
       });
 
-      console.log("✅ OTP verification successful:", result);
+      console.log("🔐 OTP verification result:", { data, error });
+
+      if (error) {
+        console.error("❌ OTP verification failed:", error);
+
+        const errorMessage = error.message ?? "Unknown error occurred";
+
+        // Handle specific error messages
+        if (errorMessage.toLowerCase().includes("expired")) {
+          setOtpError("This code has expired. Please request a new one.");
+        } else if (
+          errorMessage.toLowerCase().includes("invalid") ||
+          errorMessage.toLowerCase().includes("incorrect") ||
+          error.code === "INVALID_OTP"
+        ) {
+          setOtpError("Invalid verification code. Please check and try again.");
+        } else if (errorMessage.toLowerCase().includes("too many attempts")) {
+          setOtpError("Too many attempts. Please request a new code.");
+        } else {
+          setOtpError(`Verification failed: ${errorMessage}`);
+        }
+        return; // Don't proceed to dashboard on error
+      }
+
+      console.log("✅ OTP verification successful:", data);
       router.replace("/dashboard");
     } catch (error: unknown) {
-      console.error("❌ OTP verification failed:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-
-      if (errorMessage.toLowerCase().includes("expired")) {
-        setOtpError("This code has expired. Please request a new one.");
-      } else if (
-        errorMessage.toLowerCase().includes("invalid") ||
-        errorMessage.toLowerCase().includes("incorrect")
-      ) {
-        setOtpError("Invalid verification code. Please check and try again.");
-      } else {
-        setOtpError(`Verification failed: ${errorMessage}`);
-      }
+      console.error("❌ Unexpected error during OTP verification:", error);
+      setOtpError("An unexpected error occurred. Please try again.");
     } finally {
       setOtpLoading(false);
     }
