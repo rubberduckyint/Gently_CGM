@@ -235,9 +235,6 @@ export async function sendCommand({
       // Send the encrypted packet
       const dataToSend = Array.from(encryptedPacket);
       console.log(`  - Sending ${dataToSend.length} bytes encrypted`);
-      console.log(
-        `  - iOS BLE fragmenting issue: Sending packet size ${dataToSend.length} (should arrive as single packet)`,
-      );
 
       // Platform-specific BLE write methods - use write() for iOS, writeWithoutResponse() for Android
       const writePromise =
