@@ -34,6 +34,10 @@ import {
   parseGetUptimeResponse,
 } from "~/services/ble/commands/getUptime";
 import {
+  createSetTimeRequest,
+  parseSetTimeResponse,
+} from "~/services/ble/commands/setTime";
+import {
   extractAndDecryptAdvertisementData,
   generateDynamicKey,
 } from "~/services/ble/encryption";
@@ -407,7 +411,35 @@ const AddDeviceScreen = () => {
       });
       console.log(`✅ Device created in database:`, newDevice);
 
-      // Step 9: Stop notifications and disconnect (optional, device will stay connected)
+      // Step 9: Set device time to current time
+      setPairingStatus({
+        step: "Synchronizing device time...",
+        progress: 95,
+        isComplete: false,
+      });
+      console.log(`🕐 Setting device time...`);
+      const currentTime = new Date();
+      const setTimeCommand = createSetTimeRequest(currentTime);
+      const setTimeResponse = await sendCommand({
+        peripheralId: peripheral.id,
+        command: setTimeCommand,
+        encryptionKey: customKey,
+        timeoutMs: 5000,
+      });
+
+      if (setTimeResponse.status === ResponseStatus.OK) {
+        parseSetTimeResponse(setTimeResponse.payload);
+        console.log(
+          `✅ Device time synchronized to: ${currentTime.toISOString()}`,
+        );
+      } else {
+        console.warn(
+          `⚠️ Failed to set device time, status: ${setTimeResponse.status}`,
+        );
+        // Don't fail the pairing process if time sync fails
+      }
+
+      // Step 10: Stop notifications and disconnect (optional, device will stay connected)
       setPairingStatus({
         step: "Finalizing pairing...",
         progress: 100,
@@ -415,7 +447,7 @@ const AddDeviceScreen = () => {
       });
       await stopNotifications(peripheral.id);
 
-      // Step 10: Navigate to the paired device
+      // Step 11: Navigate to the paired device
       console.log(`✅ Device paired successfully: ${newDevice?.title}`);
       if (newDevice?.id) {
         router.push({
