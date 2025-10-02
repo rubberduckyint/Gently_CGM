@@ -1,4 +1,3 @@
-;
 /**
  * BLE Test Page
  *
@@ -8,33 +7,86 @@
 
 import type { Peripheral } from "react-native-ble-manager";
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
-import BleManager, { BleScanCallbackType, BleScanMatchMode, BleScanMode } from "react-native-ble-manager";
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import BleManager, {
+  BleScanCallbackType,
+  BleScanMatchMode,
+  BleScanMode,
+} from "react-native-ble-manager";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 
-
-
-import { createAddEventRequest, parseAddEventResponse } from "~/services/ble/commands/addEvent";
+import {
+  createAddEventRequest,
+  parseAddEventResponse,
+} from "~/services/ble/commands/addEvent";
 // Custom header - not using expo navigation
-import { createFindMeRequest, parseFindMeResponse } from "~/services/ble/commands/findMe";
-import { createGetAllEventsRequest, parseGetAllEventsResponse } from "~/services/ble/commands/getAllEvents";
-import { createGetDeviceInfoRequest, parseGetDeviceInfoResponse } from "~/services/ble/commands/getDeviceInfo";
-import { createGetDeviceStatusRequest, parseGetDeviceStatusResponse } from "~/services/ble/commands/getDeviceStatus";
-import { createGetNumberOfEventsRequest, parseGetNumberOfEventsResponse } from "~/services/ble/commands/getNumberOfEvents";
-import { createGetTimeRequest, parseGetTimeResponse } from "~/services/ble/commands/getTime";
-import { createGetUptimeRequest, parseGetUptimeResponse } from "~/services/ble/commands/getUptime";
-import { createSetEventOnOffRequest, parseSetEventOnOffResponse } from "~/services/ble/commands/setEventOnOff";
-import { createSetTimeRequest, parseSetTimeResponse } from "~/services/ble/commands/setTime";
-import { extractAndDecryptAdvertisementData, generateDynamicKey } from "~/services/ble/encryption";
-import { sendCommand, startNotifications, stopNotifications } from "~/services/ble/manager";
+import {
+  createFindMeRequest,
+  parseFindMeResponse,
+} from "~/services/ble/commands/findMe";
+import {
+  createGetAllEventsRequest,
+  parseGetAllEventsResponse,
+} from "~/services/ble/commands/getAllEvents";
+import {
+  createGetDeviceInfoRequest,
+  parseGetDeviceInfoResponse,
+} from "~/services/ble/commands/getDeviceInfo";
+import {
+  createGetDeviceStatusRequest,
+  parseGetDeviceStatusResponse,
+} from "~/services/ble/commands/getDeviceStatus";
+import {
+  createGetNumberOfEventsRequest,
+  parseGetNumberOfEventsResponse,
+} from "~/services/ble/commands/getNumberOfEvents";
+import {
+  createGetTimeRequest,
+  parseGetTimeResponse,
+} from "~/services/ble/commands/getTime";
+import {
+  createGetUptimeRequest,
+  parseGetUptimeResponse,
+} from "~/services/ble/commands/getUptime";
+import {
+  createSetEventOnOffRequest,
+  parseSetEventOnOffResponse,
+} from "~/services/ble/commands/setEventOnOff";
+import {
+  createSetTimeRequest,
+  parseSetTimeResponse,
+} from "~/services/ble/commands/setTime";
+import {
+  extractAndDecryptAdvertisementData,
+  generateDynamicKey,
+} from "~/services/ble/encryption";
+import {
+  sendCommand,
+  startNotifications,
+  stopNotifications,
+} from "~/services/ble/manager";
 import { FACTORY_BRACELET_KEY, ResponseStatus } from "~/services/ble/types";
-import { buttons, cards, colors, containers, spacing, typography } from "~/styles";
+import {
+  buttons,
+  cards,
+  colors,
+  containers,
+  spacing,
+  typography,
+} from "~/styles";
 import { trpc } from "~/utils/api";
-
 
 type ConnectionState = "disconnected" | "scanning" | "connecting" | "connected";
 
@@ -303,9 +355,8 @@ export default function BleTestPage() {
       };
 
       // Start scanning
-      const discoverListener = BleManager.onDiscoverPeripheral(
-        handleDiscoverPeripheral,
-      );
+      BleManager.onDiscoverPeripheral(handleDiscoverPeripheral);
+      addTestResult("🔍 Setup onDiscoveryPeripheral...");
 
       await BleManager.scan([], 10, false, {
         matchMode: BleScanMatchMode.Sticky,
@@ -314,9 +365,7 @@ export default function BleTestPage() {
         legacy: false,
       });
 
-      // Wait for scan to complete
-      await new Promise((resolve) => setTimeout(resolve, 10000));
-      discoverListener.remove();
+      addTestResult("🔍 Scan complete...");
 
       // Note: targetPeripheral might be set during the scan callback
       console.log("🔍 Scan completed, checking if device was found...");

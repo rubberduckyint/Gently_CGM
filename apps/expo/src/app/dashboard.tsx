@@ -274,6 +274,10 @@ export default function DashboardPage() {
     queryKey: ["devices"],
     queryFn: () => trpc.device.getAll.query({}),
     enabled: !!session?.user,
+    refetchOnMount: "always", // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when app comes to foreground
+    staleTime: 0, // Consider data stale immediately
+    gcTime: 1000 * 60 * 5, // Keep in cache for 5 minutes
   });
 
   const deleteDeviceMutation = useMutation({
@@ -320,9 +324,12 @@ export default function DashboardPage() {
   useFocusEffect(
     React.useCallback(() => {
       if (session?.user) {
+        // Invalidate the devices query to ensure fresh data
+        void queryClient.invalidateQueries({ queryKey: ["devices"] });
+        // Force refetch
         void refetch();
       }
-    }, [session, refetch]),
+    }, [session, refetch, queryClient]),
   );
 
   const handleAddDevice = () => {
