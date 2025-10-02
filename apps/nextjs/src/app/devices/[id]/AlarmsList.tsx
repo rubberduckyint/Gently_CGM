@@ -124,23 +124,93 @@ function formatCronExpressionWithStartEnd(alarm: {
   };
 }
 
-// Helper function to format haptic choice
-function formatHapticChoice(haptic: string): string {
-  switch (haptic) {
-    case "STANDARD":
-      return "Standard";
-    case "STRONG":
-      return "Strong";
-    case "SOFT":
-      return "Soft";
-    case "DOUBLE":
-      return "Double";
+// Helper function to format severity level
+function formatSeverityLevel(severity: string): string {
+  switch (severity) {
+    case "INFORMATIONAL":
+      return "Informational";
+    case "WARNING":
+      return "Warning";
+    case "CRITICAL":
+      return "Critical";
+    default:
+      return severity;
+  }
+}
+
+// Helper function to format LED pattern
+function formatLedPattern(pattern: string): string {
+  switch (pattern) {
+    case "SOLID":
+      return "Solid";
+    case "BLINK_SLOW":
+      return "Blink Slow";
+    case "BLINK_FAST":
+      return "Blink Fast";
     case "PULSE":
       return "Pulse";
-    case "WAVE":
-      return "Wave";
+    case "STROBE":
+      return "Strobe";
     default:
-      return haptic;
+      return pattern;
+  }
+}
+
+// Helper function to format LED color
+function formatLedColor(color: string): string {
+  switch (color) {
+    case "RED":
+      return "Red";
+    case "GREEN":
+      return "Green";
+    case "BLUE":
+      return "Blue";
+    case "YELLOW":
+      return "Yellow";
+    case "MAGENTA":
+      return "Magenta";
+    case "CYAN":
+      return "Cyan";
+    case "WHITE":
+      return "White";
+    default:
+      return color;
+  }
+}
+
+// Helper function to format vibration intensity
+function formatVibrationIntensity(intensity: string): string {
+  switch (intensity) {
+    case "LOW":
+      return "Low";
+    case "MEDIUM":
+      return "Medium";
+    case "HIGH":
+      return "High";
+    default:
+      return intensity;
+  }
+}
+
+// Helper function to get LED color for display
+function getLedColorValue(color: string): string {
+  switch (color) {
+    case "RED":
+      return "#ef4444";
+    case "GREEN":
+      return "#22c55e";
+    case "BLUE":
+      return "#3b82f6";
+    case "YELLOW":
+      return "#eab308";
+    case "MAGENTA":
+      return "#d946ef";
+    case "CYAN":
+      return "#06b6d4";
+    case "WHITE":
+      return "#ffffff";
+    default:
+      return "#6b7280";
   }
 }
 
@@ -318,31 +388,36 @@ export default function AlarmsList({ deviceId }: AlarmsListProps) {
                   <div className="flex items-center gap-2">
                     <Flag className="text-muted-foreground h-4 w-4" />
                     <span className="text-muted-foreground text-xs font-medium">
-                      Priority:
+                      Severity:
                     </span>
-                    <Badge variant="outline">{alarm.priority}</Badge>
+                    <Badge variant="outline">{formatSeverityLevel(alarm.severityLevel)}</Badge>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <Vibrate className="text-muted-foreground h-4 w-4" />
                     <span className="text-muted-foreground text-xs font-medium">
-                      Haptic:
+                      Vibration:
                     </span>
                     <Badge variant="outline">
-                      {formatHapticChoice(alarm.hapticChoice)}
+                      {formatVibrationIntensity(alarm.vibrationIntensity)} (Pattern {alarm.vibrationPattern})
                     </Badge>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <Palette className="text-muted-foreground h-4 w-4" />
                     <span className="text-muted-foreground text-xs font-medium">
-                      Color:
+                      LED:
                     </span>
-                    <div
-                      className="h-6 w-6 rounded-full border-2 border-white shadow-sm"
-                      style={{ backgroundColor: alarm.color }}
-                      title={alarm.color}
-                    />
+                    <div className="flex items-center gap-1">
+                      <div
+                        className="h-4 w-4 rounded-full border shadow-sm"
+                        style={{ backgroundColor: getLedColorValue(alarm.ledColor) }}
+                        title={formatLedColor(alarm.ledColor)}
+                      />
+                      <Badge variant="outline" className="text-xs">
+                        {formatLedPattern(alarm.ledPattern)}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
 

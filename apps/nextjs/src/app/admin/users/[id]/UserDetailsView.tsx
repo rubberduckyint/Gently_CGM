@@ -85,14 +85,14 @@ export function UserDetailsView({ userId }: UserDetailsViewProps) {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "HIGH":
+  const getSeverityLevelColor = (severityLevel: string) => {
+    switch (severityLevel) {
+      case "CRITICAL":
         return "bg-red-100 text-red-800";
-      case "MEDIUM":
+      case "WARNING":
         return "bg-yellow-100 text-yellow-800";
-      case "LOW":
-        return "bg-green-100 text-green-800";
+      case "INFORMATIONAL":
+        return "bg-blue-100 text-blue-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -252,10 +252,10 @@ export function UserDetailsView({ userId }: UserDetailsViewProps) {
                     <TableCell>{alarm.device?.title ?? "No device"}</TableCell>
                     <TableCell>
                       <Badge
-                        className={getPriorityColor(alarm.priority)}
+                        className={getSeverityLevelColor(alarm.severityLevel)}
                         variant="secondary"
                       >
-                        {alarm.priority}
+                        {alarm.severityLevel}
                       </Badge>
                     </TableCell>
                     <TableCell>

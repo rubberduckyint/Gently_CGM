@@ -5,7 +5,7 @@ export const EmailConfigSchema = z.object({
   smtpPort: z.number(),
   smtpUser: z.string().optional(),
   smtpPassword: z.string().optional(),
-  emailFrom: z.string().email(),
+  emailFrom: z.string(),
 });
 
 export type EmailConfig = z.infer<typeof EmailConfigSchema>;
