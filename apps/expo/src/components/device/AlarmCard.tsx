@@ -100,13 +100,72 @@ export function AlarmCard({ alarm, compact = false, onPress }: AlarmCardProps) {
     alarm.cronExpression,
   ]);
 
-  const getHumanReadableCron = (cronExpression: string) => {
-    try {
-      return cronstrue.toString(cronExpression);
-    } catch (error) {
-      console.warn("Failed to parse cron expression:", cronExpression, error);
-      return "Invalid schedule";
+  const getDetailedScheduleDescription = () => {
+    const startTime = safeStartDate.toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    const startDate = safeStartDate.toLocaleDateString();
+    
+    let description = "";
+    
+    // Base schedule
+    if (alarm.repeat) {
+      try {
+        description = cronstrue.toString(alarm.cronExpression);
+      } catch {
+        description = "Repeating alarm";
+      }
+    } else {
+      description = `One-time alarm on ${startDate} at ${startTime}`;
     }
+    
+    // Add end date information if available
+    if (safeEndDate) {
+      const endDate = safeEndDate.toLocaleDateString();
+      const endTime = safeEndDate.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+      
+      if (alarm.repeat) {
+        description += ` until ${endDate} at ${endTime}`;
+      }
+    } else if (alarm.repeat) {
+      description += " (continues indefinitely)";
+    }
+    
+    // Add next occurrence info if available
+    if (scheduleInfo.nextOccurrence && alarm.isActive) {
+      const nextTime = scheduleInfo.nextOccurrence.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+      const nextDate = scheduleInfo.nextOccurrence.toLocaleDateString();
+      const today = new Date().toLocaleDateString();
+      
+      if (nextDate === today) {
+        description += `\nNext: Today at ${nextTime}`;
+      } else {
+        description += `\nNext: ${nextDate} at ${nextTime}`;
+      }
+    }
+    
+    // Add additional context for better understanding
+    if (alarm.repeat && alarm.snoozePeriod && alarm.snoozePeriod > 0) {
+      description += `\nSnooze: ${alarm.snoozePeriod} minutes`;
+    }
+    
+    // Add status information
+    if (!alarm.isActive) {
+      description += "\n(Inactive)";
+    } else if (safeEndDate && safeEndDate < new Date()) {
+      description += "\n(Expired)";
+    } else if (!scheduleInfo.nextOccurrence) {
+      description += "\n(No upcoming occurrences)";
+    }
+    
+    return description;
   };
 
   const getSeverityConfig = (severityLevel: string) => {
@@ -223,25 +282,28 @@ export function AlarmCard({ alarm, compact = false, onPress }: AlarmCardProps) {
                 {
                   color: colors.text.secondary,
                   fontWeight: "500",
+                  lineHeight: 16,
                 },
               ]}
-              numberOfLines={1}
+              numberOfLines={3}
             >
-              {getHumanReadableCron(alarm.cronExpression)}
+              {getDetailedScheduleDescription()}
             </Text>
-            <Text
-              style={[
-                typography.caption,
-                {
-                  color: getAlarmStatusColor(scheduleInfo),
-                  fontWeight: "600",
-                  marginTop: spacing[1],
-                },
-              ]}
-              numberOfLines={1}
-            >
-              {scheduleInfo.timeUntilNext}
-            </Text>
+            {scheduleInfo.timeUntilNext && (
+              <Text
+                style={[
+                  typography.caption,
+                  {
+                    color: getAlarmStatusColor(scheduleInfo),
+                    fontWeight: "600",
+                    marginTop: spacing[1],
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {scheduleInfo.timeUntilNext}
+              </Text>
+            )}
           </View>
 
           <View
@@ -396,10 +458,14 @@ export function AlarmCard({ alarm, compact = false, onPress }: AlarmCardProps) {
         <Text
           style={[
             typography.bodySmall,
-            { color: colors.text.primary, marginBottom: spacing[1] },
+            { 
+              color: colors.text.primary, 
+              marginBottom: spacing[2],
+              lineHeight: 20,
+            },
           ]}
         >
-          {getHumanReadableCron(alarm.cronExpression)}
+          {getDetailedScheduleDescription()}
         </Text>
         <Text
           style={[

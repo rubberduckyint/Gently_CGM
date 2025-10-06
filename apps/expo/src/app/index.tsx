@@ -246,6 +246,8 @@ export default function LoginPage() {
       // Complete Apple Sign In flow
       const result = await completeAppleSignIn();
 
+      console.log("Apple Sign In result:", result);
+
       if (result.success) {
         console.log("✅ Apple Sign In successful, navigating to dashboard");
         router.replace("/dashboard");
@@ -370,21 +372,19 @@ export default function LoginPage() {
               </Pressable>
 
               {/* Apple Sign In Button */}
-              {Platform.OS === "ios" && (
-                <Pressable
-                  style={[
-                    buttons.base,
-                    buttons.large,
-                    buttons.secondary,
-                    isLoading && buttons.disabled,
-                    { marginTop: spacing[4] },
-                  ]}
-                  onPress={handleAppleAuth}
-                  disabled={isLoading}
-                >
-                  <Text style={buttonText.secondary}>Continue with Apple</Text>
-                </Pressable>
-              )}
+              <Pressable
+                style={[
+                  buttons.base,
+                  buttons.large,
+                  buttons.secondary,
+                  isLoading && buttons.disabled,
+                  { marginTop: spacing[4] },
+                ]}
+                onPress={handleAppleAuth}
+                disabled={isLoading}
+              >
+                <Text style={buttonText.secondary}>Continue with Apple</Text>
+              </Pressable>
             </>
           )}
 

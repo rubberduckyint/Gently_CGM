@@ -3,7 +3,6 @@ import React, { useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -43,14 +42,14 @@ import {
   parseSetEventOnOffResponse,
 } from "~/services/ble/commands/setEventOnOff";
 import {
+  connectToBLEDevice,
+  disconnectFromBLEDevice,
+} from "~/services/ble/connection";
+import {
   extractAndDecryptAdvertisementData,
   generateDynamicKey,
 } from "~/services/ble/encryption";
-import {
-  sendCommand,
-  startNotifications,
-  stopNotifications,
-} from "~/services/ble/manager";
+import { sendCommand } from "~/services/ble/manager";
 import { FACTORY_BRACELET_KEY, ResponseStatus } from "~/services/ble/types";
 import {
   buttons,
@@ -99,6 +98,69 @@ export default function DeviceDetailPage() {
   const deleteMutation = useMutation({
     mutationFn: async () => {
       if (!initialDeviceId) throw new Error("Device ID is required");
+
+      // Check for connected BLE devices and disconnect if necessary
+      console.log("🔍 Checking for connected BLE devices before deletion...");
+      try {
+        const connectedPeripherals = await BleManager.getConnectedPeripherals(
+          [],
+        );
+        console.log(
+          `Found ${connectedPeripherals.length} connected peripherals`,
+        );
+
+        // Check each connected peripheral to see if it matches our device
+        for (const peripheral of connectedPeripherals) {
+          const sanitizedDeviceId = peripheral.id.replace(
+            /[^a-zA-Z0-9._-]/g,
+            "_",
+          );
+          try {
+            const storedKey = await SecureStore.getItemAsync(
+              `ble_device_${sanitizedDeviceId}`,
+            );
+            if (storedKey) {
+              console.log(
+                `🔌 Found connected device: ${peripheral.id}, disconnecting...`,
+              );
+
+              // Disconnect using standardized function
+              try {
+                await disconnectFromBLEDevice(peripheral.id);
+                console.log(`✅ Disconnected device: ${peripheral.id}`);
+              } catch (disconnectError) {
+                console.warn(
+                  `⚠️ Failed to disconnect ${peripheral.id}:`,
+                  disconnectError,
+                );
+              }
+
+              // Remove the stored encryption key
+              try {
+                await SecureStore.deleteItemAsync(
+                  `ble_device_${sanitizedDeviceId}`,
+                );
+                console.log(
+                  `✅ Removed stored encryption key for ${peripheral.id}`,
+                );
+              } catch (keyError) {
+                console.warn(
+                  `⚠️ Failed to remove encryption key for ${peripheral.id}:`,
+                  keyError,
+                );
+              }
+            }
+          } catch (error) {
+            console.warn(`⚠️ Error checking device ${peripheral.id}:`, error);
+          }
+        }
+      } catch (bleError) {
+        console.warn("⚠️ Error checking connected BLE devices:", bleError);
+        // Continue with deletion even if BLE cleanup fails
+      }
+
+      // Delete the device from the database
+      console.log("🗑️ Deleting device from database...");
       return await trpc.device.delete.mutate({ id: initialDeviceId });
     },
     onSuccess: () => {
@@ -124,9 +186,31 @@ export default function DeviceDetailPage() {
           );
         },
       });
-      // Invalidate the devices list to refresh the dashboard
-      void queryClient.invalidateQueries({ queryKey: ["devices"] });
-      router.back();
+
+      // Update the devices list cache directly to remove the deleted device
+      queryClient.setQueryData(
+        ["devices"],
+        (oldData: { id: string }[] | undefined) => {
+          if (!oldData) return oldData;
+          return oldData.filter(
+            (device) => device.id !== initialDeviceId && device.id !== deviceId,
+          );
+        },
+      );
+
+      // Also update the trpc query cache with the correct key
+      const queryKey = [["device", "getAll"], { input: {}, type: "query" }];
+      queryClient.setQueryData(
+        queryKey,
+        (oldData: { id: string }[] | undefined) => {
+          if (!oldData) return oldData;
+          return oldData.filter(
+            (device) => device.id !== initialDeviceId && device.id !== deviceId,
+          );
+        },
+      );
+
+      router.push("/dashboard");
     },
   });
 
@@ -140,7 +224,7 @@ export default function DeviceDetailPage() {
       console.log(
         "📱 Device not found or access denied, navigating back to dashboard",
       );
-      router.back();
+      router.push("/dashboard");
     }
   }, [error]);
 
@@ -158,10 +242,6 @@ export default function DeviceDetailPage() {
       ],
     );
   };
-
-  function sleep(ms: number) {
-    return new Promise<void>((resolve) => setTimeout(resolve, ms));
-  }
 
   const handleSyncAlarms = async () => {
     if (!device?.serialNumber) {
@@ -357,41 +437,27 @@ export default function DeviceDetailPage() {
 
                   await BleManager.stopScan();
 
-                  // use ble manager to check if peripheral.id is connected
-                  const isConnected = await BleManager.isPeripheralConnected(
+                  // Use standardized connection process
+                  const connectionResult = await connectToBLEDevice(
                     peripheral.id,
+                    {
+                      maxRetries: 3,
+                      connectionTimeout: 5000,
+                      stabilizationDelay: 900,
+                      enableMTU: true,
+                      mtuSize: 512,
+                    },
                   );
-                  if (isConnected) {
-                    // disconnect if already connected
-                    await BleManager.disconnect(peripheral.id);
+
+                  if (!connectionResult.success) {
+                    throw new Error(
+                      connectionResult.error ?? "Failed to connect to device",
+                    );
                   }
 
-                  // Step 1: Connect and establish services
-                  await BleManager.connect(peripheral.id);
-                  console.log(`✅ Connected to device: ${peripheral.id}`);
-
-                  await sleep(900); // Wait for a bit to ensure connection is stable
-
-                  if (Platform.OS === "android") {
-                    console.log(`🔧 Configuring MTU for Android device...`);
-                    // Request MTU of 512 for better communication performance
-                    try {
-                      await BleManager.requestMTU(peripheral.id, 512);
-                      console.log(`📶 MTU 512 requested for ${peripheral.id}`);
-                    } catch (mtuError) {
-                      console.warn(
-                        `⚠️ MTU request failed for ${peripheral.id}:`,
-                        mtuError,
-                      );
-                      // Continue without MTU - this is not critical for basic functionality
-                    }
-                  }
-
-                  await BleManager.retrieveServices(peripheral.id);
-                  console.log(`✅ Services discovered for ${peripheral.id}`);
-
-                  await startNotifications(peripheral.id);
-                  console.log(`✅ Notifications started for ${peripheral.id}`);
+                  console.log(
+                    `✅ BLE connection established for ${peripheral.id}`,
+                  );
 
                   // Step 2: Generate encryption key
                   setSyncProgress("Generating encryption key...");
@@ -558,7 +624,7 @@ export default function DeviceDetailPage() {
                   }
 
                   // Step 5: Clean up and complete
-                  await stopNotifications(peripheral.id);
+                  await disconnectFromBLEDevice(peripheral.id);
 
                   setSyncProgress("Sync completed successfully!");
                   console.log("🎉 Alarm sync completed successfully");
@@ -760,7 +826,7 @@ export default function DeviceDetailPage() {
         }
 
         // Clean up
-        await stopNotifications(targetPeripheral.id);
+        await disconnectFromBLEDevice(targetPeripheral.id);
 
         setSyncProgress("Sync completed successfully!");
         console.log("🎉 Alarm sync completed successfully");
@@ -992,41 +1058,6 @@ export default function DeviceDetailPage() {
                 { flexDirection: "row", flexWrap: "wrap", gap: spacing[4] },
               ]}
             >
-              <View style={[{ flexDirection: "row", alignItems: "center" }]}>
-                <Ionicons
-                  name="sync"
-                  size={14}
-                  color={colors.gray[500]}
-                  style={{ marginRight: spacing[1] }}
-                />
-                <Text
-                  style={[
-                    typography.caption,
-                    { color: colors.gray[500], fontWeight: "500" },
-                  ]}
-                >
-                  {getSyncStatusText(device.syncStatus ?? "NOT_SYNCED")}
-                </Text>
-              </View>
-              <View style={[{ flexDirection: "row", alignItems: "center" }]}>
-                <Ionicons
-                  name="battery-half"
-                  size={14}
-                  color={getBatteryColor(device.batteryLevel ?? 0)}
-                  style={{ marginRight: spacing[1] }}
-                />
-                <Text
-                  style={[
-                    typography.caption,
-                    {
-                      color: getBatteryColor(device.batteryLevel ?? 0),
-                      fontWeight: "500",
-                    },
-                  ]}
-                >
-                  {device.batteryLevel ?? 0}%
-                </Text>
-              </View>
               {device.serialNumber && (
                 <View style={[{ flexDirection: "row", alignItems: "center" }]}>
                   <Ionicons
@@ -1061,7 +1092,13 @@ export default function DeviceDetailPage() {
               },
             ]}
           >
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginRight: spacing[2],
+              }}
+            >
               <Ionicons
                 name="alarm"
                 size={24}
@@ -1095,7 +1132,7 @@ export default function DeviceDetailPage() {
                 <Text
                   style={[typography.label, { color: colors.text.inverse }]}
                 >
-                  {isSyncing ? "Syncing..." : "Sync Alarms"}
+                  {isSyncing ? "Syncing..." : "Sync"}
                 </Text>
               </Pressable>
               <Pressable

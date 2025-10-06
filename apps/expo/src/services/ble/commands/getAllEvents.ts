@@ -5,6 +5,7 @@
 
 import type { BLECommandRequest } from "../types";
 import { CommandCode } from "../types";
+import { sendMultiPacketCommand } from "../manager";
 
 export interface Event {
   id: number;
@@ -35,6 +36,82 @@ export function createGetAllEventsRequest(): BLECommandRequest {
   };
 }
 
+// Store for accumulating multi-packet responses
+interface PacketAccumulator {
+  packets: Map<number, Uint8Array>;
+  totalPackets: number;
+  events: Event[];
+}
+
+const eventPacketStore = new Map<string, PacketAccumulator>();
+
+export function handleGetAllEventsPacket(
+  payload: Uint8Array,
+  deviceId: string,
+): AllEventsResponse | null {
+  console.log(`📥 GET_ALL_EVENTS Packet Handler for device: ${deviceId}`);
+  console.log(`  - Payload after header stripping (${payload.length} bytes): [${Array.from(payload).map(b => "0x" + b.toString(16).padStart(2, "0")).join(", ")}]`);
+  
+  if (payload.length < 2) {
+    console.error(`❌ Packet too short (${payload.length} < 2)`);
+    throw new Error("Invalid packet: payload too short");  
+  }
+
+  // After parseResponsePacket strips headers, the payload structure is:
+  // payload[0]: Packet number (1...N)
+  // payload[1]: Total packets expected (N)
+  // payload[2]: Current event index (0-49)
+  // payload[3+]: Event data
+  
+  const packetNumber = payload[0] ?? 0;
+  const totalPackets = payload[1] ?? 0;
+  
+  console.log(`  - Packet ${packetNumber}/${totalPackets}`);
+
+  // Initialize or get accumulator for this device
+  let accumulator = eventPacketStore.get(deviceId);
+  if (!accumulator) {
+    accumulator = {
+      packets: new Map(),
+      totalPackets,
+      events: [],
+    };
+    eventPacketStore.set(deviceId, accumulator);
+  }
+
+  // Store this packet
+  accumulator.packets.set(packetNumber, payload);
+  
+  // Check if we have all packets (all should have status 0x00 per protocol)
+  if (accumulator.packets.size === totalPackets) {
+    console.log(`✅ All packets received for device ${deviceId}, processing...`);
+    
+    // Process all packets in order
+    const allEvents: Event[] = [];
+    for (let i = 1; i <= totalPackets; i++) {
+      const packet = accumulator.packets.get(i);
+      if (packet) {
+        // Note: packet here is already the payload without headers (thanks to parseResponsePacket)
+        const singlePacketResponse = parseGetAllEventsResponse(packet);
+        allEvents.push(...singlePacketResponse.events);
+      } else {
+        console.warn(`⚠️ Missing packet ${i} for device ${deviceId}`);
+      }
+    }
+    
+    // Clean up
+    eventPacketStore.delete(deviceId);
+    
+  return {
+    events: allEvents,
+    totalEvents: allEvents.length,
+    rawPayload: new Uint8Array(), // Combined payload would be too large
+  };
+}  // Still waiting for more packets
+  console.log(`⏳ Waiting for ${totalPackets - accumulator.packets.size} more packets...`);
+  return null;
+}
+
 export function parseGetAllEventsResponse(
   payload: Uint8Array,
 ): AllEventsResponse {
@@ -46,53 +123,38 @@ export function parseGetAllEventsResponse(
       .join(", ")}]`,
   );
 
-  if (payload.length < 3) {
+  if (payload.length < 2) {
     console.error(
-      `❌ GET_ALL_EVENTS Response: Payload too short (${payload.length} < 3)`,
+      `❌ GET_ALL_EVENTS Response: Payload too short (${payload.length} < 2)`,
     );
     throw new Error("Invalid get all events response: payload too short");
   }
 
-  // Parse according to BLE protocol:
-  // After BLE manager strips API version and command code:
-  // payload[0]: Response Status (0x00=OK, 0x01=ERROR)
-  // payload[1]: Packet number (1...N)
-  // payload[2]: Total packets expected (N)
-  // payload[3]: Current event index (0-49)
-  // payload[4]: Event current state (0x00-0x05)
-  // payload[5]: Vibration pattern + intensity (combined byte)
-  // payload[6]: LED pattern + color (combined byte)
-  // payload[7]: Severity level
-  // payload[8]: Snooze period
-  // payload[9]: Snooze timeout
-  // payload[10]: Retrigger delay
-  // payload[11]: Retrigger timeout
-  // payload[12-22]: Event name (max 10 chars + null terminator)
-  // payload[23-65]: Cron expression (max 42 chars + null terminator)
-  // payload[66-71]: Reserved
+  // Parse according to BLE protocol specification:
+  // parseResponsePacket strips API version, command code, and status, so:
+  // payload[0]: Packet number (1...N)
+  // payload[1]: Total packets expected (N)
+  // payload[2]: Current event index (0-49)
+  // payload[3]: Event current state (0x00-0x05)
+  // payload[4]: Vibration pattern + intensity (combined byte)
+  // payload[5]: LED pattern + color (combined byte)
+  // payload[6]: Severity level
+  // payload[7]: Snooze period
+  // payload[8]: Snooze timeout
+  // payload[9]: Retrigger delay
+  // payload[10]: Retrigger timeout
+  // payload[11-21]: Event name (max 10 chars + null terminator)
+  // payload[22-64]: Cron expression (max 42 chars + null terminator)
+  // payload[65-68]: Reserved
 
-  const statusByte = payload[0] ?? 0;
-  const status = statusByte === 0x00 ? "OK" : "ERROR";
-  const packetNumber = payload[1] ?? 0;
-  const totalPackets = payload[2] ?? 0;
+  const packetNumber = payload[0] ?? 0;
+  const totalPackets = payload[1] ?? 0;
 
-  console.log(
-    `  - Status: 0x${statusByte.toString(16).padStart(2, "0")} (${status})`,
-  );
   console.log(`  - Packet: ${packetNumber}/${totalPackets}`);
 
-  if (status === "ERROR") {
-    console.error(`❌ GET_ALL_EVENTS Response: Device returned error status`);
-    return {
-      events: [],
-      totalEvents: 0,
-      rawPayload: payload,
-    };
-  }
-
-  if (payload.length < 12) {
+  if (payload.length < 11) {
     console.warn(
-      `⚠️ GET_ALL_EVENTS Response: Insufficient data for event parsing (${payload.length} < 12)`,
+      `⚠️ GET_ALL_EVENTS Response: Insufficient data for event parsing (${payload.length} < 11)`,
     );
     return {
       events: [],
@@ -103,11 +165,11 @@ export function parseGetAllEventsResponse(
 
   // Parse single event from this packet
   const events: Event[] = [];
-  const eventIndex = payload[3] ?? 0;
-  const eventState = payload[4] ?? 0;
-  const vibrationByte = payload[5] ?? 0;
-  const ledByte = payload[6] ?? 0;
-  const severityLevel = payload[7] ?? 0;
+  const eventIndex = payload[2] ?? 0;
+  const eventState = payload[3] ?? 0;
+  const vibrationByte = payload[4] ?? 0;
+  const ledByte = payload[5] ?? 0;
+  const severityLevel = payload[6] ?? 0;
 
   // Extract vibration pattern and intensity
   const vibrationPattern = vibrationByte & 0x3f; // bits 0-5
@@ -117,17 +179,17 @@ export function parseGetAllEventsResponse(
   const ledPattern = ledByte & 0x1f; // bits 0-4
   const ledColor = (ledByte >> 5) & 0x07; // bits 5-7
 
-  // Parse event name (bytes 12-22)
+  // Parse event name (bytes 11-21, after header stripping)
   let eventName = "";
-  for (let i = 12; i < 23 && i < payload.length; i++) {
+  for (let i = 11; i < 22 && i < payload.length; i++) {
     const byte = payload[i] ?? 0;
     if (byte === 0) break; // null terminator
     eventName += String.fromCharCode(byte);
   }
 
-  // Parse cron expression (bytes 23-65)
+  // Parse cron expression (bytes 22-64, after header stripping)
   let cronExpression = "";
-  for (let i = 23; i < 66 && i < payload.length; i++) {
+  for (let i = 22; i < 65 && i < payload.length; i++) {
     const byte = payload[i] ?? 0;
     if (byte === 0) break; // null terminator
     cronExpression += String.fromCharCode(byte);
@@ -158,7 +220,26 @@ export function parseGetAllEventsResponse(
 
   return {
     events,
-    totalEvents: totalPackets,
+    totalEvents: totalPackets,  
     rawPayload: payload,
   };
+}
+
+/**
+ * Main function to get all events using multi-packet handling
+ */
+export async function getAllEvents(
+  peripheralId: string,
+  encryptionKey: string,
+): Promise<AllEventsResponse> {
+  console.log(`🔍 Getting all events from device: ${peripheralId}`);
+  
+  const command = createGetAllEventsRequest();
+  
+  return sendMultiPacketCommand(
+    peripheralId,
+    encryptionKey,
+    command,
+    handleGetAllEventsPacket,
+  );
 }

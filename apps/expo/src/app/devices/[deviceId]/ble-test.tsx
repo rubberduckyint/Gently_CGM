@@ -41,8 +41,7 @@ import {
   parseFindMeResponse,
 } from "~/services/ble/commands/findMe";
 import {
-  createGetAllEventsRequest,
-  parseGetAllEventsResponse,
+  getAllEvents,
 } from "~/services/ble/commands/getAllEvents";
 import {
   createGetDeviceInfoRequest,
@@ -73,14 +72,14 @@ import {
   parseSetTimeResponse,
 } from "~/services/ble/commands/setTime";
 import {
+  connectToBLEDevice,
+  disconnectFromBLEDevice,
+} from "~/services/ble/connection";
+import {
   extractAndDecryptAdvertisementData,
   generateDynamicKey,
 } from "~/services/ble/encryption";
-import {
-  sendCommand,
-  startNotifications,
-  stopNotifications,
-} from "~/services/ble/manager";
+import { sendCommand, startNotifications } from "~/services/ble/manager";
 import { FACTORY_BRACELET_KEY, ResponseStatus } from "~/services/ble/types";
 import {
   buttons,
@@ -115,10 +114,6 @@ export default function BleTestPage() {
     },
     enabled: !!deviceId,
   });
-
-  function sleep(ms: number) {
-    return new Promise<void>((resolve) => setTimeout(resolve, ms));
-  }
 
   const addTestResult = (result: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -156,43 +151,21 @@ export default function BleTestPage() {
             addTestResult("🔗 Connecting to device...");
 
             try {
-              await BleManager.stopScan();
+              // Use standardized connection process
+              const connectionResult = await connectToBLEDevice(peripheral.id, {
+                maxRetries: 3,
+                connectionTimeout: 5000,
+                stabilizationDelay: 900,
+                enableMTU: true,
+                mtuSize: 512,
+              });
 
-              // use ble manager to check if peripheral.id is connected
-              const isConnected = await BleManager.isPeripheralConnected(
-                peripheral.id,
-              );
-              if (isConnected) {
-                // disconnect if already connected
-                await BleManager.disconnect(peripheral.id);
+              if (!connectionResult.success) {
+                throw new Error(connectionResult.error ?? "Connection failed");
               }
 
-              // Connect to device
-              await BleManager.connect(peripheral.id);
               addTestResult("✅ Connected to device");
-
-              // good idea to wait a bit before working with the device
-              await sleep(900);
-
-              if (Platform.OS === "android") {
-                console.log(`🔧 Configuring MTU for Android device...`);
-                // Request MTU of 512 for better communication performance
-                try {
-                  await BleManager.requestMTU(peripheral.id, 512);
-                  console.log(`📶 MTU 512 requested for ${peripheral.id}`);
-                } catch (mtuError) {
-                  console.warn(
-                    `⚠️ MTU request failed for ${peripheral.id}:`,
-                    mtuError,
-                  );
-                  // Continue without MTU - this is not critical for basic functionality
-                }
-              }
-
-              await BleManager.retrieveServices(peripheral.id);
               addTestResult("✅ Services discovered");
-
-              await startNotifications(peripheral.id);
               addTestResult("✅ Notifications started");
 
               // Generate encryption key
@@ -524,8 +497,7 @@ export default function BleTestPage() {
   const disconnectDevice = async () => {
     if (connectedPeripheral) {
       try {
-        await stopNotifications(connectedPeripheral.id);
-        await BleManager.disconnect(connectedPeripheral.id);
+        await disconnectFromBLEDevice(connectedPeripheral.id);
         addTestResult("🔌 Disconnected from device");
       } catch (error) {
         addTestResult(
@@ -676,35 +648,31 @@ export default function BleTestPage() {
   const testGetAllEvents = async () => {
     if (!connectedPeripheral || !encryptionKey) return;
 
-    const response = await sendCommand({
-      peripheralId: connectedPeripheral.id,
-      command: createGetAllEventsRequest(),
-      encryptionKey,
-    });
-
-    const result = parseGetAllEventsResponse(response.payload);
-    const statusText = response.status === ResponseStatus.OK ? "OK" : "ERROR";
-    addTestResult(`✅ Get All Events: Found ${result.totalEvents} events`);
-    if (result.events.length > 0) {
-      result.events.forEach((event, index) => {
-        const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-        const activeDays = daysOfWeek
-          .filter((_, i) => (event.days & (1 << i)) !== 0)
-          .join(", ");
-        addTestResult(
-          `  📅 Event ${index + 1}: ${event.hour.toString().padStart(2, "0")}:${event.minute.toString().padStart(2, "0")} on ${activeDays || "No days"}, ${event.enabled ? "Enabled" : "Disabled"}, Pattern: ${event.vibratePattern}`,
-        );
-      });
-    } else {
-      addTestResult(`  📝 No events found on device`);
+    try {
+      addTestResult(`🔍 Getting all events using multi-packet handler...`);
+      
+      const result = await getAllEvents(connectedPeripheral.id, encryptionKey);
+      
+      addTestResult(`✅ Get All Events: Found ${result.totalEvents} events`);
+      if (result.events.length > 0) {
+        result.events.forEach((event, index) => {
+          const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+          const activeDays = daysOfWeek
+            .filter((_, i) => (event.days & (1 << i)) !== 0)
+            .join(", ");
+          addTestResult(
+            `  📅 Event ${index + 1}: ${event.hour.toString().padStart(2, "0")}:${event.minute.toString().padStart(2, "0")} on ${activeDays || "No days"}, ${event.enabled ? "Enabled" : "Disabled"}, Pattern: ${event.vibratePattern}${event.name ? `, Name: "${event.name}"` : ""}`,
+          );
+        });
+      } else {
+        addTestResult(`  📝 No events found on device`);
+      }
+      addTestResult(
+        `📊 Multi-packet All Events: Total=${result.totalEvents}, Parsed=${result.events.length}`,
+      );
+    } catch (error) {
+      addTestResult(`❌ Get All Events failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-    addTestResult(
-      `📊 All Events Response: Status=${statusText} (0x${response.status.toString(16)}), Command=0x${response.commandCode.toString(16)}, Total=${result.totalEvents}, Events=${result.events.length}, Raw=[${Array.from(
-        response.payload,
-      )
-        .map((b) => "0x" + b.toString(16).padStart(2, "0"))
-        .join(", ")}]`,
-    );
   };
 
   const testAddEvent = async () => {

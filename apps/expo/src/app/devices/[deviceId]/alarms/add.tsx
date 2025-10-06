@@ -5,13 +5,14 @@
  * All settings are displayed on one scrollable page for better UX.
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   Platform,
   Pressable,
   ScrollView,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -31,7 +32,7 @@ import { trpc } from "~/utils/api";
 
 const getDefaultFormData = (): AlarmFormData => {
   const now = new Date();
-  const defaultStart = new Date(now.getTime() + 60000); // 1 minute from now
+  const defaultStart = new Date(now.getTime() + 300000); // 5 minutes from now
 
   return {
     title: "",
@@ -91,6 +92,24 @@ export default function AddAlarmPage() {
   const [formData, setFormData] = useState<AlarmFormData>(getDefaultFormData());
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  
+  // Local state for temporary picker values (iOS only)
+  const [tempStartDate, setTempStartDate] = useState(formData.startDate);
+  const [tempEndDate, setTempEndDate] = useState(formData.endsOnDate ?? new Date());
+  
+  // Validation state
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
+  const isFormValid = formData.title.trim().length > 0;
+  
+  // Update temp values when form data changes
+  useEffect(() => {
+    setTempStartDate(formData.startDate);
+  }, [formData.startDate]);
+
+  useEffect(() => {
+    setTempEndDate(formData.endsOnDate ?? new Date());
+  }, [formData.endsOnDate]);
+  
   const queryClient = useQueryClient();
 
   const createAlarmMutation = useMutation({
@@ -186,6 +205,7 @@ export default function AddAlarmPage() {
         <BasicInfoSection
           formData={formData}
           onUpdateFormData={updateFormData}
+          showValidationErrors={showValidationErrors}
         />
 
         {/* Schedule Section */}
@@ -222,43 +242,154 @@ export default function AddAlarmPage() {
             buttons.base,
             buttons.primary,
             createAlarmMutation.isPending && { opacity: 0.5 },
+            !isFormValid && showValidationErrors && {
+              backgroundColor: colors.error[500],
+              borderColor: colors.error[600],
+            },
           ]}
-          onPress={handleSave}
-          disabled={createAlarmMutation.isPending || !formData.title.trim()}
+          onPress={() => {
+            if (!isFormValid) {
+              setShowValidationErrors(true);
+              Alert.alert(
+                "Missing Required Fields",
+                "Please fill in all required fields before creating the alarm.",
+                [{ text: "OK" }]
+              );
+              return;
+            }
+            handleSave();
+          }}
+          disabled={createAlarmMutation.isPending}
         >
           <Text style={[buttonText.primary]}>
-            {createAlarmMutation.isPending ? "Creating..." : "Create Alarm"}
+            {createAlarmMutation.isPending
+              ? "Creating..."
+              : !isFormValid && showValidationErrors
+              ? "Missing Required Fields"
+              : "Create Alarm"}
           </Text>
         </Pressable>
       </View>
 
       {/* Date/Time Pickers */}
       {showStartTimePicker && (
-        <DateTimePicker
-          value={formData.startDate}
-          mode={Platform.OS === "ios" ? "datetime" : "time"}
-          display="default"
-          onChange={(event, selectedDate) => {
-            setShowStartTimePicker(false);
-            if (selectedDate) {
-              updateFormData({ startDate: selectedDate });
-            }
-          }}
-        />
+        <View style={Platform.OS === "ios" ? {
+          backgroundColor: colors.background.secondary,
+          borderRadius: 12,
+          marginVertical: 10,
+          padding: 10,
+        } : undefined}>
+          <DateTimePicker
+            value={Platform.OS === "ios" ? tempStartDate : formData.startDate}
+            mode={Platform.OS === "ios" ? "datetime" : "time"}
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(event, selectedDate) => {
+              if (Platform.OS === "android") {
+                // Android: close immediately and update
+                setShowStartTimePicker(false);
+                if (selectedDate) {
+                  updateFormData({ startDate: selectedDate });
+                }
+              } else if (selectedDate) {
+                // iOS: update temporary value but don't close
+                setTempStartDate(selectedDate);
+              }
+            }}
+            style={Platform.OS === "ios" ? {
+              backgroundColor: colors.background.secondary,
+              height: 200,
+            } : undefined}
+            textColor={colors.text.primary}
+          />
+          {Platform.OS === "ios" && (
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              paddingTop: 10,
+              borderTopWidth: 1,
+              borderTopColor: colors.border.light,
+              marginTop: 10,
+            }}>
+              <TouchableOpacity 
+                onPress={() => {
+                  // Save temporary picker value to form and close
+                  updateFormData({ startDate: tempStartDate });
+                  setShowStartTimePicker(false);
+                }}
+                style={{
+                  paddingHorizontal: 20,
+                  paddingVertical: 8,
+                  backgroundColor: colors.primary[500],
+                  borderRadius: 8,
+                }}
+              >
+                <Text style={{ color: colors.text.inverse, fontSize: 16, fontWeight: '600' }}>
+                  Done
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       )}
 
       {showEndDatePicker && (
-        <DateTimePicker
-          value={formData.endsOnDate ?? new Date()}
-          mode={Platform.OS === "ios" ? "datetime" : "date"}
-          display="default"
-          onChange={(event, selectedDate) => {
-            setShowEndDatePicker(false);
-            if (selectedDate) {
-              updateFormData({ endsOnDate: selectedDate });
-            }
-          }}
-        />
+        <View style={Platform.OS === "ios" ? {
+          backgroundColor: colors.background.secondary,
+          borderRadius: 12,
+          marginVertical: 10,
+          padding: 10,
+        } : undefined}>
+          <DateTimePicker
+            value={Platform.OS === "ios" ? tempEndDate : (formData.endsOnDate ?? new Date())}
+            mode={Platform.OS === "ios" ? "datetime" : "date"}
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(event, selectedDate) => {
+              if (Platform.OS === "android") {
+                // Android: close immediately and update
+                setShowEndDatePicker(false);
+                if (selectedDate) {
+                  updateFormData({ endsOnDate: selectedDate });
+                }
+              } else if (selectedDate) {
+                // iOS: update temporary value but don't close
+                setTempEndDate(selectedDate);
+              }
+            }}
+            style={Platform.OS === "ios" ? {
+              backgroundColor: colors.background.secondary,
+              height: 200,
+            } : undefined}
+            textColor={colors.text.primary}
+          />
+          {Platform.OS === "ios" && (
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              paddingTop: 10,
+              borderTopWidth: 1,
+              borderTopColor: colors.border.light,
+              marginTop: 10,
+            }}>
+              <TouchableOpacity 
+                onPress={() => {
+                  // Save temporary picker value to form and close
+                  updateFormData({ endsOnDate: tempEndDate });
+                  setShowEndDatePicker(false);
+                }}
+                style={{
+                  paddingHorizontal: 20,
+                  paddingVertical: 8,
+                  backgroundColor: colors.primary[500],
+                  borderRadius: 8,
+                }}
+              >
+                <Text style={{ color: colors.text.inverse, fontSize: 16, fontWeight: '600' }}>
+                  Done
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       )}
     </SafeAreaView>
   );

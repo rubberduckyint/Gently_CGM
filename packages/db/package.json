@@ -34,7 +34,7 @@
   "dependencies": {
     "@vercel/postgres": "^0.10.0",
     "drizzle-cuid2": "^2.1.0",
-    "drizzle-orm": "^0.44.5",
+    "drizzle-orm": "^0.44.6",
     "drizzle-zod": "^0.8.3",
     "minimatch": "^10.0.3",
     "postgres": "^3.4.7",

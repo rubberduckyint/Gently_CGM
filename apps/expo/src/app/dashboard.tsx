@@ -50,38 +50,6 @@ function DeviceCard({
 }) {
   const [showDeleteButton, setShowDeleteButton] = React.useState(false);
 
-  const getBatteryColor = (level: number) => {
-    if (level > 50) return colors.battery.high;
-    if (level > 20) return colors.battery.medium;
-    return colors.battery.low;
-  };
-
-  const getSyncStatusText = (status: string) => {
-    switch (status) {
-      case "SYNCED":
-        return "✓ Synced";
-      case "SYNCING":
-        return "⟳ Syncing";
-      case "ERROR":
-        return "⚠ Error";
-      default:
-        return "○ Not Synced";
-    }
-  };
-
-  const getSyncStatusColor = (status: string) => {
-    switch (status) {
-      case "SYNCED":
-        return colors.status.synced;
-      case "SYNCING":
-        return colors.status.syncing;
-      case "ERROR":
-        return colors.status.error;
-      default:
-        return colors.status.pending;
-    }
-  };
-
   const handleLongPress = () => {
     setShowDeleteButton(!showDeleteButton);
   };
@@ -175,69 +143,6 @@ function DeviceCard({
               />
             </View>
           </View>
-
-          {/* Device Stats */}
-          <View
-            style={[
-              flex.row,
-              flex.justifyBetween,
-              {
-                paddingTop: spacing[3],
-                borderTopWidth: 1,
-                borderTopColor: colors.border.light,
-              },
-            ]}
-          >
-            <View style={flex.itemsCenter}>
-              <Text
-                style={[typography.caption, { color: colors.text.secondary }]}
-              >
-                Alarms
-              </Text>
-              <Text style={[typography.labelLarge, { marginTop: spacing[1] }]}>
-                {device._count.alarms}
-              </Text>
-            </View>
-
-            <View style={flex.itemsCenter}>
-              <Text
-                style={[typography.caption, { color: colors.text.secondary }]}
-              >
-                Battery
-              </Text>
-              <Text
-                style={[
-                  typography.labelLarge,
-                  {
-                    color: getBatteryColor(device.batteryLevel),
-                    marginTop: spacing[1],
-                  },
-                ]}
-              >
-                {device.batteryLevel}%
-              </Text>
-            </View>
-
-            <View style={flex.itemsCenter}>
-              <Text
-                style={[typography.caption, { color: colors.text.secondary }]}
-              >
-                Status
-              </Text>
-              <Text
-                style={[
-                  typography.caption,
-                  {
-                    color: getSyncStatusColor(device.syncStatus),
-                    fontWeight: "600",
-                    marginTop: spacing[1],
-                  },
-                ]}
-              >
-                {getSyncStatusText(device.syncStatus)}
-              </Text>
-            </View>
-          </View>
         </Pressable>
       </Link>
 
@@ -304,8 +209,25 @@ export default function DashboardPage() {
           );
         },
       });
-      // Invalidate the devices list to refresh the dashboard
-      void queryClient.invalidateQueries({ queryKey: ["devices"] });
+
+      // Update the devices list cache directly to remove the deleted device
+      queryClient.setQueryData(
+        ["devices"],
+        (oldData: DeviceWithAlarmsCount[] | undefined) => {
+          if (!oldData) return oldData;
+          return oldData.filter((device) => device.id !== deviceId);
+        },
+      );
+
+      // Also update the trpc query cache with the correct key
+      const queryKey = [["device", "getAll"], { input: {}, type: "query" }];
+      queryClient.setQueryData(
+        queryKey,
+        (oldData: DeviceWithAlarmsCount[] | undefined) => {
+          if (!oldData) return oldData;
+          return oldData.filter((device) => device.id !== deviceId);
+        },
+      );
     },
     onError: (error) => {
       Alert.alert("Error", `Failed to delete device: ${error.message}`);
@@ -324,8 +246,11 @@ export default function DashboardPage() {
   useFocusEffect(
     React.useCallback(() => {
       if (session?.user) {
-        // Invalidate the devices query to ensure fresh data
+        // Invalidate both the legacy and TRPC query keys to ensure fresh data
         void queryClient.invalidateQueries({ queryKey: ["devices"] });
+        void queryClient.invalidateQueries({
+          queryKey: [["device", "getAll"]],
+        });
         // Force refetch
         void refetch();
       }
@@ -428,16 +353,6 @@ export default function DashboardPage() {
           />
         }
       />
-
-      {/* Device count subtitle */}
-      <View
-        style={{ paddingHorizontal: spacing[6], paddingVertical: spacing[2] }}
-      >
-        <Text style={[typography.bodySmall, { color: colors.text.secondary }]}>
-          {devices?.length ?? 0} device{devices?.length !== 1 ? "s" : ""}{" "}
-          connected
-        </Text>
-      </View>
 
       {/* Content */}
       <View style={containers.content}>

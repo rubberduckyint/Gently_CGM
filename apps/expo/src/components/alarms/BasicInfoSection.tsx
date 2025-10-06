@@ -38,12 +38,16 @@ export interface AlarmFormData {
 interface BasicInfoSectionProps {
   formData: AlarmFormData;
   onUpdateFormData: (updates: Partial<AlarmFormData>) => void;
+  showValidationErrors?: boolean;
 }
 
 export function BasicInfoSection({
   formData,
   onUpdateFormData,
+  showValidationErrors = false,
 }: BasicInfoSectionProps) {
+  const isTitleEmpty = formData.title.trim().length === 0;
+  const showTitleError = showValidationErrors && isTitleEmpty;
   return (
     <View style={[cards.base, { marginBottom: spacing[6] }]}>
       <Text style={[typography.h4, { marginBottom: spacing[4] }]}>
@@ -52,16 +56,34 @@ export function BasicInfoSection({
 
       {/* Title Input */}
       <View style={{ marginBottom: spacing[4] }}>
-        <Text style={[typography.label, { marginBottom: spacing[2] }]}>
+        <Text style={[
+          typography.label, 
+          { marginBottom: spacing[2] },
+          showTitleError && { color: colors.error[500] }
+        ]}>
           Title *
         </Text>
         <TextInput
-          style={[inputs.base]}
+          style={[
+            inputs.base,
+            showTitleError && {
+              borderColor: colors.error[500],
+              borderWidth: 2,
+            }
+          ]}
           value={formData.title}
           onChangeText={(text) => onUpdateFormData({ title: text })}
           placeholder="Enter alarm title"
           placeholderTextColor={colors.text.secondary}
         />
+        {showTitleError && (
+          <Text style={[
+            typography.caption,
+            { color: colors.error[500], marginTop: spacing[1] }
+          ]}>
+            Title is required
+          </Text>
+        )}
       </View>
 
       {/* Description Input */}

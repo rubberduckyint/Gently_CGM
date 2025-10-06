@@ -44,6 +44,11 @@ export default function EditAlarmPage() {
   const [formData, setFormData] = useState<AlarmFormData | null>(null);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  
+  // Validation state
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
+  const isFormValid = formData ? formData.title.trim().length > 0 : false;
+  
   const queryClient = useQueryClient();
 
   const {
@@ -421,6 +426,7 @@ export default function EditAlarmPage() {
         <BasicInfoSection
           formData={formData}
           onUpdateFormData={updateFormData}
+          showValidationErrors={showValidationErrors}
         />
 
         {/* Schedule Section */}
@@ -457,12 +463,31 @@ export default function EditAlarmPage() {
             buttons.base,
             buttons.primary,
             updateAlarmMutation.isPending && { opacity: 0.5 },
+            !isFormValid && showValidationErrors && {
+              backgroundColor: colors.error[500],
+              borderColor: colors.error[600],
+            },
           ]}
-          onPress={handleSave}
-          disabled={updateAlarmMutation.isPending || !formData.title.trim()}
+          onPress={() => {
+            if (!isFormValid) {
+              setShowValidationErrors(true);
+              Alert.alert(
+                "Missing Required Fields",
+                "Please fill in all required fields before updating the alarm.",
+                [{ text: "OK" }]
+              );
+              return;
+            }
+            handleSave();
+          }}
+          disabled={updateAlarmMutation.isPending}
         >
           <Text style={[buttonText.primary]}>
-            {updateAlarmMutation.isPending ? "Updating..." : "Update Alarm"}
+            {updateAlarmMutation.isPending
+              ? "Updating..."
+              : !isFormValid && showValidationErrors
+              ? "Missing Required Fields"
+              : "Update Alarm"}
           </Text>
         </Pressable>
       </View>

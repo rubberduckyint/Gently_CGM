@@ -7,7 +7,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -37,15 +36,12 @@ import {
   createSetTimeRequest,
   parseSetTimeResponse,
 } from "~/services/ble/commands/setTime";
+import { connectToBLEDevice } from "~/services/ble/connection";
 import {
   extractAndDecryptAdvertisementData,
   generateDynamicKey,
 } from "~/services/ble/encryption";
-import {
-  sendCommand,
-  startNotifications,
-  stopNotifications,
-} from "~/services/ble/manager";
+import { sendCommand, stopNotifications } from "~/services/ble/manager";
 import { FACTORY_BRACELET_KEY, ResponseStatus } from "~/services/ble/types";
 import { requestBluetoothPermissions } from "~/services/ble/utils";
 import {
@@ -73,10 +69,19 @@ interface PairingStatus {
   error?: string;
 }
 
+interface PairingSuccess {
+  deviceName: string;
+  deviceId: string;
+  serialNumber: string;
+}
+
 const AddDeviceScreen = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [isConnecting, setIsConnecting] = useState<string | null>(null);
   const [pairingStatus, setPairingStatus] = useState<PairingStatus | null>(
+    null,
+  );
+  const [pairingSuccess, setPairingSuccess] = useState<PairingSuccess | null>(
     null,
   );
   const [hasScanned, setHasScanned] = useState(false);
@@ -155,10 +160,6 @@ const AddDeviceScreen = () => {
       data.value,
     );
   };
-
-  function sleep(ms: number) {
-    return new Promise<void>((resolve) => setTimeout(resolve, ms));
-  }
 
   useEffect(() => {
     BleManager.start({ showAlert: false })
@@ -248,50 +249,34 @@ const AddDeviceScreen = () => {
         await BleManager.stopScan();
       }
 
-      // use ble manager to check if peripheral.id is connected
-      const isConnected = await BleManager.isPeripheralConnected(peripheral.id);
-      if (isConnected) {
-        // disconnect if already connected
-        await BleManager.disconnect(peripheral.id);
-      }
-
-      console.log(`🔗 Connecting to device: ${peripheral.id}`);
-      await BleManager.connect(peripheral.id);
-      console.log(`✅ Connected to device: ${peripheral.id}`);
-
-      // before retrieving services, it is often a good idea to let bonding & connection finish properly
-      await sleep(900);
-
-      if (Platform.OS === "android") {
-        console.log(`🔧 Configuring MTU for Android device...`);
-        // Request MTU of 512 for better communication performance
-        try {
-          await BleManager.requestMTU(peripheral.id, 512);
-          console.log(`📶 MTU 512 requested for ${peripheral.id}`);
-        } catch (mtuError) {
-          console.warn(`⚠️ MTU request failed for ${peripheral.id}:`, mtuError);
-          // Continue without MTU - this is not critical for basic functionality
-        }
-      }
-
-      // Step 2: Discover services and characteristics
+      // Step 2: Use standardized connection process
       setPairingStatus({
         step: "Discovering services...",
         progress: 20,
         isComplete: false,
       });
-      console.log(`🔍 Discovering services...`);
-      await BleManager.retrieveServices(peripheral.id);
-      console.log(`✅ Services discovered for ${peripheral.id}`);
 
-      // Step 3: Start notifications
+      const connectionResult = await connectToBLEDevice(peripheral.id, {
+        maxRetries: 3,
+        connectionTimeout: 5000,
+        stabilizationDelay: 900,
+        enableMTU: true,
+        mtuSize: 512,
+      });
+
+      if (!connectionResult.success) {
+        throw new Error(
+          connectionResult.error ??
+            "Failed to connect after 3 attempts. Please ensure the device is in pairing mode and try again.",
+        );
+      }
+
+      // Step 3: Setup communication is complete (handled by connectToBLEDevice)
       setPairingStatus({
         step: "Setting up communication...",
         progress: 30,
         isComplete: false,
       });
-      console.log(`🔔 Starting notifications...`);
-      await startNotifications(peripheral.id);
 
       // Step 4: Send GetUptime command using factory key
       setPairingStatus({
@@ -448,12 +433,13 @@ const AddDeviceScreen = () => {
       });
       await stopNotifications(peripheral.id);
 
-      // Step 11: Navigate to the paired device
+      // Step 11: Show success message
       console.log(`✅ Device paired successfully: ${newDevice?.title}`);
       if (newDevice?.id) {
-        router.push({
-          pathname: "/devices/[deviceId]",
-          params: { deviceId: newDevice.id },
+        setPairingSuccess({
+          deviceName: newDevice.title,
+          deviceId: newDevice.id,
+          serialNumber: advertisementData.serialNumber,
         });
       }
     } catch (error) {
@@ -467,11 +453,36 @@ const AddDeviceScreen = () => {
         console.error("Cleanup error:", cleanupError);
       }
 
-      Alert.alert(
-        "Pairing Failed",
-        `Could not pair with ${peripheral.name}. ${error instanceof Error ? error.message : "Please try again."}`,
-        [{ text: "OK" }],
-      );
+      // Check if this was a connection failure specifically
+      const isConnectionFailure =
+        error instanceof Error &&
+        (error.message.includes("Connection timeout") ||
+          error.message.includes("Failed to connect after") ||
+          error.message.includes("Connection failed"));
+
+      if (isConnectionFailure) {
+        Alert.alert(
+          "Connection Failed",
+          `Unable to connect to ${peripheral.name}. ${error instanceof Error ? error.message : "Please ensure the device is in pairing mode and try scanning again."}`,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                // Reset scan state to allow user to scan again
+                setDiscoveredDevices(new Map());
+                setHasScanned(false);
+                setIsScanning(false);
+              },
+            },
+          ],
+        );
+      } else {
+        Alert.alert(
+          "Pairing Failed",
+          `Could not pair with ${peripheral.name}. ${error instanceof Error ? error.message : "Please try again."}`,
+          [{ text: "OK" }],
+        );
+      }
     } finally {
       setIsConnecting(null);
       setPairingStatus(null);
@@ -919,6 +930,124 @@ const AddDeviceScreen = () => {
           renderEmptyState()
         )}
       </ScrollView>
+
+      {/* Success Modal Overlay */}
+      {pairingSuccess && (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            alignItems: "center",
+            justifyContent: "center",
+            paddingHorizontal: spacing[4],
+          }}
+        >
+          <View
+            style={[
+              cards.base,
+              {
+                width: "100%",
+                maxWidth: 400,
+                padding: spacing[6],
+                alignItems: "center",
+              },
+            ]}
+          >
+            {/* Success Icon */}
+            <View
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                backgroundColor: colors.success[100],
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: spacing[4],
+              }}
+            >
+              <Ionicons
+                name="checkmark-circle"
+                size={48}
+                color={colors.success[600]}
+              />
+            </View>
+
+            {/* Success Message */}
+            <Text
+              style={[
+                typography.h2,
+                {
+                  color: colors.text.primary,
+                  textAlign: "center",
+                  marginBottom: spacing[2],
+                },
+              ]}
+            >
+              Device Paired Successfully!
+            </Text>
+
+            <Text
+              style={[
+                typography.body,
+                {
+                  color: colors.text.secondary,
+                  textAlign: "center",
+                  marginBottom: spacing[1],
+                },
+              ]}
+            >
+              {pairingSuccess.deviceName} is now connected and ready to use.
+            </Text>
+
+            <Text
+              style={[
+                typography.caption,
+                {
+                  color: colors.text.tertiary,
+                  textAlign: "center",
+                  marginBottom: spacing[6],
+                },
+              ]}
+            >
+              Serial: {pairingSuccess.serialNumber}
+            </Text>
+
+            {/* Action Buttons */}
+            <View style={{ width: "100%", gap: spacing[3] }}>
+              <Pressable
+                style={[buttons.primary, buttons.large]}
+                onPress={() => {
+                  router.push({
+                    pathname: "/devices/[deviceId]",
+                    params: { deviceId: pairingSuccess.deviceId },
+                  });
+                }}
+              >
+                <Text style={[buttonText.primary, buttonText.large]}>
+                  Go to Device
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[buttons.secondary, buttons.large]}
+                onPress={() => {
+                  setPairingSuccess(null);
+                  setDiscoveredDevices(new Map());
+                  setHasScanned(false);
+                }}
+              >
+                <Text style={[buttonText.secondary, buttonText.large]}>
+                  Pair Another Device
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 };

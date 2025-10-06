@@ -71,6 +71,142 @@ export async function stopNotifications(peripheralId: string): Promise<void> {
 }
 
 /**
+ * Sends a command that expects multi-packet responses (like GET_ALL_EVENTS)
+ */
+export async function sendMultiPacketCommand<T>(
+  peripheralId: string,
+  encryptionKey: string,
+  command: BLECommandRequest,
+  packetHandler: (payload: Uint8Array, deviceId: string) => T | null,
+  timeoutMs = 30000, // Longer timeout for multi-packet commands
+): Promise<T> {
+  console.log(
+    `🔄 Sending multi-packet command 0x${command.command.toString(16).padStart(2, "0")} to ${peripheralId}`,
+  );
+
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Multi-packet command timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    let responseListener: { remove: () => void } | null = null;
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      if (responseListener) {
+        try {
+          responseListener.remove();
+        } catch (cleanupError) {
+          console.warn(
+            "Warning: Failed to remove BLE response listener:",
+            cleanupError,
+          );
+        }
+        responseListener = null;
+      }
+    };
+
+    try {
+      // Set up response listener for multiple packets
+      responseListener = BleManager.onDidUpdateValueForCharacteristic(
+        (data: BleManagerDidUpdateValueForCharacteristicEvent) => {
+          const isCharacteristicMatch =
+            data.characteristic.toUpperCase() ===
+            BLE_RESPONSE_CHARACTERISTIC_UUID.toUpperCase();
+
+          if (data.peripheral === peripheralId && isCharacteristicMatch) {
+            try {
+              console.log(`📥 Received multi-packet response from ${peripheralId}`);
+
+              // Decrypt the response
+              const tea = new TEAEncryption(encryptionKey);
+              const encryptedData = new Uint8Array(data.value);
+
+              const decryptedData = new Uint8Array(encryptedData.length);
+              for (let i = 0; i < encryptedData.length; i += 8) {
+                const block = encryptedData.slice(i, i + 8);
+                const decryptedBlock = tea.decrypt(block);
+                decryptedData.set(decryptedBlock, i);
+              }
+
+              const response = parseResponsePacket(decryptedData);
+
+              // Validate command code matches
+              if (response.commandCode !== command.command) {
+                console.warn(
+                  `⚠️ Command mismatch! Sent 0x${command.command.toString(16).padStart(2, "0")}, received 0x${response.commandCode.toString(16).padStart(2, "0")}`,
+                );
+              }
+
+              // Use the packet handler to process this packet (payload has headers stripped)
+              const result = packetHandler(response.payload, peripheralId);
+              
+              // If handler returns a result, we're done
+              if (result !== null) {
+                console.log(`✅ Multi-packet command 0x${command.command.toString(16).padStart(2, "0")} completed`);
+                cleanup();
+                resolve(result);
+              }
+              // Otherwise, continue waiting for more packets
+
+            } catch (error) {
+              console.error(
+                `❌ Error processing multi-packet response for command ${command.command}:`,
+                error,
+              );
+              cleanup();
+              reject(error instanceof Error ? error : new Error(String(error)));
+            }
+          }
+        },
+      );
+
+      // Send the command (same as single-packet)
+      const packet = constructCommandPacket(command);
+      const tea = new TEAEncryption(encryptionKey);
+
+      const encryptedPacket = new Uint8Array(packet.length);
+      for (let i = 0; i < packet.length; i += 8) {
+        const block = packet.slice(i, i + 8);
+        const encryptedBlock = tea.encrypt(block);
+        encryptedPacket.set(encryptedBlock, i);
+      }
+
+      const dataToSend = Array.from(encryptedPacket);
+      console.log(`  - Sending ${dataToSend.length} bytes encrypted`);
+
+      const writePromise =
+        Platform.OS === "ios"
+          ? BleManager.write(
+              peripheralId,
+              BLE_SERVICE_UUID,
+              BLE_REQUEST_CHARACTERISTIC_UUID,
+              dataToSend,
+              dataToSend.length,
+            )
+          : BleManager.writeWithoutResponse(
+              peripheralId,
+              BLE_SERVICE_UUID,
+              BLE_REQUEST_CHARACTERISTIC_UUID,
+              dataToSend,
+            );
+
+      writePromise.catch((error) => {
+        console.error(`❌ Failed to send multi-packet command:`, error);
+        cleanup();
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
+
+    } catch (error) {
+      console.error(`❌ Failed to setup multi-packet command:`, error);
+      cleanup();
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
+}
+
+/**
  * Constructs a BLE command packet according to the protocol
  */
 function constructCommandPacket(command: BLECommandRequest): Uint8Array {
