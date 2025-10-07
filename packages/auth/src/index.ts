@@ -7,20 +7,6 @@ import { emailOTP, magicLink, oAuthProxy } from "better-auth/plugins";
 import { db } from "@gently/db/client";
 import { EmailSender, MagicLinkService, OTPService } from "@gently/email";
 
-// Import the function here to use inside the config
-import {
-  generateAppleClientSecret,
-  setAppleConfig,
-} from "./apple-client-secret";
-
-// Export Apple client secret utilities
-export {
-  generateAppleClientSecret,
-  getApplePrivateKey,
-  clearAppleClientSecretCache,
-  getAppleClientSecretInfo,
-} from "./apple-client-secret";
-
 export function initAuth(options: {
   baseUrl: string;
   productionUrl: string;
@@ -31,11 +17,8 @@ export function initAuth(options: {
 
   // Apple Sign In configuration
   appleClientId?: string;
+  appleClientSecret?: string;
   appleAppBundleId?: string;
-  appleTeamId?: string;
-  appleKeyId?: string;
-  applePrivateKey?: string;
-  applePrivateKeyPath?: string;
   appleEnabled?: boolean;
 
   // Email configuration for magic links
@@ -46,30 +29,6 @@ export function initAuth(options: {
   smtpUser?: string;
   smtpPassword?: string;
 }) {
-  // Initialize Apple configuration FIRST if enabled
-  if (
-    options.appleEnabled &&
-    options.appleClientId &&
-    options.appleTeamId &&
-    options.appleKeyId
-  ) {
-    // Validate that we have a private key source
-    if (!options.applePrivateKey && !options.applePrivateKeyPath) {
-      throw new Error(
-        "Apple Sign In is enabled but no private key provided. " +
-          "Set APPLE_PRIVATE_KEY or APPLE_PRIVATE_KEY_PATH environment variable.",
-      );
-    }
-
-    setAppleConfig({
-      teamId: options.appleTeamId,
-      keyId: options.appleKeyId,
-      clientId: options.appleClientId,
-      privateKey: options.applePrivateKey ?? "",
-      privateKeyPath: options.applePrivateKeyPath,
-    });
-  }
-
   // Initialize email service if SMTP is configured
   let magicLinkService: MagicLinkService | null = null;
   let otpService: OTPService | null = null;
@@ -178,17 +137,11 @@ export function initAuth(options: {
         clientSecret: options.googleClientSecret,
       },
       ...(options.appleEnabled &&
-        options.appleClientId && {
+        options.appleClientId &&
+        options.appleClientSecret && {
           apple: {
             clientId: options.appleClientId,
-            clientSecret: (() => {
-              try {
-                return generateAppleClientSecret();
-              } catch (error) {
-                console.error("Failed to generate Apple client secret:", error);
-                throw error;
-              }
-            })(),
+            clientSecret: options.appleClientSecret,
             redirectURI: `${options.baseUrl}/api/auth/callback/apple`,
             // Required for native iOS apps
             ...(options.appleAppBundleId && {
