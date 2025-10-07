@@ -46,6 +46,30 @@ export function initAuth(options: {
   smtpUser?: string;
   smtpPassword?: string;
 }) {
+  // Initialize Apple configuration FIRST if enabled
+  if (
+    options.appleEnabled &&
+    options.appleClientId &&
+    options.appleTeamId &&
+    options.appleKeyId
+  ) {
+    // Validate that we have a private key source
+    if (!options.applePrivateKey && !options.applePrivateKeyPath) {
+      throw new Error(
+        "Apple Sign In is enabled but no private key provided. " +
+          "Set APPLE_PRIVATE_KEY or APPLE_PRIVATE_KEY_PATH environment variable.",
+      );
+    }
+
+    setAppleConfig({
+      teamId: options.appleTeamId,
+      keyId: options.appleKeyId,
+      clientId: options.appleClientId,
+      privateKey: options.applePrivateKey ?? "",
+      privateKeyPath: options.applePrivateKeyPath,
+    });
+  }
+
   // Initialize email service if SMTP is configured
   let magicLinkService: MagicLinkService | null = null;
   let otpService: OTPService | null = null;
@@ -61,22 +85,6 @@ export function initAuth(options: {
 
     magicLinkService = new MagicLinkService(emailSender);
     otpService = new OTPService(emailSender);
-  }
-
-  // Initialize Apple configuration if enabled
-  if (
-    options.appleEnabled &&
-    options.appleClientId &&
-    options.appleTeamId &&
-    options.appleKeyId
-  ) {
-    setAppleConfig({
-      teamId: options.appleTeamId,
-      keyId: options.appleKeyId,
-      clientId: options.appleClientId,
-      privateKey: options.applePrivateKey ?? "",
-      privateKeyPath: options.applePrivateKeyPath,
-    });
   }
 
   const config = {
@@ -173,7 +181,14 @@ export function initAuth(options: {
         options.appleClientId && {
           apple: {
             clientId: options.appleClientId,
-            clientSecret: generateAppleClientSecret(),
+            clientSecret: (() => {
+              try {
+                return generateAppleClientSecret();
+              } catch (error) {
+                console.error("Failed to generate Apple client secret:", error);
+                throw error;
+              }
+            })(),
             redirectURI: `${options.baseUrl}/api/auth/callback/apple`,
             // Required for native iOS apps
             ...(options.appleAppBundleId && {

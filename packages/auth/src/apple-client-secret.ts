@@ -125,6 +125,28 @@ export function getApplePrivateKey(): string {
     );
   }
 
+  // Ensure the private key is in PKCS#8 format for ES256
+  // Apple's .p8 files are typically in PKCS#8 format which starts with "-----BEGIN PRIVATE KEY-----"
+  if (!privateKey.includes("-----BEGIN PRIVATE KEY-----")) {
+    // If it's an EC PRIVATE KEY format, convert or warn
+    if (privateKey.includes("-----BEGIN EC PRIVATE KEY-----")) {
+      console.warn(
+        "Apple private key appears to be in EC PRIVATE KEY format. " +
+          "For ES256 JWT signing, PKCS#8 format (-----BEGIN PRIVATE KEY-----) is recommended. " +
+          "Convert using: openssl pkcs8 -topk8 -nocrypt -in ec_private_key.pem -out pkcs8_private_key.pem",
+      );
+    } else {
+      // Check for other common formats
+      console.warn(
+        `Apple private key format detected: ${privateKey.substring(0, 50)}... ` +
+          "Ensure it's in PKCS#8 format for ES256 JWT signing.",
+      );
+    }
+  }
+
+  // Trim any extra whitespace that might cause issues
+  privateKey = privateKey.trim();
+
   return privateKey;
 }
 
@@ -172,6 +194,10 @@ function createAppleClientSecret(): CachedToken {
   };
 
   try {
+    // Debug: Log key format for troubleshooting
+    const keyStart = privateKey.substring(0, 50);
+    console.debug(`Apple JWT: Using private key starting with: ${keyStart}...`);
+
     const token = jwt.sign(payload, privateKey, {
       algorithm: "ES256",
       header,
@@ -183,11 +209,20 @@ function createAppleClientSecret(): CachedToken {
       issuedAt: now,
     };
   } catch (error) {
-    throw new Error(
-      `Failed to sign Apple client secret JWT: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }`,
-    );
+    // Enhanced error reporting for JWT signing issues
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+
+    if (errorMessage.includes("secretOrPrivateKey must be an asymmetric key")) {
+      throw new Error(
+        `Failed to sign Apple client secret JWT: The private key must be in PKCS#8 format for ES256 signing. ` +
+          `Error: ${errorMessage}. ` +
+          `Please ensure your Apple private key (.p8 file) is in the correct format. ` +
+          `You can convert it using: openssl pkcs8 -topk8 -nocrypt -in your_key.p8 -out converted_key.p8`,
+      );
+    }
+
+    throw new Error(`Failed to sign Apple client secret JWT: ${errorMessage}`);
   }
 }
 
