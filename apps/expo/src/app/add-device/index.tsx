@@ -7,8 +7,11 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
+  Share,
   Text,
   View,
 } from "react-native";
@@ -36,12 +39,15 @@ import {
   createSetTimeRequest,
   parseSetTimeResponse,
 } from "~/services/ble/commands/setTime";
-import { connectToBLEDevice } from "~/services/ble/connection";
 import {
   extractAndDecryptAdvertisementData,
   generateDynamicKey,
 } from "~/services/ble/encryption";
-import { sendCommand, stopNotifications } from "~/services/ble/manager";
+import {
+  sendCommand,
+  startNotifications,
+  stopNotifications,
+} from "~/services/ble/manager";
 import { FACTORY_BRACELET_KEY, ResponseStatus } from "~/services/ble/types";
 import { requestBluetoothPermissions } from "~/services/ble/utils";
 import {
@@ -75,6 +81,13 @@ interface PairingSuccess {
   serialNumber: string;
 }
 
+interface DebugLog {
+  timestamp: string;
+  level: "info" | "warning" | "error" | "success";
+  message: string;
+  details?: Record<string, unknown>;
+}
+
 const AddDeviceScreen = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [isConnecting, setIsConnecting] = useState<string | null>(null);
@@ -88,6 +101,27 @@ const AddDeviceScreen = () => {
   const [discoveredDevices, setDiscoveredDevices] = useState(
     new Map<Peripheral["id"], DiscoveredGentlyDevice>(),
   );
+  const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
+  const [showDebugLogs, setShowDebugLogs] = useState(false);
+
+  // Debug logging functions
+  const addDebugLog = useCallback(
+    (level: DebugLog["level"], message: string, details?: unknown) => {
+      const log: DebugLog = {
+        timestamp: new Date().toLocaleTimeString(),
+        level,
+        message,
+        details: details as Record<string, unknown>,
+      };
+      setDebugLogs((prev) => [...prev, log]);
+      console.log(`[${level.toUpperCase()}] ${message}`, details ?? "");
+    },
+    [],
+  );
+
+  const clearDebugLogs = useCallback(() => {
+    setDebugLogs([]);
+  }, []);
 
   const handleDiscoverPeripheral = useCallback(
     async (peripheral: Peripheral) => {
@@ -234,7 +268,16 @@ const AddDeviceScreen = () => {
     setIsConnecting(peripheral.id);
 
     try {
-      console.log(`🔗 Starting pairing process for device: ${peripheral.id}`);
+      clearDebugLogs();
+      addDebugLog(
+        "info",
+        `Starting pairing process for device: ${peripheral.id}`,
+        {
+          deviceName: peripheral.name,
+          serialNumber: advertisementData.serialNumber,
+          batteryLevel: advertisementData.batteryLevel,
+        },
+      );
 
       // Step 1: Connect to device
       setPairingStatus({
@@ -242,10 +285,11 @@ const AddDeviceScreen = () => {
         progress: 10,
         isComplete: false,
       });
+      addDebugLog("info", "Step 1: Initiating BLE connection");
 
       // stop scan if it is still running
       if (isScanning) {
-        console.log(`🛑 Stopping scan...`);
+        addDebugLog("info", "Stopping active scan before connection");
         await BleManager.stopScan();
       }
 
@@ -255,21 +299,178 @@ const AddDeviceScreen = () => {
         progress: 20,
         isComplete: false,
       });
+      addDebugLog(
+        "info",
+        "Step 2: Starting detailed inline BLE connection with debug logging",
+        {
+          maxRetries: 3,
+          connectionTimeout: 5000,
+          stabilizationDelay: 900,
+          mtuSize: 512,
+          platform: Platform.OS,
+        },
+      );
 
-      const connectionResult = await connectToBLEDevice(peripheral.id, {
-        maxRetries: 3,
-        connectionTimeout: 5000,
-        stabilizationDelay: 900,
-        enableMTU: true,
-        mtuSize: 512,
-      });
+      // Inline BLE connection with detailed logging
+      const maxRetries = 3;
+      const connectionTimeout = 5000;
+      const stabilizationDelay = 900;
+      const mtuSize = 512;
 
-      if (!connectionResult.success) {
-        throw new Error(
-          connectionResult.error ??
-            "Failed to connect after 3 attempts. Please ensure the device is in pairing mode and try again.",
+      // Check existing connection
+      addDebugLog("info", "Checking existing connection status");
+      const isConnected = await BleManager.isPeripheralConnected(peripheral.id);
+      if (isConnected) {
+        addDebugLog("warning", "Device already connected, disconnecting first");
+        await BleManager.disconnect(peripheral.id);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        addDebugLog("info", "Previous connection disconnected");
+      } else {
+        addDebugLog("info", "No existing connection found");
+      }
+
+      // Connection attempts with retries
+      let connectionSuccess = false;
+      let lastError: Error | null = null;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          addDebugLog("info", `Connection attempt ${attempt}/${maxRetries}`, {
+            deviceId: peripheral.id,
+            attempt,
+            maxRetries,
+            timeout: connectionTimeout,
+          });
+
+          // Create connection with timeout
+          const connectionPromise = BleManager.connect(peripheral.id);
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(
+              () =>
+                reject(
+                  new Error(`Connection timeout after ${connectionTimeout}ms`),
+                ),
+              connectionTimeout,
+            );
+          });
+
+          await Promise.race([connectionPromise, timeoutPromise]);
+
+          addDebugLog("success", `Connected to device on attempt ${attempt}`, {
+            deviceId: peripheral.id,
+            attempt,
+            timeElapsed: `${connectionTimeout}ms or less`,
+          });
+          connectionSuccess = true;
+          break;
+        } catch (connectionError) {
+          lastError =
+            connectionError instanceof Error
+              ? connectionError
+              : new Error(String(connectionError));
+          addDebugLog("warning", `Connection attempt ${attempt} failed`, {
+            attempt,
+            error: lastError.message,
+            deviceId: peripheral.id,
+            willRetry: attempt < maxRetries,
+          });
+
+          if (attempt < maxRetries) {
+            addDebugLog("info", "Waiting 1 second before retry");
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        }
+      }
+
+      if (!connectionSuccess) {
+        const errorMessage = `Failed to connect after ${maxRetries} attempts. ${lastError?.message ?? "Unknown error"}`;
+        addDebugLog("error", "All connection attempts failed", {
+          maxRetries,
+          finalError: lastError?.message,
+          deviceId: peripheral.id,
+          rssi: peripheral.rssi,
+        });
+        throw new Error(errorMessage);
+      }
+
+      // Connection stabilization
+      addDebugLog(
+        "info",
+        `Waiting ${stabilizationDelay}ms for connection stabilization`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, stabilizationDelay));
+      addDebugLog("success", "Connection stabilization complete");
+
+      // Configure MTU for Android
+      if (Platform.OS === "android") {
+        addDebugLog("info", `Configuring MTU for Android (${mtuSize} bytes)`);
+        try {
+          await BleManager.requestMTU(peripheral.id, mtuSize);
+          addDebugLog("success", `MTU ${mtuSize} configured successfully`);
+        } catch (mtuError) {
+          const mtuMessage =
+            mtuError instanceof Error ? mtuError.message : String(mtuError);
+          addDebugLog("warning", `MTU configuration failed: ${mtuMessage}`, {
+            error: mtuMessage,
+            requestedMTU: mtuSize,
+          });
+        }
+      } else {
+        addDebugLog(
+          "info",
+          `Skipping MTU configuration (Platform: ${Platform.OS})`,
         );
       }
+
+      // Discover services
+      addDebugLog("info", "Discovering BLE services and characteristics");
+      try {
+        // Use Promise.race with timeout to prevent hanging (GitHub community fix)
+        await Promise.race([
+          BleManager.retrieveServices(peripheral.id),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error("Service discovery timeout after 3000ms")),
+              3000,
+            ),
+          ),
+        ]);
+        addDebugLog("success", "BLE services discovered successfully");
+      } catch (servicesError) {
+        const servicesMessage =
+          servicesError instanceof Error
+            ? servicesError.message
+            : String(servicesError);
+        addDebugLog("error", `Service discovery failed: ${servicesMessage}`, {
+          error: servicesMessage,
+          deviceId: peripheral.id,
+          isTimeout: servicesMessage.includes("timeout"),
+        });
+        throw new Error(`Service discovery failed: ${servicesMessage}`);
+      }
+
+      // Start notifications
+      addDebugLog("info", "Starting BLE notifications");
+      try {
+        await startNotifications(peripheral.id);
+        addDebugLog("success", "BLE notifications started successfully");
+      } catch (notificationError) {
+        const notificationMessage =
+          notificationError instanceof Error
+            ? notificationError.message
+            : String(notificationError);
+        addDebugLog(
+          "error",
+          `Notification setup failed: ${notificationMessage}`,
+          {
+            error: notificationMessage,
+            deviceId: peripheral.id,
+          },
+        );
+        throw new Error(`Notification setup failed: ${notificationMessage}`);
+      }
+
+      addDebugLog("success", "BLE connection fully established");
 
       // Step 3: Setup communication is complete (handled by connectToBLEDevice)
       setPairingStatus({
@@ -277,6 +478,10 @@ const AddDeviceScreen = () => {
         progress: 30,
         isComplete: false,
       });
+      addDebugLog(
+        "info",
+        "Step 3: BLE services and characteristics discovered",
+      );
 
       // Step 4: Send GetUptime command using factory key
       setPairingStatus({
@@ -284,7 +489,7 @@ const AddDeviceScreen = () => {
         progress: 40,
         isComplete: false,
       });
-      console.log(`⏱️ Getting device uptime...`);
+      addDebugLog("info", "Step 4: Sending GetUptime command with factory key");
       const uptimeCommand = createGetUptimeRequest();
       const uptimeResponse = await sendCommand({
         peripheralId: peripheral.id,
@@ -294,13 +499,20 @@ const AddDeviceScreen = () => {
       });
 
       if (uptimeResponse.status !== ResponseStatus.OK) {
+        addDebugLog("error", "GetUptime command failed", {
+          status: uptimeResponse.status,
+          payload: uptimeResponse.payload,
+        });
         throw new Error(
           `GetUptime command failed with status: ${uptimeResponse.status}`,
         );
       }
 
       const uptimeData = parseGetUptimeResponse(uptimeResponse.payload);
-      console.log(`✅ Device uptime received: ${uptimeData.uptime}ms`);
+      addDebugLog("success", `Device uptime received: ${uptimeData.uptime}ms`, {
+        uptime: uptimeData.uptime,
+        uptimeBytes: uptimeData.uptimeBytes,
+      });
 
       // Step 5: Generate custom dynamic key
       setPairingStatus({
@@ -308,23 +520,18 @@ const AddDeviceScreen = () => {
         progress: 60,
         isComplete: false,
       });
-      console.log(`🔑 Generating custom dynamic key...`);
+      addDebugLog("info", "Step 5: Generating custom dynamic encryption key");
       const customKey = generateDynamicKey(
         FACTORY_BRACELET_KEY,
         uptimeData.uptimeBytes,
         advertisementData.serialNumber,
       );
-      console.log(
-        `\n🔐 ==================== PAIRING ENCRYPTION KEY ====================`,
-      );
-      console.log(`🔑 Generated custom encryption key: ${customKey}`);
-      console.log(`📱 Device ID: ${peripheral.id}`);
-      console.log(`🏷️  Serial Number: ${advertisementData.serialNumber}`);
-      console.log(`⏰ Uptime: ${uptimeData.uptime}ms`);
-      console.log(
-        `🔐 ===============================================================\n`,
-      );
-      console.log(`✅ Custom key generated`);
+      addDebugLog("success", "Custom encryption key generated", {
+        keyLength: customKey.length,
+        deviceId: peripheral.id,
+        serialNumber: advertisementData.serialNumber,
+        uptime: uptimeData.uptime,
+      });
 
       // Step 6: Send GetDeviceInfo command using custom key
       setPairingStatus({
@@ -332,7 +539,10 @@ const AddDeviceScreen = () => {
         progress: 70,
         isComplete: false,
       });
-      console.log(`📱 Getting device info with custom key...`);
+      addDebugLog(
+        "info",
+        "Step 6: Sending GetDeviceInfo command with custom key",
+      );
       const deviceInfoCommand = createGetDeviceInfoRequest();
       const deviceInfoResponse = await sendCommand({
         peripheralId: peripheral.id,
@@ -342,13 +552,17 @@ const AddDeviceScreen = () => {
       });
 
       if (deviceInfoResponse.status !== ResponseStatus.OK) {
+        addDebugLog("error", "GetDeviceInfo command failed", {
+          status: deviceInfoResponse.status,
+          payload: deviceInfoResponse.payload,
+        });
         throw new Error(
           `GetDeviceInfo command failed with status: ${deviceInfoResponse.status}`,
         );
       }
 
       const deviceInfo = parseGetDeviceInfoResponse(deviceInfoResponse.payload);
-      console.log(`✅ Device info received:`, deviceInfo);
+      addDebugLog("success", "Device info received successfully", deviceInfo);
 
       // Step 7: Store custom key in secure storage
       setPairingStatus({
@@ -356,7 +570,7 @@ const AddDeviceScreen = () => {
         progress: 80,
         isComplete: false,
       });
-      console.log(`💾 Storing custom key in secure storage...`);
+      addDebugLog("info", "Step 7: Storing encryption key in secure storage");
       // Sanitize device ID for SecureStore (remove colons and other invalid chars)
       const sanitizedDeviceId = peripheral.id.replace(/[^a-zA-Z0-9._-]/g, "_");
       const storageKey = `ble_device_key_${sanitizedDeviceId}`;
@@ -370,16 +584,10 @@ const AddDeviceScreen = () => {
           apiVersion: 1,
         }),
       );
-      console.log(
-        `\n💾 ==================== STORING ENCRYPTION KEY ====================`,
-      );
-      console.log(`🔑 Stored encryption key: ${customKey}`);
-      console.log(`🗂️  Storage key: ${storageKey}`);
-      console.log(`📱 Device ID: ${peripheral.id}`);
-      console.log(
-        `💾 ===============================================================\n`,
-      );
-      console.log(`✅ Custom key stored securely`);
+      addDebugLog("success", "Encryption key stored securely", {
+        storageKey,
+        deviceId: peripheral.id,
+      });
 
       // Step 8: Create device in database
       setPairingStatus({
@@ -387,7 +595,7 @@ const AddDeviceScreen = () => {
         progress: 90,
         isComplete: false,
       });
-      console.log(`💾 Creating device in database...`);
+      addDebugLog("info", "Step 8: Creating device record in database");
       const newDevice = await trpc.device.create.mutate({
         title: `Gently ${advertisementData.serialNumber.slice(-4)}`,
         description: `Gently Bracelet (${advertisementData.serialNumber})`,
@@ -395,7 +603,10 @@ const AddDeviceScreen = () => {
         batteryLevel: advertisementData.batteryLevel,
         firmwareVersion: `${deviceInfo.firmwareVersionMajor}.${deviceInfo.firmwareVersionMinor}.${deviceInfo.firmwareBuildNumber}`,
       });
-      console.log(`✅ Device created in database:`, newDevice);
+      addDebugLog("success", "Device created in database", {
+        deviceId: newDevice?.id,
+        title: newDevice?.title,
+      });
 
       // Step 9: Set device time to current time
       setPairingStatus({
@@ -403,7 +614,7 @@ const AddDeviceScreen = () => {
         progress: 95,
         isComplete: false,
       });
-      console.log(`🕐 Setting device time...`);
+      addDebugLog("info", "Step 9: Synchronizing device time");
       const currentTime = new Date();
       const setTimeCommand = createSetTimeRequest(currentTime);
       const setTimeResponse = await sendCommand({
@@ -415,12 +626,18 @@ const AddDeviceScreen = () => {
 
       if (setTimeResponse.status === ResponseStatus.OK) {
         parseSetTimeResponse(setTimeResponse.payload);
-        console.log(
-          `✅ Device time synchronized to: ${currentTime.toISOString()}`,
+        addDebugLog(
+          "success",
+          `Device time synchronized to: ${currentTime.toISOString()}`,
         );
       } else {
-        console.warn(
-          `⚠️ Failed to set device time, status: ${setTimeResponse.status}`,
+        addDebugLog(
+          "warning",
+          `Failed to set device time, status: ${setTimeResponse.status}`,
+          {
+            status: setTimeResponse.status,
+            payload: setTimeResponse.payload,
+          },
         );
         // Don't fail the pairing process if time sync fails
       }
@@ -431,10 +648,11 @@ const AddDeviceScreen = () => {
         progress: 100,
         isComplete: true,
       });
+      addDebugLog("info", "Step 10: Stopping notifications and finalizing");
       await stopNotifications(peripheral.id);
 
       // Step 11: Show success message
-      console.log(`✅ Device paired successfully: ${newDevice?.title}`);
+      addDebugLog("success", `Device paired successfully: ${newDevice?.title}`);
       if (newDevice?.id) {
         setPairingSuccess({
           deviceName: newDevice.title,
@@ -443,14 +661,35 @@ const AddDeviceScreen = () => {
         });
       }
     } catch (error) {
-      console.error(`❌ Pairing failed for device ${peripheral.id}:`, error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      addDebugLog(
+        "error",
+        `Pairing failed for device ${peripheral.id}: ${errorMessage}`,
+        {
+          error: errorMessage,
+          deviceId: peripheral.id,
+          deviceName: peripheral.name,
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+      );
 
       // Cleanup on error
       try {
+        addDebugLog("info", "Attempting cleanup after error");
         await stopNotifications(peripheral.id);
         await BleManager.disconnect(peripheral.id);
+        addDebugLog("info", "Cleanup completed successfully");
       } catch (cleanupError) {
-        console.error("Cleanup error:", cleanupError);
+        const cleanupMessage =
+          cleanupError instanceof Error
+            ? cleanupError.message
+            : "Unknown cleanup error";
+        addDebugLog(
+          "warning",
+          `Cleanup error: ${cleanupMessage}`,
+          cleanupError,
+        );
       }
 
       // Check if this was a connection failure specifically
@@ -463,10 +702,14 @@ const AddDeviceScreen = () => {
       if (isConnectionFailure) {
         Alert.alert(
           "Connection Failed",
-          `Unable to connect to ${peripheral.name}. ${error instanceof Error ? error.message : "Please ensure the device is in pairing mode and try scanning again."}`,
+          `Unable to connect to ${peripheral.name}. ${error instanceof Error ? error.message : "Please ensure the device is in pairing mode and try scanning again."}\n\nTap 'View Debug Logs' to see detailed connection information.`,
           [
             {
-              text: "OK",
+              text: "View Debug Logs",
+              onPress: () => setShowDebugLogs(true),
+            },
+            {
+              text: "Try Again",
               onPress: () => {
                 // Reset scan state to allow user to scan again
                 setDiscoveredDevices(new Map());
@@ -479,8 +722,14 @@ const AddDeviceScreen = () => {
       } else {
         Alert.alert(
           "Pairing Failed",
-          `Could not pair with ${peripheral.name}. ${error instanceof Error ? error.message : "Please try again."}`,
-          [{ text: "OK" }],
+          `Could not pair with ${peripheral.name}. ${error instanceof Error ? error.message : "Please try again."}\n\nTap 'View Debug Logs' to see detailed connection information.`,
+          [
+            {
+              text: "View Debug Logs",
+              onPress: () => setShowDebugLogs(true),
+            },
+            { text: "OK" },
+          ],
         );
       }
     } finally {
@@ -913,6 +1162,32 @@ const AddDeviceScreen = () => {
           </View>
         </Pressable>
 
+        {/* Debug Logs Button */}
+        {debugLogs.length > 0 && (
+          <Pressable
+            style={[
+              buttons.secondary,
+              {
+                marginBottom: spacing[4],
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+              },
+            ]}
+            onPress={() => setShowDebugLogs(true)}
+          >
+            <Ionicons
+              name="bug-outline"
+              size={16}
+              color={colors.text.primary}
+              style={{ marginRight: spacing[2] }}
+            />
+            <Text style={[buttonText.secondary]}>
+              View Debug Logs ({debugLogs.length})
+            </Text>
+          </Pressable>
+        )}
+
         {/* Device List */}
         {Array.from(discoveredDevices.values()).length > 0 ? (
           <View>
@@ -1032,6 +1307,32 @@ const AddDeviceScreen = () => {
                 </Text>
               </Pressable>
 
+              {/* Debug Logs Button */}
+              {debugLogs.length > 0 && (
+                <Pressable
+                  style={[buttons.secondary, buttons.large]}
+                  onPress={() => setShowDebugLogs(true)}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Ionicons
+                      name="bug-outline"
+                      size={16}
+                      color={colors.text.primary}
+                      style={{ marginRight: spacing[2] }}
+                    />
+                    <Text style={[buttonText.secondary, buttonText.large]}>
+                      View Debug Logs ({debugLogs.length})
+                    </Text>
+                  </View>
+                </Pressable>
+              )}
+
               <Pressable
                 style={[buttons.secondary, buttons.large]}
                 onPress={() => {
@@ -1048,6 +1349,240 @@ const AddDeviceScreen = () => {
           </View>
         </View>
       )}
+
+      {/* Debug Logs Modal */}
+      <Modal
+        visible={showDebugLogs}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowDebugLogs(false)}
+      >
+        <SafeAreaView
+          style={{ flex: 1, backgroundColor: colors.background.primary }}
+        >
+          {/* Header */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingHorizontal: spacing[4],
+              paddingVertical: spacing[3],
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border.light,
+            }}
+          >
+            <Text style={[typography.h3, { color: colors.text.primary }]}>
+              Debug Logs
+            </Text>
+            <View style={{ flexDirection: "row", gap: spacing[3] }}>
+              <Pressable
+                style={[
+                  buttons.secondary,
+                  {
+                    paddingHorizontal: spacing[3],
+                    paddingVertical: spacing[2],
+                  },
+                ]}
+                onPress={async () => {
+                  const logText = debugLogs
+                    .map(
+                      (log) =>
+                        `[${log.timestamp}] ${log.level.toUpperCase()}: ${log.message}${
+                          log.details
+                            ? `\nDetails: ${JSON.stringify(log.details, null, 2)}`
+                            : ""
+                        }`,
+                    )
+                    .join("\n\n");
+
+                  try {
+                    await Share.share({
+                      message: `Gently App Debug Logs\n\n${logText}`,
+                      title: "Debug Logs",
+                    });
+                  } catch {
+                    Alert.alert("Error", "Could not share debug logs");
+                  }
+                }}
+              >
+                <Text style={[buttonText.secondary]}>Share</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  buttons.secondary,
+                  {
+                    paddingHorizontal: spacing[3],
+                    paddingVertical: spacing[2],
+                  },
+                ]}
+                onPress={clearDebugLogs}
+              >
+                <Text style={[buttonText.secondary]}>Clear</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  buttons.secondary,
+                  {
+                    paddingHorizontal: spacing[3],
+                    paddingVertical: spacing[2],
+                  },
+                ]}
+                onPress={() => setShowDebugLogs(false)}
+              >
+                <Text style={[buttonText.secondary]}>Close</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Debug Logs Content */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ padding: spacing[4] }}
+          >
+            {debugLogs.length === 0 ? (
+              <View
+                style={{
+                  flex: 1,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  paddingVertical: spacing[8],
+                }}
+              >
+                <Ionicons
+                  name="document-text-outline"
+                  size={48}
+                  color={colors.text.tertiary}
+                  style={{ marginBottom: spacing[3] }}
+                />
+                <Text
+                  style={[
+                    typography.body,
+                    { color: colors.text.secondary, textAlign: "center" },
+                  ]}
+                >
+                  No debug logs yet.{"\n"}
+                  Try connecting to a device to see logs here.
+                </Text>
+              </View>
+            ) : (
+              <View style={{ gap: spacing[3] }}>
+                {debugLogs.map((log, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      cards.base,
+                      {
+                        padding: spacing[3],
+                        borderLeftWidth: 4,
+                        borderLeftColor:
+                          log.level === "error"
+                            ? colors.error[500]
+                            : log.level === "warning"
+                              ? colors.warning[500]
+                              : log.level === "success"
+                                ? colors.success[500]
+                                : colors.primary[500],
+                      },
+                    ]}
+                  >
+                    {/* Log Header */}
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginBottom: spacing[2],
+                      }}
+                    >
+                      <View
+                        style={{
+                          backgroundColor:
+                            log.level === "error"
+                              ? colors.error[100]
+                              : log.level === "warning"
+                                ? colors.warning[100]
+                                : log.level === "success"
+                                  ? colors.success[100]
+                                  : colors.primary[100],
+                          paddingHorizontal: spacing[2],
+                          paddingVertical: spacing[1],
+                          borderRadius: 8,
+                          marginRight: spacing[2],
+                        }}
+                      >
+                        <Text
+                          style={[
+                            typography.caption,
+                            {
+                              color:
+                                log.level === "error"
+                                  ? colors.error[700]
+                                  : log.level === "warning"
+                                    ? colors.warning[700]
+                                    : log.level === "success"
+                                      ? colors.success[700]
+                                      : colors.primary[700],
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                            },
+                          ]}
+                        >
+                          {log.level}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          typography.caption,
+                          { color: colors.text.tertiary },
+                        ]}
+                      >
+                        {log.timestamp}
+                      </Text>
+                    </View>
+
+                    {/* Log Message */}
+                    <Text
+                      style={[
+                        typography.body,
+                        {
+                          color: colors.text.primary,
+                          marginBottom: spacing[2],
+                        },
+                      ]}
+                    >
+                      {log.message}
+                    </Text>
+
+                    {/* Log Details */}
+                    {log.details && (
+                      <View
+                        style={{
+                          backgroundColor: colors.background.secondary,
+                          padding: spacing[2],
+                          borderRadius: 8,
+                          marginTop: spacing[1],
+                        }}
+                      >
+                        <Text
+                          style={[
+                            typography.caption,
+                            {
+                              color: colors.text.secondary,
+                              fontFamily: "monospace",
+                            },
+                          ]}
+                        >
+                          {JSON.stringify(log.details, null, 2)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };

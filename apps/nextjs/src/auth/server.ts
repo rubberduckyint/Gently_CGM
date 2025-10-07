@@ -19,10 +19,7 @@ export const auth = initAuth({
   appleClientId: env.APPLE_CLIENT_ID,
   appleClientSecret: env.APPLE_CLIENT_SECRET,
   appleAppBundleId: env.APPLE_APP_BUNDLE_ID,
-  appleEnabled: !!(
-    env.APPLE_CLIENT_ID &&
-    env.APPLE_CLIENT_SECRET
-  ),
+  appleEnabled: !!(env.APPLE_CLIENT_ID && env.APPLE_CLIENT_SECRET),
 
   emailFrom: env.EMAIL_FROM,
   // Add email service configuration here if needed

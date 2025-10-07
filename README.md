@@ -184,7 +184,7 @@ cp .env.example .env
 
 #### Database Configuration
 
-```bash
+````bash
 ```env
 # Database (Required) - Use Docker setup
 POSTGRES_URL="postgresql://gently:gently@localhost:5832/gently"
@@ -210,7 +210,7 @@ EMAIL_FROM="noreply@gently.dev"
 # API Endpoints
 NEXT_PUBLIC_BASE_URL="http://localhost:3000"
 EXPO_PUBLIC_BASE_URL="http://localhost:3000"  # Use your local IP for physical devices
-```
+````
 
 > **Development Tip**: When testing on physical devices, replace `localhost` with your computer's IP address (e.g., `http://192.168.1.100:3000`)
 
@@ -256,6 +256,7 @@ For detailed setup, see the [Better-Auth documentation](https://www.better-auth.
 - Apple Developer account (for device testing)
 
 ```bash
+
 ```
 
 Update the `.env` file with your specific configuration:
@@ -331,7 +332,7 @@ The Gently app communicates with smart bracelets using a secure Bluetooth Low En
 ### Supported Commands
 
 - **Device Management**: Get device info, battery status, find device
-- **Alarm Operations**: Add, modify, delete, and sync medication reminders  
+- **Alarm Operations**: Add, modify, delete, and sync medication reminders
 - **Time Synchronization**: Keep bracelet time accurate
 - **Secure Communication**: All data encrypted with TEA algorithm
 
