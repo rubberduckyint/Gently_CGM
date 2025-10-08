@@ -57,14 +57,13 @@ export function createAddEventRequest(
   // Byte #0: Event Index (0-49)
   payload[offset++] = params.eventIndex & 0xff;
 
-  // Byte #1: Vibration Pattern (bits 0-5) + Vibration Intensity (bits 6-7)
+  // Byte #1 (Byte#3 in protocol): Vibration byte = intensity + 4 * pattern
   const vibrationByte =
-    (params.vibrationPattern & 0x3f) |
-    ((params.vibrationIntensity & 0x03) << 6);
+    (params.vibrationIntensity & 0x03) + 4 * (params.vibrationPattern & 0x3f);
   payload[offset++] = vibrationByte;
 
-  // Byte #2: LED Pattern (bits 0-4) + LED Color (bits 5-7)
-  const ledByte = (params.ledPattern & 0x1f) | ((params.ledColor & 0x07) << 5);
+  // Byte #2 (Byte#4 in protocol): LED byte = color + 8 * pattern
+  const ledByte = (params.ledColor & 0x07) + 8 * (params.ledPattern & 0x07);
   payload[offset++] = ledByte;
 
   // Byte #3: Severity Level
@@ -93,7 +92,7 @@ export function createAddEventRequest(
   payload[offset++] = 0x00; // Null terminator
 
   console.log(
-    `  - Payload: ${payload.length} bytes (vibration ${params.vibrationPattern}/${params.vibrationIntensity}, LED ${params.ledPattern}/${params.ledColor}, severity ${params.severityLevel})`,
+    `  - Payload: ${payload.length} bytes (vibration ${params.vibrationPattern}/${params.vibrationIntensity}=${vibrationByte}, LED ${params.ledPattern}/${params.ledColor}=${ledByte}, severity ${params.severityLevel})`,
   );
 
   return {

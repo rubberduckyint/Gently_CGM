@@ -7,7 +7,7 @@
  */
 
 import React from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import type { AlarmFormData } from "./BasicInfoSection";
@@ -105,6 +105,33 @@ const VIBRATION_INTENSITIES = [
     label: "High",
     description: "Strong vibration",
     icon: "reorder-three" as const,
+  },
+] as const;
+
+const VIBRATION_PATTERNS = [
+  {
+    key: "QUICK" as const,
+    label: "Quick",
+    description: "Short, sharp vibrations",
+    icon: "flash" as const,
+  },
+  {
+    key: "HEARTBEAT" as const,
+    label: "Heartbeat",
+    description: "Rhythmic double pulses",
+    icon: "heart" as const,
+  },
+  {
+    key: "RAPID" as const,
+    label: "Rapid",
+    description: "Fast continuous pulses",
+    icon: "pulse" as const,
+  },
+  {
+    key: "SYMPHONY" as const,
+    label: "Symphony",
+    description: "Complex musical pattern",
+    icon: "musical-notes" as const,
   },
 ] as const;
 
@@ -488,22 +515,75 @@ export function AdvancedSection({
               { color: colors.text.secondary, marginBottom: spacing[3] },
             ]}
           >
-            Choose a vibration pattern (1-63). Different numbers create unique
-            vibration sequences.
+            Choose from the available vibration patterns below.
           </Text>
-          <TextInput
-            style={[inputs.base]}
-            value={formData.vibrationPattern.toString()}
-            onChangeText={(text) => {
-              const value = parseInt(text) || 1;
-              onUpdateFormData({
-                vibrationPattern: Math.max(1, Math.min(63, value)),
-              });
-            }}
-            keyboardType="numeric"
-            placeholder="1"
-            placeholderTextColor={colors.text.secondary}
-          />
+          <View style={{ gap: spacing[3] }}>
+            {VIBRATION_PATTERNS.map((pattern) => (
+              <TouchableOpacity
+                key={pattern.key}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: spacing[3],
+                  backgroundColor:
+                    formData.vibrationPattern === pattern.key
+                      ? colors.primary[500]
+                      : colors.background.primary,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor:
+                    formData.vibrationPattern === pattern.key
+                      ? colors.primary[500]
+                      : colors.border.medium,
+                }}
+                onPress={() =>
+                  onUpdateFormData({
+                    vibrationPattern: pattern.key,
+                  })
+                }
+              >
+                <Ionicons
+                  name={pattern.icon}
+                  size={20}
+                  color={
+                    formData.vibrationPattern === pattern.key
+                      ? colors.background.primary
+                      : colors.text.primary
+                  }
+                  style={{ marginRight: spacing[3] }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      typography.body,
+                      {
+                        color:
+                          formData.vibrationPattern === pattern.key
+                            ? colors.background.primary
+                            : colors.text.primary,
+                        fontWeight: "600",
+                      },
+                    ]}
+                  >
+                    {pattern.label}
+                  </Text>
+                  <Text
+                    style={[
+                      typography.caption,
+                      {
+                        color:
+                          formData.vibrationPattern === pattern.key
+                            ? colors.background.primary
+                            : colors.text.secondary,
+                      },
+                    ]}
+                  >
+                    {pattern.description}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </View>
     </View>

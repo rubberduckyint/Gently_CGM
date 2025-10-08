@@ -25,7 +25,7 @@ export interface AlarmFormData {
   severityLevel: "INFORMATIONAL" | "WARNING" | "CRITICAL";
   ledPattern: "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE";
   ledColor: "RED" | "GREEN" | "BLUE" | "YELLOW" | "MAGENTA" | "CYAN" | "WHITE";
-  vibrationPattern: number; // 1-63
+  vibrationPattern: "QUICK" | "HEARTBEAT" | "RAPID" | "SYMPHONY"; // 0-3: quick, heartbeat, rapid, symphony
   vibrationIntensity: "LOW" | "MEDIUM" | "HIGH";
   snoozePeriod: number; // minutes
   snoozeTimeout: number; // minutes

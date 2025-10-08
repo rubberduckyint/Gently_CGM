@@ -573,10 +573,12 @@ The request sent via UUID 0xF023 is as follows:
 | ----------: | -----------------------------: | -----------------------: |
 | API Version | Command Code: 0x04 (Add Event) | Event Index Uint8 (0-49) |
 
-| Byte\#3                               |                                                                         | Byte\#4                                                                                      |                                                                                        |
-| ------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| **Bits\#0-5**                         | **Bits6-7**                                                             | **Bits\#0-4**                                                                                | **Bits\#5-7**                                                                          |
-| Vibration Pattern (0-63) Patterns TBD | Vibration Intensity 0x00 (LOW) 0x01 (MEDIUM) 0x02 (HIGH) 0x03 (MAXIMUM) | LED Pattern 0x00 (OFF) 0x01 (blink slow) 0x02 (blink fast) 0x03 (solid) 0x04-0x1F (RESERVED) | LED color 0 (OFF) 1 (Blue) 2 (Green) 3 (Cyan) 4 (Red) 5 (Yellow) 6 (Magenta) 7 (White) |
+| Byte\#3 (Vibration)                                  | Byte\#4 (LED)                                                    |
+| ---------------------------------------------------- | ---------------------------------------------------------------- |
+| **Formula: intensity + 4 \* pattern**                | **Formula: color + 8 \* pattern**                                |
+| intensity: 0-3 (LOW, MEDIUM, HIGH, MAX)              | color: 0-7 (OFF, Blue, Green, Cyan, Red, Yellow, Magenta, White) |
+| pattern: 0-3 (quick, heartbeat, rapid, symphony)     | pattern: 0-3 (OFF, Blink Slow, Blink Fast, Solid)                |
+| Example: symphony(2) + max(3) = 3 + 4\*2 = 11 = 0x0B | Example: solid(3) + red(4) = 4 + 8\*3 = 28 = 0x1C                |
 
 | Byte\#5                                                             | Byte\#6                                           | Byte\#7                                            | Byte\#8                            | Byte\#9                           |
 | ------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------- | ---------------------------------- | --------------------------------- |

@@ -29,6 +29,7 @@ import {
 import { Header } from "~/components/ui/Header";
 import { buttons, buttonText, colors, containers, spacing } from "~/styles";
 import { trpc } from "~/utils/api";
+import { mapVibrationPatternToLegacyNumber } from "~/utils/bleAlarmUtils";
 
 const getDefaultFormData = (): AlarmFormData => {
   const now = new Date();
@@ -49,7 +50,7 @@ const getDefaultFormData = (): AlarmFormData => {
     severityLevel: "INFORMATIONAL",
     ledPattern: "BLINK_SLOW",
     ledColor: "BLUE",
-    vibrationPattern: 1,
+    vibrationPattern: "QUICK",
     vibrationIntensity: "MEDIUM",
     snoozePeriod: 5, // 5 minutes
     snoozeTimeout: 15, // 15 minutes
@@ -144,7 +145,7 @@ export default function AddAlarmPage() {
         severityLevel: data.severityLevel,
         ledPattern: data.ledPattern,
         ledColor: data.ledColor,
-        vibrationPattern: data.vibrationPattern,
+        vibrationPattern: mapVibrationPatternToLegacyNumber(data.vibrationPattern),
         vibrationIntensity: data.vibrationIntensity,
         snoozePeriod: data.snoozePeriod,
         snoozeTimeout: data.snoozeTimeout,

@@ -16,7 +16,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Alert, Platform } from "react-native";
+import { Platform } from "react-native";
 import BleManager, {
   BleScanCallbackType,
   BleScanMatchMode,
@@ -319,22 +319,12 @@ export function BLEProvider({ children }: BLEProviderProps) {
             console.log(`   └─ Decrypted Data:`, Array.from(decryptedData));
             console.log(`   └─ Event Notification:`, eventNotification);
 
-            // Show alert when an alarm/event starts (state 2 = "ON (vibrating)")
+            // Log when an alarm/event starts (state 2 = "ON (vibrating)")
             if (eventNotification.eventState === 2) {
               console.log(
                 `🚨 [BLE Context] ALARM TRIGGERED: Event #${eventNotification.eventIndex} is now vibrating!`,
               );
-              Alert.alert(
-                "🚨 Alarm Started",
-                `Event #${eventNotification.eventIndex} is now active and vibrating on your Gently device.`,
-                [
-                  {
-                    text: "OK",
-                    style: "default",
-                  },
-                ],
-                { cancelable: true },
-              );
+              // Alert removed - device will handle vibration/LED notifications
             }
           } else {
             // Time Notification (command === 0x82)

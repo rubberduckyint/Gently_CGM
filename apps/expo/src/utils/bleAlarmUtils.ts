@@ -43,13 +43,57 @@ export function mapVibrationIntensityToNumber(
 }
 
 /**
+ * Convert legacy numeric vibration pattern (1-63) to new enum format
+ */
+export function mapLegacyVibrationPatternToEnum(
+  numericPattern: number,
+): AlarmFormData["vibrationPattern"] {
+  // Map the old 1-63 range to the 4 new patterns
+  // This is a best-effort conversion for backwards compatibility
+  if (numericPattern <= 16) return "QUICK";
+  if (numericPattern <= 32) return "HEARTBEAT"; 
+  if (numericPattern <= 48) return "RAPID";
+  return "SYMPHONY";
+}
+
+/**
+ * Convert new enum vibration pattern to legacy numeric format for database storage
+ */
+export function mapVibrationPatternToLegacyNumber(
+  pattern: AlarmFormData["vibrationPattern"],
+): number {
+  switch (pattern) {
+    case "QUICK":
+      return 1; // Use 1 as the representative number for QUICK
+    case "HEARTBEAT":
+      return 25; // Use 25 as the representative number for HEARTBEAT
+    case "RAPID":
+      return 40; // Use 40 as the representative number for RAPID
+    case "SYMPHONY":
+      return 60; // Use 60 as the representative number for SYMPHONY
+    default:
+      return 1; // Default to 1 (QUICK)
+  }
+}
+
+/**
  * Map alarm form vibrationPattern to BLE vibration pattern number
  */
 export function mapVibrationPatternToNumber(
   pattern: AlarmFormData["vibrationPattern"],
 ): number {
-  // vibrationPattern is already a number 1-63, just validate range
-  return Math.max(1, Math.min(63, pattern));
+  switch (pattern) {
+    case "QUICK":
+      return 0; // Quick pattern
+    case "HEARTBEAT":
+      return 1; // Heartbeat pattern
+    case "RAPID":
+      return 2; // Rapid pattern
+    case "SYMPHONY":
+      return 3; // Symphony pattern  
+    default:
+      return 0; // Default to Quick
+  }
 }
 
 /**
@@ -198,7 +242,8 @@ export function alarmDatabaseToBleParameters(
   const vibrationIntensity = mapVibrationIntensityToNumber(
     alarm.vibrationIntensity,
   );
-  const vibrationPattern = mapVibrationPatternToNumber(alarm.vibrationPattern);
+  const vibrationPatternEnum = mapLegacyVibrationPatternToEnum(alarm.vibrationPattern);
+  const vibrationPattern = mapVibrationPatternToNumber(vibrationPatternEnum);
   const ledColor = mapLedColorToNumber(alarm.ledColor);
   const ledPattern = mapLedPatternToNumber(alarm.ledPattern);
 

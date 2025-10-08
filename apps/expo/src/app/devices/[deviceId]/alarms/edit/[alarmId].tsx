@@ -5,7 +5,7 @@
  * All settings are displayed on one scrollable page for better UX.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -35,6 +35,7 @@ import {
   typography,
 } from "~/styles";
 import { trpc } from "~/utils/api";
+import { mapLegacyVibrationPatternToEnum, mapVibrationPatternToLegacyNumber } from "~/utils/bleAlarmUtils";
 
 export default function EditAlarmPage() {
   const { deviceId, alarmId } = useLocalSearchParams<{
@@ -44,6 +45,7 @@ export default function EditAlarmPage() {
   const [formData, setFormData] = useState<AlarmFormData | null>(null);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const initializedRef = useRef(false);
 
   // Validation state
   const [showValidationErrors, setShowValidationErrors] = useState(false);
@@ -65,11 +67,12 @@ export default function EditAlarmPage() {
 
   // Convert alarm data to form data when alarm is loaded
   useEffect(() => {
-    if (alarm && !formData) {
+    if (alarm && !initializedRef.current) {
       const convertedFormData = convertAlarmToFormData(alarm);
       setFormData(convertedFormData);
+      initializedRef.current = true;
     }
-  }, [alarm, formData]);
+  }, [alarm]);
 
   const updateAlarmMutation = useMutation({
     mutationFn: async (data: AlarmFormData) => {
@@ -106,7 +109,7 @@ export default function EditAlarmPage() {
         severityLevel: data.severityLevel,
         ledPattern: data.ledPattern,
         ledColor: data.ledColor,
-        vibrationPattern: data.vibrationPattern,
+        vibrationPattern: mapVibrationPatternToLegacyNumber(data.vibrationPattern),
         vibrationIntensity: data.vibrationIntensity,
         snoozePeriod: data.snoozePeriod,
         snoozeTimeout: data.snoozeTimeout,
@@ -226,7 +229,7 @@ export default function EditAlarmPage() {
       severityLevel: alarm.severityLevel,
       ledPattern: alarm.ledPattern,
       ledColor: alarm.ledColor,
-      vibrationPattern: alarm.vibrationPattern,
+      vibrationPattern: mapLegacyVibrationPatternToEnum(alarm.vibrationPattern),
       vibrationIntensity: alarm.vibrationIntensity,
       snoozePeriod: alarm.snoozePeriod,
       snoozeTimeout: alarm.snoozeTimeout,
