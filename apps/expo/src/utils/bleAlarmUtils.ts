@@ -51,7 +51,7 @@ export function mapLegacyVibrationPatternToEnum(
   // Map the old 1-63 range to the 4 new patterns
   // This is a best-effort conversion for backwards compatibility
   if (numericPattern <= 16) return "QUICK";
-  if (numericPattern <= 32) return "HEARTBEAT"; 
+  if (numericPattern <= 32) return "HEARTBEAT";
   if (numericPattern <= 48) return "RAPID";
   return "SYMPHONY";
 }
@@ -90,7 +90,7 @@ export function mapVibrationPatternToNumber(
     case "RAPID":
       return 2; // Rapid pattern
     case "SYMPHONY":
-      return 3; // Symphony pattern  
+      return 3; // Symphony pattern
     default:
       return 0; // Default to Quick
   }
@@ -242,7 +242,9 @@ export function alarmDatabaseToBleParameters(
   const vibrationIntensity = mapVibrationIntensityToNumber(
     alarm.vibrationIntensity,
   );
-  const vibrationPatternEnum = mapLegacyVibrationPatternToEnum(alarm.vibrationPattern);
+  const vibrationPatternEnum = mapLegacyVibrationPatternToEnum(
+    alarm.vibrationPattern,
+  );
   const vibrationPattern = mapVibrationPatternToNumber(vibrationPatternEnum);
   const ledColor = mapLedColorToNumber(alarm.ledColor);
   const ledPattern = mapLedPatternToNumber(alarm.ledPattern);

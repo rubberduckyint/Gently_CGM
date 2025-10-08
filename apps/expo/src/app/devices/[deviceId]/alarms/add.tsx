@@ -145,7 +145,9 @@ export default function AddAlarmPage() {
         severityLevel: data.severityLevel,
         ledPattern: data.ledPattern,
         ledColor: data.ledColor,
-        vibrationPattern: mapVibrationPatternToLegacyNumber(data.vibrationPattern),
+        vibrationPattern: mapVibrationPatternToLegacyNumber(
+          data.vibrationPattern,
+        ),
         vibrationIntensity: data.vibrationIntensity,
         snoozePeriod: data.snoozePeriod,
         snoozeTimeout: data.snoozeTimeout,

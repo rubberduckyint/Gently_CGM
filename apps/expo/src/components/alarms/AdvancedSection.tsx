@@ -7,7 +7,13 @@
  */
 
 import React from "react";
-import { Pressable, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  Pressable,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import type { AlarmFormData } from "./BasicInfoSection";

@@ -35,7 +35,10 @@ import {
   typography,
 } from "~/styles";
 import { trpc } from "~/utils/api";
-import { mapLegacyVibrationPatternToEnum, mapVibrationPatternToLegacyNumber } from "~/utils/bleAlarmUtils";
+import {
+  mapLegacyVibrationPatternToEnum,
+  mapVibrationPatternToLegacyNumber,
+} from "~/utils/bleAlarmUtils";
 
 export default function EditAlarmPage() {
   const { deviceId, alarmId } = useLocalSearchParams<{
@@ -109,7 +112,9 @@ export default function EditAlarmPage() {
         severityLevel: data.severityLevel,
         ledPattern: data.ledPattern,
         ledColor: data.ledColor,
-        vibrationPattern: mapVibrationPatternToLegacyNumber(data.vibrationPattern),
+        vibrationPattern: mapVibrationPatternToLegacyNumber(
+          data.vibrationPattern,
+        ),
         vibrationIntensity: data.vibrationIntensity,
         snoozePeriod: data.snoozePeriod,
         snoozeTimeout: data.snoozeTimeout,
