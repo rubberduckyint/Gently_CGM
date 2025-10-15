@@ -1,5 +1,5 @@
 import type { Peripheral } from "react-native-ble-manager";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,7 +10,6 @@ import {
   Text,
   View,
 } from "react-native";
-import BleManager from "react-native-ble-manager";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,7 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { AdvertisementData } from "~/services/ble/types";
 import { Header } from "~/components/ui/Header";
 import { useBLE } from "~/contexts/BLEContext";
-import { requestBluetoothPermissions } from "~/services/ble/utils";
+import { useResponsive } from "~/hooks/useResponsive";
 import {
   buttons,
   buttonText,
@@ -59,8 +58,14 @@ interface DebugLog {
 
 const AddDeviceScreen = () => {
   // Use BLE context
-  const { connectToDevice: connectToDeviceFromContext, scanForDevices } =
-    useBLE();
+  const {
+    connectToDevice: connectToDeviceFromContext,
+    scanForDevices,
+    disconnectDevice,
+  } = useBLE();
+
+  // Responsive design hook
+  const { getIconSize, getSpacing, isLargeText } = useResponsive();
 
   const [isScanning, setIsScanning] = useState(false);
   const [isConnecting, setIsConnecting] = useState<string | null>(null);
@@ -94,11 +99,6 @@ const AddDeviceScreen = () => {
 
   const clearDebugLogs = useCallback(() => {
     setDebugLogs([]);
-  }, []);
-
-  // BLE manager initialization and global listeners are now handled by BLE context
-  useEffect(() => {
-    void requestBluetoothPermissions();
   }, []);
 
   const startScan = async () => {
@@ -209,12 +209,6 @@ const AddDeviceScreen = () => {
           batteryLevel: advertisementData.batteryLevel,
         },
       );
-
-      // Stop scan if it is still running
-      if (isScanning) {
-        addDebugLog("info", "Stopping active scan before connection");
-        await BleManager.stopScan();
-      }
 
       // Use BLE context's complete pairing process (handles connection, key generation, validation, and storage)
       addDebugLog(
@@ -342,7 +336,7 @@ const AddDeviceScreen = () => {
       // Cleanup on error
       try {
         addDebugLog("info", "Attempting cleanup after error");
-        await BleManager.disconnect(peripheral.id);
+        await disconnectDevice();
         addDebugLog("info", "Cleanup completed successfully");
       } catch (cleanupError) {
         const cleanupMessage =
@@ -406,13 +400,19 @@ const AddDeviceScreen = () => {
     const { peripheral, advertisementData, isAlreadyPaired } = device;
     const isCurrentlyConnecting = isConnecting === peripheral.id;
 
+    // Responsive sizes
+    const avatarSize = getIconSize(48);
+    const iconSize = getIconSize(24);
+    const chevronSize = getIconSize(20);
+    const cardSpacing = getSpacing(spacing[3]);
+
     return (
       <Pressable
         key={peripheral.id}
         style={[
           cards.base,
           {
-            marginBottom: spacing[3],
+            marginBottom: cardSpacing,
             opacity: isCurrentlyConnecting ? 0.7 : 1,
             borderLeftWidth: isAlreadyPaired ? 4 : 0,
             borderLeftColor: isAlreadyPaired
@@ -423,39 +423,44 @@ const AddDeviceScreen = () => {
         onPress={() => connectToDevice(device)}
         disabled={isConnecting !== null}
       >
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View
+          style={{ flexDirection: "row", alignItems: "center", flexShrink: 1 }}
+        >
           <View
             style={{
-              width: 48,
-              height: 48,
-              borderRadius: 24,
+              width: avatarSize,
+              height: avatarSize,
+              borderRadius: avatarSize / 2,
               backgroundColor: isAlreadyPaired
                 ? colors.success[100]
                 : colors.primary[100],
               alignItems: "center",
               justifyContent: "center",
-              marginRight: spacing[3],
+              marginRight: cardSpacing,
+              flexShrink: 0,
             }}
           >
             <Ionicons
               name={isAlreadyPaired ? "checkmark-circle" : "watch"}
-              size={24}
+              size={iconSize}
               color={
                 isAlreadyPaired ? colors.success[600] : colors.primary[600]
               }
             />
           </View>
 
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
             <View
               style={{
                 flexDirection: "row",
                 alignItems: "center",
                 marginBottom: spacing[1],
+                flexWrap: "wrap",
               }}
             >
               <Text
                 style={[typography.subtitle, { color: colors.text.primary }]}
+                numberOfLines={1}
               >
                 {peripheral.name ?? "Unknown Device"}
               </Text>
@@ -483,6 +488,7 @@ const AddDeviceScreen = () => {
 
             <Text
               style={[typography.caption, { color: colors.text.secondary }]}
+              numberOfLines={1}
             >
               Serial: {advertisementData.serialNumber}
             </Text>
@@ -492,6 +498,7 @@ const AddDeviceScreen = () => {
                 flexDirection: "row",
                 alignItems: "center",
                 marginTop: spacing[1],
+                flexWrap: "wrap",
               }}
             >
               <Text
@@ -513,7 +520,7 @@ const AddDeviceScreen = () => {
               {advertisementData.chargingStatus && (
                 <Ionicons
                   name="flash"
-                  size={12}
+                  size={getIconSize(12)}
                   color={colors.warning[500]}
                   style={{ marginLeft: spacing[1] }}
                 />
@@ -524,11 +531,15 @@ const AddDeviceScreen = () => {
           {isCurrentlyConnecting ? (
             <ActivityIndicator size="small" color={colors.primary[500]} />
           ) : isAlreadyPaired ? (
-            <Ionicons name="refresh" size={20} color={colors.primary[500]} />
+            <Ionicons
+              name="refresh"
+              size={chevronSize}
+              color={colors.primary[500]}
+            />
           ) : (
             <Ionicons
               name="chevron-forward"
-              size={20}
+              size={chevronSize}
               color={colors.text.tertiary}
             />
           )}
@@ -631,6 +642,8 @@ const AddDeviceScreen = () => {
   };
 
   const renderEmptyState = () => {
+    const emptyStateIconSize = getIconSize(48);
+
     if (isScanning) {
       return (
         <View
@@ -650,7 +663,11 @@ const AddDeviceScreen = () => {
               marginBottom: spacing[4],
             }}
           >
-            <Ionicons name="search" size={48} color={colors.text.tertiary} />
+            <Ionicons
+              name="search"
+              size={emptyStateIconSize}
+              color={colors.text.tertiary}
+            />
           </View>
           <Text
             style={[
@@ -695,7 +712,11 @@ const AddDeviceScreen = () => {
               marginBottom: spacing[4],
             }}
           >
-            <Ionicons name="search" size={48} color={colors.text.tertiary} />
+            <Ionicons
+              name="search"
+              size={emptyStateIconSize}
+              color={colors.text.tertiary}
+            />
           </View>
           <Text
             style={[
@@ -725,6 +746,12 @@ const AddDeviceScreen = () => {
     return null;
   };
 
+  // Responsive sizing for the main UI elements
+  const headerIconContainerSize = getIconSize(80);
+  const headerIconSize = getIconSize(40);
+  const scanIconSize = getIconSize(20);
+  const debugIconSize = getIconSize(16);
+
   return (
     <SafeAreaView style={containers.safeArea}>
       <Header title="Add Device" />
@@ -739,20 +766,25 @@ const AddDeviceScreen = () => {
             alignItems: "center",
             marginTop: spacing[6],
             marginBottom: spacing[8],
+            paddingHorizontal: spacing[4],
           }}
         >
           <View
             style={{
-              width: 80,
-              height: 80,
-              borderRadius: 40,
+              width: headerIconContainerSize,
+              height: headerIconContainerSize,
+              borderRadius: headerIconContainerSize / 2,
               backgroundColor: colors.primary[100],
               alignItems: "center",
               justifyContent: "center",
               marginBottom: spacing[4],
             }}
           >
-            <Ionicons name="bluetooth" size={40} color={colors.primary[600]} />
+            <Ionicons
+              name="bluetooth"
+              size={headerIconSize}
+              color={colors.primary[600]}
+            />
           </View>
 
           <Text
@@ -811,7 +843,7 @@ const AddDeviceScreen = () => {
             ) : (
               <Ionicons
                 name="search"
-                size={20}
+                size={scanIconSize}
                 color={colors.text.inverse}
                 style={{ marginRight: spacing[2] }}
               />
@@ -838,7 +870,7 @@ const AddDeviceScreen = () => {
           >
             <Ionicons
               name="bug-outline"
-              size={16}
+              size={debugIconSize}
               color={colors.text.primary}
               style={{ marginRight: spacing[2] }}
             />

@@ -165,4 +165,58 @@ export const alarmRouter = {
 
       return { success: true };
     }),
+
+  // Update sync status for alarms (batch update)
+  updateSyncStatus: protectedProcedure
+    .input(
+      z.object({
+        alarmIds: z.array(z.string()),
+        syncStatus: z.enum(["NOT_SYNCED", "SYNCING", "SYNCED", "ERROR"]),
+      }),
+    )
+    .output(z.object({ success: z.boolean(), updatedCount: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      // Verify all alarms belong to the current user
+      const alarms = await ctx.db.query.Alarm.findMany({
+        where: eq(Alarm.userId, ctx.session.user.id),
+      });
+
+      const userAlarmIds = new Set(alarms.map((a) => a.id));
+      const validAlarmIds = input.alarmIds.filter((id) => userAlarmIds.has(id));
+
+      if (validAlarmIds.length === 0) {
+        return { success: true, updatedCount: 0 };
+      }
+
+      // Update sync status for all valid alarms
+      let updatedCount = 0;
+      for (const alarmId of validAlarmIds) {
+        await ctx.db
+          .update(Alarm)
+          .set({
+            syncStatus: input.syncStatus,
+            lastSync: input.syncStatus === "SYNCED" ? new Date() : undefined,
+          })
+          .where(eq(Alarm.id, alarmId));
+        updatedCount++;
+      }
+
+      return { success: true, updatedCount };
+    }),
+
+  // Get unsynced alarms for a device
+  getUnsyncedByDevice: protectedProcedure
+    .input(z.object({ deviceId: z.string() }))
+    .output(AlarmListSchema)
+    .query(async ({ input, ctx }) => {
+      return await ctx.db.query.Alarm.findMany({
+        where: and(
+          eq(Alarm.userId, ctx.session.user.id),
+          eq(Alarm.deviceId, input.deviceId),
+        ),
+        with: {
+          device: true,
+        },
+      });
+    }),
 } satisfies TRPCRouterRecord;

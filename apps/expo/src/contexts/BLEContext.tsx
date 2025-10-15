@@ -52,6 +52,7 @@ import {
   parseTimeNotification,
 } from "../services/ble/notifications";
 import { FACTORY_BRACELET_KEY, ResponseStatus } from "../services/ble/types";
+import { requestBluetoothPermissions } from "../services/ble/utils";
 
 export type BLEConnectionState =
   | "disconnected"
@@ -386,14 +387,23 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
     bleInitialized.current = true;
 
-    BleManager.start({ showAlert: false })
-      .then(() => {
-        console.log("✅ [BLE Context] BLE Manager started successfully");
-      })
-      .catch((error) => {
-        console.error("❌ [BLE Context] BLE Manager failed to start:", error);
-        bleInitialized.current = false; // Reset on error
-      });
+    // Request Bluetooth permissions before starting BLE manager
+    void requestBluetoothPermissions().then((granted) => {
+      if (!granted) {
+        console.warn(
+          "⚠️ [BLE Context] Bluetooth permissions not granted, BLE functionality may be limited",
+        );
+      }
+
+      BleManager.start({ showAlert: false })
+        .then(() => {
+          console.log("✅ [BLE Context] BLE Manager started successfully");
+        })
+        .catch((error) => {
+          console.error("❌ [BLE Context] BLE Manager failed to start:", error);
+          bleInitialized.current = false; // Reset on error
+        });
+    });
 
     console.log("👂 [BLE Context] Setting up global BLE event listeners...");
     const listeners = [
@@ -827,6 +837,25 @@ export function BLEProvider({ children }: BLEProviderProps) {
           console.log(
             `✅ [BLE Context] Successfully disconnected from device: ${connectedDevice.id}`,
           );
+
+          // Remove the stored encryption key
+          const sanitizedDeviceId = connectedDevice.id.replace(
+            /[^a-zA-Z0-9._-]/g,
+            "_",
+          );
+          try {
+            await SecureStore.deleteItemAsync(
+              `ble_device_${sanitizedDeviceId}`,
+            );
+            console.log(
+              `🗑️ [BLE Context] Removed stored encryption key for ${connectedDevice.id}`,
+            );
+          } catch (keyError) {
+            console.warn(
+              `⚠️ [BLE Context] Failed to remove encryption key for ${connectedDevice.id}:`,
+              keyError,
+            );
+          }
         } catch (error) {
           console.warn("❌ [BLE Context] Disconnect error:", error);
         }
