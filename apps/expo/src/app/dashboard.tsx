@@ -41,41 +41,7 @@ import { authClient } from "~/utils/auth";
 
 type DeviceWithAlarmsCount = RouterOutputs["device"]["getAll"][number];
 
-function DeviceCard({
-  device,
-  onDeleteDevice,
-}: {
-  device: DeviceWithAlarmsCount;
-  onDeleteDevice: (deviceId: string) => void;
-}) {
-  const [showDeleteButton, setShowDeleteButton] = React.useState(false);
-
-  const handleLongPress = () => {
-    setShowDeleteButton(!showDeleteButton);
-  };
-
-  const handleDeletePress = () => {
-    Alert.alert(
-      "Delete Device",
-      `Are you sure you want to delete "${device.title}"? This action cannot be undone.`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-          onPress: () => setShowDeleteButton(false),
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            onDeleteDevice(device.id);
-            setShowDeleteButton(false);
-          },
-        },
-      ],
-    );
-  };
-
+function DeviceCard({ device }: { device: DeviceWithAlarmsCount }) {
   return (
     <View style={{ marginBottom: spacing[4] }}>
       <Link
@@ -89,10 +55,8 @@ function DeviceCard({
           style={({ pressed }) => [
             cards.base,
             cards.interactive,
-            showDeleteButton && cards.pressed,
             pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] },
           ]}
-          onLongPress={handleLongPress}
         >
           {/* Device Header */}
           <View
@@ -145,23 +109,6 @@ function DeviceCard({
           </View>
         </Pressable>
       </Link>
-
-      {/* Delete Button */}
-      {showDeleteButton && (
-        <Pressable
-          style={[
-            buttons.base,
-            buttons.small,
-            buttons.error,
-            { marginTop: spacing[2] },
-          ]}
-          onPress={handleDeletePress}
-        >
-          <Text style={[buttonText.error, buttonText.small]}>
-            Delete Device
-          </Text>
-        </Pressable>
-      )}
     </View>
   );
 }
@@ -183,55 +130,6 @@ export default function DashboardPage() {
     refetchOnWindowFocus: true, // Refetch when app comes to foreground
     staleTime: 0, // Consider data stale immediately
     gcTime: 0, // No garbage collection time - data removed immediately
-  });
-
-  const deleteDeviceMutation = useMutation({
-    mutationFn: async (deviceId: string) => {
-      return await trpc.device.delete.mutate({ id: deviceId });
-    },
-    onSuccess: (_, deviceId) => {
-      // Remove all queries related to this specific device to prevent any stale data errors
-      queryClient.removeQueries({
-        queryKey: ["device", "getById", { id: deviceId }],
-      });
-      // Also remove any alarm-related queries for this device
-      queryClient.removeQueries({
-        queryKey: ["alarm"],
-        predicate: (query) => {
-          // Remove any alarm queries that reference this device
-          const queryKey = query.queryKey as unknown[];
-          return queryKey.some(
-            (key) =>
-              typeof key === "object" &&
-              key !== null &&
-              "deviceId" in key &&
-              key.deviceId === deviceId,
-          );
-        },
-      });
-
-      // Update the devices list cache directly to remove the deleted device
-      queryClient.setQueryData(
-        ["devices"],
-        (oldData: DeviceWithAlarmsCount[] | undefined) => {
-          if (!oldData) return oldData;
-          return oldData.filter((device) => device.id !== deviceId);
-        },
-      );
-
-      // Also update the trpc query cache with the correct key
-      const queryKey = [["device", "getAll"], { input: {}, type: "query" }];
-      queryClient.setQueryData(
-        queryKey,
-        (oldData: DeviceWithAlarmsCount[] | undefined) => {
-          if (!oldData) return oldData;
-          return oldData.filter((device) => device.id !== deviceId);
-        },
-      );
-    },
-    onError: (error) => {
-      Alert.alert("Error", `Failed to delete device: ${error.message}`);
-    },
   });
 
   const signOutMutation = useMutation({
@@ -259,10 +157,6 @@ export default function DashboardPage() {
 
   const handleAddDevice = () => {
     router.push("/add-device");
-  };
-
-  const handleDeleteDevice = (deviceId: string) => {
-    deleteDeviceMutation.mutate(deviceId);
   };
 
   const handleSignOut = () => {
@@ -388,9 +282,7 @@ export default function DashboardPage() {
             <FlatList
               data={devices}
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <DeviceCard device={item} onDeleteDevice={handleDeleteDevice} />
-              )}
+              renderItem={({ item }) => <DeviceCard device={item} />}
               showsVerticalScrollIndicator={false}
               ListFooterComponent={() => (
                 <Pressable

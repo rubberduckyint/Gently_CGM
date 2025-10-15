@@ -134,6 +134,8 @@ export const alarmRouter = {
           ...data,
           startDate: data.startDate ? new Date(data.startDate) : undefined,
           endDate: data.endDate ? new Date(data.endDate) : undefined,
+          // Reset sync status when alarm is updated so it will be synced to device
+          syncStatus: "NOT_SYNCED",
         })
         .where(eq(Alarm.id, id))
         .returning();

@@ -898,7 +898,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
         connectionTimeoutMs: 20000,
         stabilizationDelayMs: 900,
         mtuSize: 512,
-        scanTimeoutSeconds: 10,
+        scanTimeoutSeconds: 30,
         ...config,
       };
 
@@ -1063,7 +1063,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
         peripheral: Peripheral,
         advertisementData?: unknown,
       ) => void,
-      timeoutSeconds = 5,
+      timeoutSeconds = 30,
     ): Promise<void> => {
       console.log(
         `🔍 [BLE Context] Starting scanForDevices with timeout: ${timeoutSeconds}s`,
@@ -1171,7 +1171,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
       connectionTimeoutMs: 20000,
       stabilizationDelayMs: 900,
       mtuSize: 512,
-      scanTimeoutSeconds: 10,
+      scanTimeoutSeconds: 30,
     },
   ) => {
     setConnectionState("connecting");

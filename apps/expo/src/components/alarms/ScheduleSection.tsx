@@ -27,6 +27,8 @@ interface ScheduleSectionProps {
   onToggleStartTimePicker: () => void;
   showEndDatePicker: boolean;
   onToggleEndDatePicker: () => void;
+  showStartDatePicker: boolean;
+  onToggleStartDatePicker: () => void;
 }
 
 export function ScheduleSection({
@@ -36,6 +38,8 @@ export function ScheduleSection({
   onToggleStartTimePicker,
   showEndDatePicker,
   onToggleEndDatePicker,
+  showStartDatePicker: _showStartDatePicker,
+  onToggleStartDatePicker,
 }: ScheduleSectionProps) {
   // Local state for temporary picker values (iOS only)
   const [tempStartDate, setTempStartDate] = useState(formData.startDate);
@@ -79,6 +83,29 @@ export function ScheduleSection({
           Schedule
         </Text>
 
+        {/* Start Date */}
+        <View style={{ marginBottom: spacing[4] }}>
+          <Text style={[typography.label, { marginBottom: spacing[2] }]}>
+            Start Date
+          </Text>
+          <Pressable
+            style={{
+              borderWidth: 1,
+              borderColor: colors.border.medium,
+              backgroundColor: colors.background.secondary,
+              paddingHorizontal: spacing[4],
+              paddingVertical: spacing[3],
+              borderRadius: 8,
+              justifyContent: "center",
+            }}
+            onPress={onToggleStartDatePicker}
+          >
+            <Text style={[typography.body, { color: colors.text.primary }]}>
+              {formatDate(formData.startDate)}
+            </Text>
+          </Pressable>
+        </View>
+
         {/* Start Time */}
         <View style={{ marginBottom: spacing[4] }}>
           <Text style={[typography.label, { marginBottom: spacing[2] }]}>
@@ -100,6 +127,20 @@ export function ScheduleSection({
               {formatTime(formData.startDate)}
             </Text>
           </Pressable>
+          {showStartTimePicker && (
+            <Text
+              style={[
+                typography.caption,
+                {
+                  color: colors.primary[600],
+                  marginTop: spacing[2],
+                  fontStyle: "italic",
+                },
+              ]}
+            >
+              ⬇️ Time picker is shown below
+            </Text>
+          )}
         </View>
 
         {/* Repeat Toggle */}

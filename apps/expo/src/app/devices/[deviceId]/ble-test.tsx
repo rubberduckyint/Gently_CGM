@@ -271,7 +271,7 @@ export default function BleTestPage() {
           connectionTimeoutMs: 20000, // 20 seconds per attempt
           stabilizationDelayMs: 900,
           mtuSize: 512,
-          scanTimeoutSeconds: 20, // 20 seconds scan timeout instead of 10
+          scanTimeoutSeconds: 30, // 20 seconds scan timeout instead of 10
         },
       );
 

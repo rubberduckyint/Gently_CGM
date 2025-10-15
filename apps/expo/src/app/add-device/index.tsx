@@ -237,7 +237,7 @@ const AddDeviceScreen = () => {
           connectionTimeoutMs: 20000,
           stabilizationDelayMs: 900,
           mtuSize: 512,
-          scanTimeoutSeconds: 20,
+          scanTimeoutSeconds: 30,
         },
       );
 
@@ -988,7 +988,9 @@ const AddDeviceScreen = () => {
               <Pressable
                 style={[buttons.primary, buttons.large]}
                 onPress={() => {
-                  router.push({
+                  // Use replace instead of push to avoid keeping the pairing page in history
+                  // This prevents stale queries from running on unmounted pages
+                  router.replace({
                     pathname: "/devices/[deviceId]",
                     params: { deviceId: pairingSuccess.deviceId },
                   });

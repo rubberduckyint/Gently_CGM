@@ -91,11 +91,13 @@ const generateCronExpression = (formData: AlarmFormData): string => {
 export default function AddAlarmPage() {
   const { deviceId } = useLocalSearchParams<{ deviceId: string }>();
   const [formData, setFormData] = useState<AlarmFormData>(getDefaultFormData());
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
   // Local state for temporary picker values (iOS only)
   const [tempStartDate, setTempStartDate] = useState(formData.startDate);
+  const [tempStartTime, setTempStartTime] = useState(formData.startDate);
   const [tempEndDate, setTempEndDate] = useState(
     formData.endsOnDate ?? new Date(),
   );
@@ -107,6 +109,7 @@ export default function AddAlarmPage() {
   // Update temp values when form data changes
   useEffect(() => {
     setTempStartDate(formData.startDate);
+    setTempStartTime(formData.startDate);
   }, [formData.startDate]);
 
   useEffect(() => {
@@ -217,6 +220,10 @@ export default function AddAlarmPage() {
         <ScheduleSection
           formData={formData}
           onUpdateFormData={updateFormData}
+          showStartDatePicker={showStartDatePicker}
+          onToggleStartDatePicker={() =>
+            setShowStartDatePicker(!showStartDatePicker)
+          }
           showStartTimePicker={showStartTimePicker}
           onToggleStartTimePicker={() =>
             setShowStartTimePicker(!showStartTimePicker)
@@ -278,7 +285,7 @@ export default function AddAlarmPage() {
       </View>
 
       {/* Date/Time Pickers */}
-      {showStartTimePicker && (
+      {showStartDatePicker && (
         <View
           style={
             Platform.OS === "ios"
@@ -293,14 +300,18 @@ export default function AddAlarmPage() {
         >
           <DateTimePicker
             value={Platform.OS === "ios" ? tempStartDate : formData.startDate}
-            mode={Platform.OS === "ios" ? "datetime" : "time"}
+            mode="date"
             display={Platform.OS === "ios" ? "spinner" : "default"}
             onChange={(event, selectedDate) => {
               if (Platform.OS === "android") {
                 // Android: close immediately and update
-                setShowStartTimePicker(false);
+                setShowStartDatePicker(false);
                 if (selectedDate) {
-                  updateFormData({ startDate: selectedDate });
+                  // Preserve the time when updating the date
+                  const newDate = new Date(selectedDate);
+                  newDate.setHours(formData.startDate.getHours());
+                  newDate.setMinutes(formData.startDate.getMinutes());
+                  updateFormData({ startDate: newDate });
                 }
               } else if (selectedDate) {
                 // iOS: update temporary value but don't close
@@ -331,7 +342,97 @@ export default function AddAlarmPage() {
               <TouchableOpacity
                 onPress={() => {
                   // Save temporary picker value to form and close
-                  updateFormData({ startDate: tempStartDate });
+                  // Preserve the time when updating the date
+                  const newDate = new Date(tempStartDate);
+                  newDate.setHours(formData.startDate.getHours());
+                  newDate.setMinutes(formData.startDate.getMinutes());
+                  updateFormData({ startDate: newDate });
+                  setShowStartDatePicker(false);
+                }}
+                style={{
+                  paddingHorizontal: 20,
+                  paddingVertical: 8,
+                  backgroundColor: colors.primary[500],
+                  borderRadius: 8,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.text.inverse,
+                    fontSize: 16,
+                    fontWeight: "600",
+                  }}
+                >
+                  Done
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+
+      {showStartTimePicker && (
+        <View
+          style={
+            Platform.OS === "ios"
+              ? {
+                  backgroundColor: colors.background.secondary,
+                  borderRadius: 12,
+                  marginVertical: 10,
+                  padding: 10,
+                }
+              : undefined
+          }
+        >
+          <DateTimePicker
+            value={Platform.OS === "ios" ? tempStartTime : formData.startDate}
+            mode="time"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(event, selectedDate) => {
+              if (Platform.OS === "android") {
+                // Android: close immediately and update
+                setShowStartTimePicker(false);
+                if (selectedDate) {
+                  // Preserve the date when updating the time
+                  const newDate = new Date(formData.startDate);
+                  newDate.setHours(selectedDate.getHours());
+                  newDate.setMinutes(selectedDate.getMinutes());
+                  updateFormData({ startDate: newDate });
+                }
+              } else if (selectedDate) {
+                // iOS: update temporary value but don't close
+                setTempStartTime(selectedDate);
+              }
+            }}
+            style={
+              Platform.OS === "ios"
+                ? {
+                    backgroundColor: colors.background.secondary,
+                    height: 200,
+                  }
+                : undefined
+            }
+            textColor={colors.text.primary}
+          />
+          {Platform.OS === "ios" && (
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                paddingTop: 10,
+                borderTopWidth: 1,
+                borderTopColor: colors.border.light,
+                marginTop: 10,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => {
+                  // Save temporary picker value to form and close
+                  // Preserve the date when updating the time
+                  const newDate = new Date(formData.startDate);
+                  newDate.setHours(tempStartTime.getHours());
+                  newDate.setMinutes(tempStartTime.getMinutes());
+                  updateFormData({ startDate: newDate });
                   setShowStartTimePicker(false);
                 }}
                 style={{

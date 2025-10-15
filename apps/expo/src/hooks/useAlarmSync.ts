@@ -36,6 +36,9 @@ export function useAlarmSync({
     silent = false,
   ): Promise<boolean> => {
     if (!deviceSerialNumber || syncInProgressRef.current) {
+      console.log(
+        `⏸️ Sync skipped - deviceSerialNumber: ${!!deviceSerialNumber}, syncInProgress: ${syncInProgressRef.current}`,
+      );
       return false;
     }
 
@@ -56,6 +59,10 @@ export function useAlarmSync({
         setIsSyncing(true);
         setSyncProgress("Starting sync...");
       }
+
+      console.log(
+        `🔄 Starting ${silent ? "silent" : "visible"} sync of ${alarms.length} alarms to peripheral...`,
+      );
 
       const peripheralId = connectedDevice.id;
 
@@ -136,6 +143,9 @@ export function useAlarmSync({
     alarms: AlarmForSync[],
   ): Promise<void> => {
     if (!enabled || connectionState !== "connected") {
+      console.log(
+        `⏸️ Auto-sync skipped - enabled: ${enabled}, connectionState: ${connectionState}`,
+      );
       return;
     }
 
@@ -145,7 +155,12 @@ export function useAlarmSync({
         alarm.syncStatus === "NOT_SYNCED" || alarm.syncStatus === "ERROR",
     );
 
+    console.log(
+      `🔍 Auto-sync check - ${unsyncedAlarms.length} unsynced out of ${alarms.length} total alarms`,
+    );
+
     if (unsyncedAlarms.length > 0 || alarms.length === 0) {
+      console.log("🚀 Triggering auto-sync to peripheral...");
       // Sync ALL alarms (not just unsynced ones) to ensure deleted alarms are removed from device
       await performSync(alarms, true); // Silent sync
     }

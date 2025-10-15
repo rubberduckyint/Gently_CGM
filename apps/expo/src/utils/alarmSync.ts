@@ -54,6 +54,8 @@ export async function syncAlarmsToDevice(
   onProgress?: SyncProgressCallback,
   onStatusUpdate?: SyncStatusCallback,
 ): Promise<{ success: boolean; error?: string }> {
+  console.log(`� Syncing ${alarms.length} alarms to device ${peripheralId}`);
+
   try {
     onProgress?.({
       step: "start",
@@ -122,19 +124,21 @@ export async function syncAlarmsToDevice(
         `✅ Added alarm ${alarm.title} at index ${result.eventIndex}`,
       );
 
-      // Enable the alarm if it's active
-      if (alarm.isActive) {
-        const enableResponse = await sendCommand({
-          peripheralId,
-          command: createSetEventOnOffRequest(result.eventIndex, true),
-          encryptionKey,
-        });
+      // Set the alarm on/off state based on isActive
+      const onOffResponse = await sendCommand({
+        peripheralId,
+        command: createSetEventOnOffRequest(result.eventIndex, alarm.isActive),
+        encryptionKey,
+      });
 
-        if (enableResponse.status === ResponseStatus.OK) {
-          console.log(`✅ Enabled alarm ${alarm.title}`);
-        } else {
-          console.warn(`⚠️ Failed to enable alarm ${alarm.title}`);
-        }
+      if (onOffResponse.status === ResponseStatus.OK) {
+        console.log(
+          `✅ ${alarm.isActive ? "Enabled" : "Disabled"} alarm ${alarm.title}`,
+        );
+      } else {
+        console.warn(
+          `⚠️ Failed to ${alarm.isActive ? "enable" : "disable"} alarm ${alarm.title}`,
+        );
       }
 
       // Update sync status to SYNCED in database

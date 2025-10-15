@@ -9,14 +9,17 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AlarmFormData } from "~/components/alarms";
@@ -46,6 +49,7 @@ export default function EditAlarmPage() {
     alarmId: string;
   }>();
   const [formData, setFormData] = useState<AlarmFormData | null>(null);
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const initializedRef = useRef(false);
@@ -441,6 +445,10 @@ export default function EditAlarmPage() {
         <ScheduleSection
           formData={formData}
           onUpdateFormData={updateFormData}
+          showStartDatePicker={showStartDatePicker}
+          onToggleStartDatePicker={() =>
+            setShowStartDatePicker(!showStartDatePicker)
+          }
           showStartTimePicker={showStartTimePicker}
           onToggleStartTimePicker={() =>
             setShowStartTimePicker(!showStartTimePicker)
@@ -500,6 +508,235 @@ export default function EditAlarmPage() {
           </Text>
         </Pressable>
       </View>
+
+      {/* Date/Time Pickers */}
+      {showStartDatePicker && formData && (
+        <View
+          style={
+            Platform.OS === "ios"
+              ? {
+                  backgroundColor: colors.background.secondary,
+                  borderRadius: 12,
+                  marginVertical: 10,
+                  padding: 10,
+                }
+              : undefined
+          }
+        >
+          <DateTimePicker
+            value={formData.startDate}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(event, selectedDate) => {
+              if (Platform.OS === "android") {
+                setShowStartDatePicker(false);
+                if (selectedDate) {
+                  const newDate = new Date(selectedDate);
+                  newDate.setHours(formData.startDate.getHours());
+                  newDate.setMinutes(formData.startDate.getMinutes());
+                  updateFormData({ startDate: newDate });
+                }
+              } else if (selectedDate) {
+                const newDate = new Date(selectedDate);
+                newDate.setHours(formData.startDate.getHours());
+                newDate.setMinutes(formData.startDate.getMinutes());
+                updateFormData({ startDate: newDate });
+              }
+            }}
+            style={
+              Platform.OS === "ios"
+                ? {
+                    backgroundColor: colors.background.secondary,
+                    height: 200,
+                  }
+                : undefined
+            }
+            textColor={colors.text.primary}
+          />
+          {Platform.OS === "ios" && (
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                paddingTop: 10,
+                borderTopWidth: 1,
+                borderTopColor: colors.border.light,
+                marginTop: 10,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => setShowStartDatePicker(false)}
+                style={{
+                  paddingHorizontal: 20,
+                  paddingVertical: 8,
+                  backgroundColor: colors.primary[500],
+                  borderRadius: 8,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.text.inverse,
+                    fontSize: 16,
+                    fontWeight: "600",
+                  }}
+                >
+                  Done
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+
+      {showStartTimePicker && formData && (
+        <View
+          style={
+            Platform.OS === "ios"
+              ? {
+                  backgroundColor: colors.background.secondary,
+                  borderRadius: 12,
+                  marginVertical: 10,
+                  padding: 10,
+                }
+              : undefined
+          }
+        >
+          <DateTimePicker
+            value={formData.startDate}
+            mode="time"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(event, selectedDate) => {
+              if (Platform.OS === "android") {
+                setShowStartTimePicker(false);
+                if (selectedDate) {
+                  const newDate = new Date(formData.startDate);
+                  newDate.setHours(selectedDate.getHours());
+                  newDate.setMinutes(selectedDate.getMinutes());
+                  updateFormData({ startDate: newDate });
+                }
+              } else if (selectedDate) {
+                const newDate = new Date(formData.startDate);
+                newDate.setHours(selectedDate.getHours());
+                newDate.setMinutes(selectedDate.getMinutes());
+                updateFormData({ startDate: newDate });
+              }
+            }}
+            style={
+              Platform.OS === "ios"
+                ? {
+                    backgroundColor: colors.background.secondary,
+                    height: 200,
+                  }
+                : undefined
+            }
+            textColor={colors.text.primary}
+          />
+          {Platform.OS === "ios" && (
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                paddingTop: 10,
+                borderTopWidth: 1,
+                borderTopColor: colors.border.light,
+                marginTop: 10,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => setShowStartTimePicker(false)}
+                style={{
+                  paddingHorizontal: 20,
+                  paddingVertical: 8,
+                  backgroundColor: colors.primary[500],
+                  borderRadius: 8,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.text.inverse,
+                    fontSize: 16,
+                    fontWeight: "600",
+                  }}
+                >
+                  Done
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+
+      {showEndDatePicker && formData && (
+        <View
+          style={
+            Platform.OS === "ios"
+              ? {
+                  backgroundColor: colors.background.secondary,
+                  borderRadius: 12,
+                  marginVertical: 10,
+                  padding: 10,
+                }
+              : undefined
+          }
+        >
+          <DateTimePicker
+            value={formData.endsOnDate ?? new Date()}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(event, selectedDate) => {
+              if (Platform.OS === "android") {
+                setShowEndDatePicker(false);
+                if (selectedDate) {
+                  updateFormData({ endsOnDate: selectedDate });
+                }
+              } else if (selectedDate) {
+                updateFormData({ endsOnDate: selectedDate });
+              }
+            }}
+            style={
+              Platform.OS === "ios"
+                ? {
+                    backgroundColor: colors.background.secondary,
+                    height: 200,
+                  }
+                : undefined
+            }
+            textColor={colors.text.primary}
+          />
+          {Platform.OS === "ios" && (
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                paddingTop: 10,
+                borderTopWidth: 1,
+                borderTopColor: colors.border.light,
+                marginTop: 10,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => setShowEndDatePicker(false)}
+                style={{
+                  paddingHorizontal: 20,
+                  paddingVertical: 8,
+                  backgroundColor: colors.primary[500],
+                  borderRadius: 8,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.text.inverse,
+                    fontSize: 16,
+                    fontWeight: "600",
+                  }}
+                >
+                  Done
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
     </SafeAreaView>
   );
 }

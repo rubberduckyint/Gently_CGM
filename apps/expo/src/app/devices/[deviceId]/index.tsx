@@ -18,6 +18,8 @@ import { HamburgerMenu } from "~/components/ui/HamburgerMenu";
 import { Header } from "~/components/ui/Header";
 import { useBLE } from "~/contexts/BLEContext";
 import { useAlarmSync } from "~/hooks/useAlarmSync";
+import { createRemoveAllEventsRequest } from "~/services/ble/commands/removeAllEvents";
+import { ResponseStatus } from "~/services/ble/types";
 import {
   buttons,
   cards,
@@ -36,6 +38,12 @@ export default function DeviceDetailPage() {
   // Store the initial device ID to prevent it from changing during navigation
   const [initialDeviceId] = React.useState(deviceId);
 
+  // Debug logging to track device ID changes
+  React.useEffect(() => {
+    console.log("🔍 [Device Detail] Route deviceId:", deviceId);
+    console.log("🔍 [Device Detail] Stored initialDeviceId:", initialDeviceId);
+  }, [deviceId, initialDeviceId]);
+
   // Use BLE context to show connection status
   const {
     connectionState,
@@ -43,6 +51,7 @@ export default function DeviceDetailPage() {
     disconnectDevice,
     connectedDevice,
     notifications,
+    sendBLECommand,
   } = useBLE();
 
   // Track the latest battery status from notifications
@@ -171,14 +180,15 @@ export default function DeviceDetailPage() {
   const autoSyncedRef = React.useRef(false);
   // Track the previous alarm count to detect deletions
   const previousAlarmCountRef = React.useRef<number | null>(null);
+  // Track the previous alarm data to detect updates
+  const previousAlarmsRef = React.useRef<string | null>(null);
 
   // Auto-sync unsynced alarms when connected
   React.useEffect(() => {
     if (
       device?.alarms &&
       connectionState === "connected" &&
-      !alarmSync.isSyncing &&
-      !autoSyncedRef.current
+      !alarmSync.isSyncing
     ) {
       const alarmsForSync: AlarmForSync[] = device.alarms.map((alarm) => ({
         id: alarm.id,
@@ -200,41 +210,52 @@ export default function DeviceDetailPage() {
       const currentAlarmCount = device.alarms.length;
       const previousAlarmCount = previousAlarmCountRef.current;
 
-      // Trigger sync if:
-      // 1. There are unsynced alarms
-      // 2. The alarm count decreased (alarm was deleted)
-      const hasUnsyncedAlarms = alarmsForSync.some(
-        (alarm) =>
-          alarm.syncStatus === "NOT_SYNCED" || alarm.syncStatus === "ERROR",
+      // Create a hash of the current alarms to detect changes
+      // Include key properties that would indicate the alarm needs re-syncing
+      const currentAlarmsHash = JSON.stringify(
+        alarmsForSync.map((a) => ({
+          id: a.id,
+          title: a.title,
+          cronExpression: a.cronExpression,
+          isActive: a.isActive,
+          severityLevel: a.severityLevel,
+          ledPattern: a.ledPattern,
+          ledColor: a.ledColor,
+          vibrationPattern: a.vibrationPattern,
+          vibrationIntensity: a.vibrationIntensity,
+        })),
       );
+      const alarmsChanged = previousAlarmsRef.current !== currentAlarmsHash;
 
-      const alarmWasDeleted =
-        previousAlarmCount !== null && currentAlarmCount < previousAlarmCount;
-
-      if (hasUnsyncedAlarms || alarmWasDeleted) {
-        // Set the flag IMMEDIATELY to prevent race conditions
-        autoSyncedRef.current = true;
-
-        console.log(
-          `🔄 Triggering sync - unsynced: ${hasUnsyncedAlarms}, deleted: ${alarmWasDeleted}`,
-        );
-
-        // Force sync of all alarms when an alarm was deleted to remove it from device
-        if (alarmWasDeleted) {
-          console.log(
-            `📱 Alarm deleted (${previousAlarmCount} -> ${currentAlarmCount}), syncing all alarms to device...`,
-          );
-          void alarmSync.performSync(alarmsForSync, true); // Force sync all alarms
-        } else {
-          void alarmSync.autoSyncUnsyncedAlarms(alarmsForSync);
-        }
-      } else {
-        // No sync needed - reset the flag so future changes can trigger sync
+      // Reset the auto-sync flag if alarms have changed
+      if (alarmsChanged) {
+        console.log("📝 Alarms changed, triggering sync");
         autoSyncedRef.current = false;
       }
 
-      // Update the alarm count for next comparison
+      // Trigger sync if we haven't already synced these alarms
+      // We sync whenever alarms change or there's a deletion
+      if (!autoSyncedRef.current) {
+        const alarmWasDeleted =
+          previousAlarmCount !== null && currentAlarmCount < previousAlarmCount;
+
+        // Always sync if alarms changed or were deleted
+        if (alarmsChanged || alarmWasDeleted) {
+          // Set the flag IMMEDIATELY to prevent race conditions
+          autoSyncedRef.current = true;
+
+          console.log(
+            `🔄 Triggering sync - changed: ${alarmsChanged}, deleted: ${alarmWasDeleted}`,
+          );
+
+          // Force sync of all alarms to peripheral
+          void alarmSync.performSync(alarmsForSync, true);
+        }
+      }
+
+      // Update the alarm count and hash for next comparison
       previousAlarmCountRef.current = currentAlarmCount;
+      previousAlarmsRef.current = currentAlarmsHash;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [device?.alarms, connectionState]);
@@ -244,6 +265,7 @@ export default function DeviceDetailPage() {
     if (connectionState === "disconnected") {
       autoSyncedRef.current = false;
       previousAlarmCountRef.current = null;
+      previousAlarmsRef.current = null;
     }
   }, [connectionState]);
 
@@ -253,14 +275,53 @@ export default function DeviceDetailPage() {
 
       // Check if the current connected device matches the one being deleted
       console.log("🔍 Checking BLE connection before deletion...");
+      console.log("   └─ Connected device:", connectedDevice);
+      console.log("   └─ Device to delete:", device?.serialNumber);
+      console.log("   └─ Connection state:", connectionState);
 
       if (connectedDevice && device?.serialNumber) {
         // Check if the connected device's serial number matches this device
         if (connectedDevice.serialNumber === device.serialNumber) {
           console.log(
-            `🔌 Device ${device.serialNumber} is connected, disconnecting...`,
+            `🔌 Device ${device.serialNumber} is connected, will remove all events first...`,
           );
 
+          // Only try to send command if actually connected
+          if (connectionState === "connected") {
+            try {
+              // First, remove all events from the peripheral
+              console.log(
+                "🗑️ Sending REMOVE_ALL_EVENTS command to peripheral...",
+              );
+              const removeAllEventsCommand = createRemoveAllEventsRequest();
+              const response = await sendBLECommand(
+                removeAllEventsCommand,
+                5000,
+              );
+
+              if (response.status === ResponseStatus.OK) {
+                console.log(
+                  "✅ Successfully removed all events from peripheral",
+                );
+              } else {
+                console.warn(
+                  "⚠️ Failed to remove all events from peripheral, continuing with deletion...",
+                );
+              }
+            } catch (removeEventsError) {
+              console.warn(
+                `⚠️ Error removing events from ${device.serialNumber}:`,
+                removeEventsError,
+              );
+              // Continue with deletion even if removing events fails
+            }
+          } else {
+            console.log(
+              `⚠️ Device state is ${connectionState}, skipping REMOVE_ALL_EVENTS command`,
+            );
+          }
+
+          // Then disconnect the device
           try {
             await disconnectDevice();
             console.log(`✅ Disconnected device: ${device.serialNumber}`);
@@ -278,53 +339,25 @@ export default function DeviceDetailPage() {
       return await trpc.device.delete.mutate({ id: initialDeviceId });
     },
     onSuccess: () => {
-      // Remove all queries related to this specific device to prevent any stale data errors
-      queryClient.removeQueries({
-        queryKey: ["device", "getById", { id: initialDeviceId }],
+      console.log("✅ Device deleted successfully from database");
+      // Invalidate the devices list so it refetches on the dashboard
+      void queryClient.invalidateQueries({
+        queryKey: ["devices"],
       });
-      queryClient.removeQueries({
-        queryKey: ["device", "getById", { id: deviceId }],
-      });
-      // Also remove any alarm-related queries for this device
-      queryClient.removeQueries({
-        queryKey: ["alarm"],
-        predicate: (query) => {
-          // Remove any alarm queries that reference this device
-          const queryKey = query.queryKey as unknown[];
-          return queryKey.some(
-            (key) =>
-              typeof key === "object" &&
-              key !== null &&
-              "deviceId" in key &&
-              (key.deviceId === initialDeviceId || key.deviceId === deviceId),
-          );
-        },
+      void queryClient.invalidateQueries({
+        queryKey: [["device", "getAll"]],
       });
 
-      // Update the devices list cache directly to remove the deleted device
-      queryClient.setQueryData(
-        ["devices"],
-        (oldData: { id: string }[] | undefined) => {
-          if (!oldData) return oldData;
-          return oldData.filter(
-            (device) => device.id !== initialDeviceId && device.id !== deviceId,
-          );
-        },
-      );
-
-      // Also update the trpc query cache with the correct key
-      const queryKey = [["device", "getAll"], { input: {}, type: "query" }];
-      queryClient.setQueryData(
-        queryKey,
-        (oldData: { id: string }[] | undefined) => {
-          if (!oldData) return oldData;
-          return oldData.filter(
-            (device) => device.id !== initialDeviceId && device.id !== deviceId,
-          );
-        },
-      );
-
+      // Navigate back to dashboard
       router.push("/dashboard");
+    },
+    onError: (error) => {
+      console.error("❌ Device deletion failed:", error);
+      Alert.alert(
+        "Deletion Failed",
+        `Could not delete device: ${error instanceof Error ? error.message : "Unknown error"}`,
+        [{ text: "OK" }],
+      );
     },
   });
 
@@ -336,11 +369,20 @@ export default function DeviceDetailPage() {
         error.message.includes("you don't have permission"))
     ) {
       console.log(
-        "📱 Device not found or access denied, navigating back to dashboard",
+        `📱 Device not found or access denied for ID: ${initialDeviceId}`,
       );
-      router.push("/dashboard");
+      console.log("   └─ Error:", error.message);
+      console.log("   └─ Current route deviceId:", deviceId);
+      console.log("   └─ Navigating back to dashboard");
+      
+      // Add a small delay to prevent navigation loops and allow debugging
+      const timer = setTimeout(() => {
+        router.push("/dashboard");
+      }, 500);
+      
+      return () => clearTimeout(timer);
     }
-  }, [error]);
+  }, [error, initialDeviceId, deviceId]);
 
   // Auto-connect to device when page loads
   useEffect(() => {
