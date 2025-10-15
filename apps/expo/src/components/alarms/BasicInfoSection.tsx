@@ -7,6 +7,7 @@
 
 import React from "react";
 import { Text, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { cards, colors, inputs, spacing, typography } from "~/styles";
 
@@ -49,13 +50,37 @@ export function BasicInfoSection({
   const isTitleEmpty = formData.title.trim().length === 0;
   const showTitleError = showValidationErrors && isTitleEmpty;
   return (
-    <View style={[cards.base, { marginBottom: spacing[6] }]}>
-      <Text style={[typography.h4, { marginBottom: spacing[4] }]}>
-        Basic Information
+    <View style={[cards.base, { marginBottom: spacing[4] }]}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: spacing[2],
+          marginBottom: spacing[2],
+        }}
+      >
+        <Ionicons
+          name="information-circle"
+          size={20}
+          color={colors.primary[500]}
+        />
+        <Text style={[typography.h4]}>Alarm Details</Text>
+      </View>
+      <Text
+        style={[
+          typography.caption,
+          {
+            color: colors.text.secondary,
+            marginBottom: spacing[5],
+            lineHeight: 18,
+          },
+        ]}
+      >
+        Give your alarm a name to help you remember its purpose.
       </Text>
 
       {/* Title Input */}
-      <View style={{ marginBottom: spacing[4] }}>
+      <View style={{ marginBottom: spacing[2] }}>
         <Text
           style={[
             typography.label,
@@ -63,7 +88,7 @@ export function BasicInfoSection({
             showTitleError && { color: colors.error[500] },
           ]}
         >
-          Title *
+          Alarm Name *
         </Text>
         <TextInput
           style={[
@@ -75,38 +100,29 @@ export function BasicInfoSection({
           ]}
           value={formData.title}
           onChangeText={(text) => onUpdateFormData({ title: text })}
-          placeholder="Enter alarm title"
+          placeholder="e.g., Take Medication, Morning Reminder"
           placeholderTextColor={colors.text.secondary}
         />
-        {showTitleError && (
+        {showTitleError ? (
           <Text
             style={[
               typography.caption,
               { color: colors.error[500], marginTop: spacing[1] },
             ]}
           >
-            Title is required
+            Alarm name is required
+          </Text>
+        ) : (
+          <Text
+            style={[
+              typography.caption,
+              { color: colors.text.tertiary, marginTop: spacing[1] },
+            ]}
+          >
+            The device will show the first 10 characters
           </Text>
         )}
       </View>
-
-      {/* Description Input */}
-      <View style={{ marginBottom: spacing[4] }}>
-        <Text style={[typography.label, { marginBottom: spacing[2] }]}>
-          Description
-        </Text>
-        <TextInput
-          style={[inputs.base, { height: 80, textAlignVertical: "top" }]}
-          value={formData.description}
-          onChangeText={(text) => onUpdateFormData({ description: text })}
-          placeholder="Enter description (optional)"
-          placeholderTextColor={colors.text.secondary}
-          multiline
-          numberOfLines={3}
-        />
-      </View>
-
-      {/* Color selection moved to AdvancedSection as LED Color */}
     </View>
   );
 }

@@ -164,7 +164,7 @@ export function AddDeviceButton() {
       <DialogTrigger asChild>
         <Button className="gap-2">
           <Bluetooth className="h-4 w-4" />
-          Add Device
+          Add a Gently
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
@@ -173,7 +173,7 @@ export function AddDeviceButton() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Search className="h-5 w-5" />
-                Scanning for Devices
+                Scanning for Gentlys
               </DialogTitle>
               <DialogDescription>
                 Looking for nearby Gently devices...
@@ -187,7 +187,7 @@ export function AddDeviceButton() {
                 )}
               </div>
               <p className="text-muted-foreground text-center text-sm">
-                Make sure your Gently device is in pairing mode
+                Make sure your Gently is in pairing mode
               </p>
             </div>
           </>
@@ -284,7 +284,7 @@ export function AddDeviceButton() {
                 ✓ Connected Successfully
               </DialogTitle>
               <DialogDescription>
-                Your device has been connected and is being added to your
+                Your Gently has been connected and is being added to your
                 account.
               </DialogDescription>
             </DialogHeader>

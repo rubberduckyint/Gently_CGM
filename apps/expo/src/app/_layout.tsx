@@ -77,6 +77,13 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
+            name="devices/[deviceId]/delete/index"
+            options={{
+              title: "Delete Device",
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
             name="devices/[deviceId]/edit/index"
             options={{
               title: "Edit Device",

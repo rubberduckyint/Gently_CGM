@@ -718,11 +718,15 @@ export function BLEProvider({ children }: BLEProviderProps) {
           };
 
           let foundDevice: Peripheral | null = null;
+          let isResolved = false; // Flag to prevent double resolution
 
           const scanTimeout = setTimeout(() => {
+            if (isResolved) return; // Already found and resolved
+
             BleManager.stopScan()
               .then(() => {
-                if (!foundDevice) {
+                if (!foundDevice && !isResolved) {
+                  isResolved = true;
                   onProgress?.({
                     step: "scan_timeout",
                     progress: 0,
@@ -736,6 +740,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
           }, defaultScanConfig.scanTimeoutSeconds * 1000);
 
           const handleDiscoverPeripheral = (peripheral: Peripheral) => {
+            if (isResolved) return; // Already found and resolved
             if (peripheral.name !== "Gently") return;
 
             if (peripheral.advertising.manufacturerRawData) {
@@ -750,20 +755,27 @@ export function BLEProvider({ children }: BLEProviderProps) {
                     adData.serialNumber.toUpperCase() ===
                       serialNumber.toUpperCase())
                 ) {
+                  // Mark as found immediately to prevent timeout race condition
+                  foundDevice = peripheral;
+                  isResolved = true;
+                  clearTimeout(scanTimeout);
+
                   onProgress?.({
                     step: "device_found",
                     progress: 50,
                     message: `✅ Target device found: ${serialNumber}`,
                   });
 
-                  foundDevice = peripheral;
-                  clearTimeout(scanTimeout);
+                  // Resolve immediately, don't wait for stopScan
+                  resolve(peripheral);
 
-                  BleManager.stopScan()
-                    .then(() => {
-                      resolve(peripheral);
-                    })
-                    .catch(reject);
+                  // Stop scan in background
+                  BleManager.stopScan().catch((error) => {
+                    console.warn(
+                      "Error stopping scan after device found:",
+                      error,
+                    );
+                  });
                 }
               } catch (error) {
                 console.warn("Error processing advertisement data:", error);

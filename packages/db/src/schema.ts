@@ -169,8 +169,8 @@ export const CreateAlarmSchema = createInsertSchema(Alarm, {
   vibrationIntensity: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
   snoozePeriod: z.number().int().min(1).max(60).optional(),
   snoozeTimeout: z.number().int().min(1).max(120).optional(),
-  retriggerDelay: z.number().int().min(1).max(60).optional(),
-  retriggerTimeout: z.number().int().min(1).max(120).optional(),
+  retriggerDelay: z.number().int().min(0).max(60).optional(), // 0 = disabled
+  retriggerTimeout: z.number().int().min(0).max(120).optional(), // 0 = disabled
   deviceId: z.string().optional(),
 }).omit({
   id: true,

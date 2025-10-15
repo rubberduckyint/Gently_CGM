@@ -38,6 +38,7 @@ import {
 } from "~/styles";
 import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
+import { devicesBeingDeleted } from "~/utils/deviceDeletionTracker";
 
 type DeviceWithAlarmsCount = RouterOutputs["device"]["getAll"][number];
 
@@ -144,6 +145,15 @@ export default function DashboardPage() {
   useFocusEffect(
     React.useCallback(() => {
       if (session?.user) {
+        // Don't refetch if any device is currently being deleted
+        // This prevents the app from reloading during the deletion process
+        if (devicesBeingDeleted.size > 0) {
+          console.log(
+            "⏸️ Skipping dashboard refetch - device deletion in progress",
+          );
+          return;
+        }
+
         // Invalidate both the legacy and TRPC query keys to ensure fresh data
         void queryClient.invalidateQueries({ queryKey: ["devices"] });
         void queryClient.invalidateQueries({
@@ -185,7 +195,7 @@ export default function DashboardPage() {
               { color: colors.text.secondary, marginTop: spacing[3] },
             ]}
           >
-            Loading your devices...
+            Loading your Gentlys...
           </Text>
         </View>
       </SafeAreaView>
@@ -227,7 +237,7 @@ export default function DashboardPage() {
   return (
     <SafeAreaView style={containers.safeArea}>
       <Header
-        title="Your Devices"
+        title="Your Gentlys"
         showBackButton={false}
         rightComponent={
           <HamburgerMenu
@@ -254,7 +264,7 @@ export default function DashboardPage() {
           /* Empty State */
           <View style={emptyStates.container}>
             <Text style={[typography.h4, { marginBottom: spacing[2] }]}>
-              No devices yet
+              No Gentlys yet
             </Text>
             <Text
               style={[
@@ -267,13 +277,13 @@ export default function DashboardPage() {
                 },
               ]}
             >
-              Add your first device to start managing alarms and notifications.
+              Add your first Gently to start managing alarms and notifications.
             </Text>
             <Pressable
               style={[buttons.base, buttons.large, buttons.success]}
               onPress={handleAddDevice}
             >
-              <Text style={buttonText.success}>Add Your First Device</Text>
+              <Text style={buttonText.success}>Add Your First Gently</Text>
             </Pressable>
           </View>
         ) : (
@@ -294,7 +304,7 @@ export default function DashboardPage() {
                   ]}
                   onPress={handleAddDevice}
                 >
-                  <Text style={buttonText.outline}>+ Add Another Device</Text>
+                  <Text style={buttonText.outline}>+ Add Another Gently</Text>
                 </Pressable>
               )}
             />

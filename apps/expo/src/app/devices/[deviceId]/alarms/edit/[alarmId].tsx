@@ -1,47 +1,52 @@
 /**
  * Edit Alarm Page
  *
- * Single-page form for editing an existing alarm for a specific device.
- * All settings are displayed on one scrollable page for better UX.
+ * Simplified page for editing an existing alarm using the unified AlarmForm component.
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AlarmFormData } from "~/components/alarms";
-import {
-  AdvancedSection,
-  BasicInfoSection,
-  ScheduleSection,
-} from "~/components/alarms";
-import { Header } from "~/components/ui/Header";
-import {
-  buttons,
-  buttonText,
-  colors,
-  containers,
-  spacing,
-  typography,
-} from "~/styles";
+import { AlarmForm } from "~/components/alarms";
+import { colors, containers, spacing, typography } from "~/styles";
 import { trpc } from "~/utils/api";
 import {
   mapLegacyVibrationPatternToEnum,
   mapVibrationPatternToLegacyNumber,
 } from "~/utils/bleAlarmUtils";
+
+// Generate cron expression from form data
+const generateCronExpression = (formData: AlarmFormData): string => {
+  const { startDate, repeat, repeatType, repeatEvery, daysOfWeek } = formData;
+  const minute = startDate.getMinutes();
+  const hour = startDate.getHours();
+  const day = startDate.getDate();
+  const month = startDate.getMonth() + 1;
+
+  if (!repeat) {
+    return `${minute} ${hour} ${day} ${month} *`;
+  }
+
+  switch (repeatType) {
+    case "minutes":
+      return `*/${repeatEvery} * * * *`;
+    case "hours":
+      return `${minute} */${repeatEvery} * * *`;
+    case "days":
+      return `${minute} ${hour} */${repeatEvery} * *`;
+    case "weeks": {
+      const days = daysOfWeek.length > 0 ? daysOfWeek.join(",") : "*";
+      return `${minute} ${hour} * * ${days}`;
+    }
+    default:
+      return `${minute} ${hour} ${day} ${month} *`;
+  }
+};
 
 export default function EditAlarmPage() {
   const { deviceId, alarmId } = useLocalSearchParams<{
@@ -49,15 +54,7 @@ export default function EditAlarmPage() {
     alarmId: string;
   }>();
   const [formData, setFormData] = useState<AlarmFormData | null>(null);
-  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const initializedRef = useRef(false);
-
-  // Validation state
-  const [showValidationErrors, setShowValidationErrors] = useState(false);
-  const isFormValid = formData ? formData.title.trim().length > 0 : false;
-
   const queryClient = useQueryClient();
 
   const {
@@ -72,6 +69,79 @@ export default function EditAlarmPage() {
     enabled: !!alarmId,
   });
 
+  // Convert alarm data to form data structure
+  const convertAlarmToFormData = (alarm: {
+    title: string;
+    description?: string | null;
+    startDate: string | Date;
+    endDate?: string | Date | null;
+    repeat: boolean;
+    severityLevel: "CRITICAL" | "WARNING" | "INFORMATIONAL";
+    ledPattern: "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE";
+    ledColor:
+      | "RED"
+      | "GREEN"
+      | "BLUE"
+      | "YELLOW"
+      | "MAGENTA"
+      | "CYAN"
+      | "WHITE";
+    vibrationPattern: number;
+    vibrationIntensity: "LOW" | "MEDIUM" | "HIGH";
+    snoozePeriod: number;
+    snoozeTimeout: number;
+    retriggerDelay: number;
+    retriggerTimeout: number;
+  }): AlarmFormData => {
+    let startDate: Date;
+    try {
+      startDate = new Date(alarm.startDate);
+      if (isNaN(startDate.getTime())) {
+        console.warn("Invalid start date received:", alarm.startDate);
+        startDate = new Date();
+      }
+    } catch (error) {
+      console.error("Error parsing start date:", error, alarm.startDate);
+      startDate = new Date();
+    }
+
+    let endsOnDate: Date | undefined;
+    if (alarm.endDate) {
+      try {
+        endsOnDate = new Date(alarm.endDate);
+        if (isNaN(endsOnDate.getTime())) {
+          console.warn("Invalid end date received:", alarm.endDate);
+          endsOnDate = undefined;
+        }
+      } catch (error) {
+        console.error("Error parsing end date:", error, alarm.endDate);
+        endsOnDate = undefined;
+      }
+    }
+
+    return {
+      title: alarm.title,
+      description: alarm.description ?? "",
+      startDate,
+      repeat: alarm.repeat,
+      repeatType: "days",
+      repeatEvery: 1,
+      daysOfWeek: [],
+      ends: endsOnDate ? "on" : "never",
+      endsOnDate,
+      endsAfter: undefined,
+      severityLevel: alarm.severityLevel,
+      ledPattern: alarm.ledPattern,
+      ledColor: alarm.ledColor,
+      vibrationPattern: mapLegacyVibrationPatternToEnum(alarm.vibrationPattern),
+      vibrationIntensity: alarm.vibrationIntensity,
+      snoozePeriod: alarm.snoozePeriod,
+      snoozeTimeout: alarm.snoozeTimeout,
+      retriggerDelay: alarm.retriggerDelay,
+      retriggerTimeout: alarm.retriggerTimeout,
+    };
+  };
+
   // Convert alarm data to form data when alarm is loaded
   useEffect(() => {
     if (alarm && !initializedRef.current) {
@@ -83,12 +153,10 @@ export default function EditAlarmPage() {
 
   const updateAlarmMutation = useMutation({
     mutationFn: async (data: AlarmFormData) => {
-      // Validate start date
       if (isNaN(data.startDate.getTime())) {
         throw new Error("Invalid start date");
       }
 
-      // Validate end date if provided
       let endDate: string | undefined;
       if (data.ends === "on" && data.endsOnDate) {
         if (isNaN(data.endsOnDate.getTime())) {
@@ -112,7 +180,6 @@ export default function EditAlarmPage() {
         endDate,
         repeat: data.repeat,
         cronExpression,
-        // BLE Protocol fields (consolidated - replaces legacy color, priority, hapticChoice)
         severityLevel: data.severityLevel,
         ledPattern: data.ledPattern,
         ledColor: data.ledColor,
@@ -127,11 +194,9 @@ export default function EditAlarmPage() {
       });
     },
     onSuccess: () => {
-      // Remove the specific alarm query from cache
       queryClient.removeQueries({
         queryKey: ["alarm", "getById", { id: alarmId }],
       });
-      // Invalidate device queries to refresh alarm lists
       void queryClient.invalidateQueries({
         queryKey: ["device", "getById", { id: deviceId }],
       });
@@ -156,11 +221,9 @@ export default function EditAlarmPage() {
       return await trpc.alarm.delete.mutate({ id: alarmId });
     },
     onSuccess: () => {
-      // Remove the specific alarm query from cache
       queryClient.removeQueries({
         queryKey: ["alarm", "getById", { id: alarmId }],
       });
-      // Invalidate device queries to refresh alarm lists
       void queryClient.invalidateQueries({
         queryKey: ["device", "getById", { id: deviceId }],
       });
@@ -168,136 +231,18 @@ export default function EditAlarmPage() {
     },
   });
 
-  // Convert alarm data to form data structure
-  const convertAlarmToFormData = (alarm: {
-    title: string;
-    description?: string | null;
-    startDate: string | Date;
-    endDate?: string | Date | null;
-    repeat: boolean;
-    // BLE Protocol fields (consolidated schema)
-    severityLevel: "CRITICAL" | "WARNING" | "INFORMATIONAL";
-    ledPattern: "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE";
-    ledColor:
-      | "RED"
-      | "GREEN"
-      | "BLUE"
-      | "YELLOW"
-      | "MAGENTA"
-      | "CYAN"
-      | "WHITE";
-    vibrationPattern: number;
-    vibrationIntensity: "LOW" | "MEDIUM" | "HIGH";
-    snoozePeriod: number;
-    snoozeTimeout: number;
-    retriggerDelay: number;
-    retriggerTimeout: number;
-  }): AlarmFormData => {
-    // Safely parse the start date with validation
-    let startDate: Date;
-    try {
-      startDate = new Date(alarm.startDate);
-      // Check if the date is valid
-      if (isNaN(startDate.getTime())) {
-        console.warn("Invalid start date received:", alarm.startDate);
-        startDate = new Date(); // Fallback to current date
-      }
-    } catch (error) {
-      console.error("Error parsing start date:", error, alarm.startDate);
-      startDate = new Date(); // Fallback to current date
-    }
-
-    // Safely parse the end date with validation
-    let endsOnDate: Date | undefined;
-    if (alarm.endDate) {
-      try {
-        endsOnDate = new Date(alarm.endDate);
-        // Check if the date is valid
-        if (isNaN(endsOnDate.getTime())) {
-          console.warn("Invalid end date received:", alarm.endDate);
-          endsOnDate = undefined;
-        }
-      } catch (error) {
-        console.error("Error parsing end date:", error, alarm.endDate);
-        endsOnDate = undefined;
-      }
-    }
-
-    return {
-      title: alarm.title,
-      description: alarm.description ?? "",
-      startDate,
-      repeat: alarm.repeat,
-      repeatType: "days", // Default - could be parsed from cron if needed
-      repeatEvery: 1,
-      daysOfWeek: [],
-      ends: endsOnDate ? "on" : "never",
-      endsOnDate,
-      endsAfter: undefined,
-      // BLE Protocol fields (consolidated schema)
-      severityLevel: alarm.severityLevel,
-      ledPattern: alarm.ledPattern,
-      ledColor: alarm.ledColor,
-      vibrationPattern: mapLegacyVibrationPatternToEnum(alarm.vibrationPattern),
-      vibrationIntensity: alarm.vibrationIntensity,
-      snoozePeriod: alarm.snoozePeriod,
-      snoozeTimeout: alarm.snoozeTimeout,
-      retriggerDelay: alarm.retriggerDelay,
-      retriggerTimeout: alarm.retriggerTimeout,
-    };
-  };
-
-  // Generate cron expression from form data
-  const generateCronExpression = (formData: AlarmFormData): string => {
-    const { startDate, repeat, repeatType, repeatEvery, daysOfWeek } = formData;
-    const minute = startDate.getMinutes();
-    const hour = startDate.getHours();
-    const day = startDate.getDate();
-    const month = startDate.getMonth() + 1;
-
-    if (!repeat) {
-      // One-time alarm
-      return `${minute} ${hour} ${day} ${month} *`;
-    }
-
-    switch (repeatType) {
-      case "minutes":
-        return `*/${repeatEvery} * * * *`;
-      case "hours":
-        return `${minute} */${repeatEvery} * * *`;
-      case "days":
-        return `${minute} ${hour} */${repeatEvery} * *`;
-      case "weeks": {
-        const days = daysOfWeek.length > 0 ? daysOfWeek.join(",") : "*";
-        return `${minute} ${hour} * * ${days}`;
-      }
-      default:
-        return `${minute} ${hour} ${day} ${month} *`;
-    }
-  };
-
   if (!deviceId || !alarmId) {
     Alert.alert("Error", "Device ID and Alarm ID are required");
     router.back();
     return null;
   }
 
-  const updateFormData = (updates: Partial<AlarmFormData>) => {
-    setFormData((prev: AlarmFormData | null) =>
-      prev ? { ...prev, ...updates } : null,
-    );
-  };
-
-  const handleSave = () => {
-    if (!formData) return;
-
-    // Validate required fields
-    if (!formData.title.trim()) {
+  const handleSave = (data: AlarmFormData) => {
+    if (!data.title.trim()) {
       Alert.alert("Error", "Alarm title is required");
       return;
     }
-
-    updateAlarmMutation.mutate(formData);
+    updateAlarmMutation.mutate(data);
   };
 
   const handleDeleteAlarm = () => {
@@ -321,17 +266,71 @@ export default function EditAlarmPage() {
   if (isLoading || !formData) {
     return (
       <SafeAreaView style={containers.safeArea}>
-        <Header title="Edit Alarm" showBackButton={true} />
-        <View style={containers.contentCentered}>
-          <ActivityIndicator size="large" color={colors.primary[500]} />
-          <Text
-            style={[
-              typography.body,
-              { marginTop: spacing[3], color: colors.gray[500] },
-            ]}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: spacing[6],
+            paddingVertical: spacing[4],
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border.light,
+          }}
+        >
+          <Pressable
+            onPress={() => router.back()}
+            style={{ padding: spacing[2] }}
           >
-            Loading alarm...
-          </Text>
+            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+          </Pressable>
+          <View style={{ flex: 1, alignItems: "center" }}>
+            <Text style={[typography.h3, { color: colors.text.primary }]}>
+              Edit Alarm
+            </Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={containers.contentCentered}>
+          <View
+            style={{
+              alignItems: "center",
+              justifyContent: "center",
+              paddingVertical: spacing[8],
+            }}
+          >
+            <View
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                backgroundColor: colors.primary[100],
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: spacing[4],
+              }}
+            >
+              <ActivityIndicator size="large" color={colors.primary[500]} />
+            </View>
+            <Text
+              style={[
+                typography.h3,
+                {
+                  color: colors.text.primary,
+                  marginBottom: spacing[2],
+                  textAlign: "center",
+                },
+              ]}
+            >
+              Loading Alarm
+            </Text>
+            <Text
+              style={[
+                typography.body,
+                { color: colors.text.secondary, textAlign: "center" },
+              ]}
+            >
+              Please wait...
+            </Text>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -340,7 +339,29 @@ export default function EditAlarmPage() {
   if (error || !alarm) {
     return (
       <SafeAreaView style={containers.safeArea}>
-        <Header title="Edit Alarm" showBackButton={true} />
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: spacing[6],
+            paddingVertical: spacing[4],
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border.light,
+          }}
+        >
+          <Pressable
+            onPress={() => router.back()}
+            style={{ padding: spacing[2] }}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+          </Pressable>
+          <View style={{ flex: 1, alignItems: "center" }}>
+            <Text style={[typography.h3, { color: colors.text.primary }]}>
+              Edit Alarm
+            </Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
         <View
           style={[
             containers.contentCentered,
@@ -374,7 +395,6 @@ export default function EditAlarmPage() {
 
   return (
     <SafeAreaView style={containers.safeArea}>
-      {/* Custom header with delete button */}
       <View
         style={{
           flexDirection: "row",
@@ -386,7 +406,6 @@ export default function EditAlarmPage() {
           backgroundColor: colors.background.primary,
         }}
       >
-        {/* Left side - Back button */}
         <Pressable
           onPress={() => router.back()}
           style={({ pressed }) => ({
@@ -398,7 +417,6 @@ export default function EditAlarmPage() {
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </Pressable>
 
-        {/* Center - Title */}
         <View style={{ flex: 1, alignItems: "center" }}>
           <Text
             style={[
@@ -413,7 +431,6 @@ export default function EditAlarmPage() {
           </Text>
         </View>
 
-        {/* Right side - Delete button */}
         <Pressable
           onPress={handleDeleteAlarm}
           style={({ pressed }) => ({
@@ -426,317 +443,13 @@ export default function EditAlarmPage() {
         </Pressable>
       </View>
 
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{
-          padding: spacing[6],
-          paddingBottom: spacing[20],
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Basic Information Section */}
-        <BasicInfoSection
-          formData={formData}
-          onUpdateFormData={updateFormData}
-          showValidationErrors={showValidationErrors}
-        />
-
-        {/* Schedule Section */}
-        <ScheduleSection
-          formData={formData}
-          onUpdateFormData={updateFormData}
-          showStartDatePicker={showStartDatePicker}
-          onToggleStartDatePicker={() =>
-            setShowStartDatePicker(!showStartDatePicker)
-          }
-          showStartTimePicker={showStartTimePicker}
-          onToggleStartTimePicker={() =>
-            setShowStartTimePicker(!showStartTimePicker)
-          }
-          showEndDatePicker={showEndDatePicker}
-          onToggleEndDatePicker={() => setShowEndDatePicker(!showEndDatePicker)}
-        />
-
-        {/* Advanced Settings Section */}
-        <AdvancedSection
-          formData={formData}
-          onUpdateFormData={updateFormData}
-        />
-      </ScrollView>
-
-      {/* Fixed Save Button */}
-      <View
-        style={{
-          padding: spacing[6],
-          paddingTop: spacing[4],
-          borderTopWidth: 1,
-          borderTopColor: colors.border.light,
-          backgroundColor: colors.background.primary,
-        }}
-      >
-        <Pressable
-          style={[
-            buttons.base,
-            buttons.primary,
-            updateAlarmMutation.isPending && { opacity: 0.5 },
-            !isFormValid &&
-              showValidationErrors && {
-                backgroundColor: colors.error[500],
-                borderColor: colors.error[600],
-              },
-          ]}
-          onPress={() => {
-            if (!isFormValid) {
-              setShowValidationErrors(true);
-              Alert.alert(
-                "Missing Required Fields",
-                "Please fill in all required fields before updating the alarm.",
-                [{ text: "OK" }],
-              );
-              return;
-            }
-            handleSave();
-          }}
-          disabled={updateAlarmMutation.isPending}
-        >
-          <Text style={[buttonText.primary]}>
-            {updateAlarmMutation.isPending
-              ? "Updating..."
-              : !isFormValid && showValidationErrors
-                ? "Missing Required Fields"
-                : "Update Alarm"}
-          </Text>
-        </Pressable>
-      </View>
-
-      {/* Date/Time Pickers */}
-      {showStartDatePicker && formData && (
-        <View
-          style={
-            Platform.OS === "ios"
-              ? {
-                  backgroundColor: colors.background.secondary,
-                  borderRadius: 12,
-                  marginVertical: 10,
-                  padding: 10,
-                }
-              : undefined
-          }
-        >
-          <DateTimePicker
-            value={formData.startDate}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(event, selectedDate) => {
-              if (Platform.OS === "android") {
-                setShowStartDatePicker(false);
-                if (selectedDate) {
-                  const newDate = new Date(selectedDate);
-                  newDate.setHours(formData.startDate.getHours());
-                  newDate.setMinutes(formData.startDate.getMinutes());
-                  updateFormData({ startDate: newDate });
-                }
-              } else if (selectedDate) {
-                const newDate = new Date(selectedDate);
-                newDate.setHours(formData.startDate.getHours());
-                newDate.setMinutes(formData.startDate.getMinutes());
-                updateFormData({ startDate: newDate });
-              }
-            }}
-            style={
-              Platform.OS === "ios"
-                ? {
-                    backgroundColor: colors.background.secondary,
-                    height: 200,
-                  }
-                : undefined
-            }
-            textColor={colors.text.primary}
-          />
-          {Platform.OS === "ios" && (
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "flex-end",
-                paddingTop: 10,
-                borderTopWidth: 1,
-                borderTopColor: colors.border.light,
-                marginTop: 10,
-              }}
-            >
-              <TouchableOpacity
-                onPress={() => setShowStartDatePicker(false)}
-                style={{
-                  paddingHorizontal: 20,
-                  paddingVertical: 8,
-                  backgroundColor: colors.primary[500],
-                  borderRadius: 8,
-                }}
-              >
-                <Text
-                  style={{
-                    color: colors.text.inverse,
-                    fontSize: 16,
-                    fontWeight: "600",
-                  }}
-                >
-                  Done
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      )}
-
-      {showStartTimePicker && formData && (
-        <View
-          style={
-            Platform.OS === "ios"
-              ? {
-                  backgroundColor: colors.background.secondary,
-                  borderRadius: 12,
-                  marginVertical: 10,
-                  padding: 10,
-                }
-              : undefined
-          }
-        >
-          <DateTimePicker
-            value={formData.startDate}
-            mode="time"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(event, selectedDate) => {
-              if (Platform.OS === "android") {
-                setShowStartTimePicker(false);
-                if (selectedDate) {
-                  const newDate = new Date(formData.startDate);
-                  newDate.setHours(selectedDate.getHours());
-                  newDate.setMinutes(selectedDate.getMinutes());
-                  updateFormData({ startDate: newDate });
-                }
-              } else if (selectedDate) {
-                const newDate = new Date(formData.startDate);
-                newDate.setHours(selectedDate.getHours());
-                newDate.setMinutes(selectedDate.getMinutes());
-                updateFormData({ startDate: newDate });
-              }
-            }}
-            style={
-              Platform.OS === "ios"
-                ? {
-                    backgroundColor: colors.background.secondary,
-                    height: 200,
-                  }
-                : undefined
-            }
-            textColor={colors.text.primary}
-          />
-          {Platform.OS === "ios" && (
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "flex-end",
-                paddingTop: 10,
-                borderTopWidth: 1,
-                borderTopColor: colors.border.light,
-                marginTop: 10,
-              }}
-            >
-              <TouchableOpacity
-                onPress={() => setShowStartTimePicker(false)}
-                style={{
-                  paddingHorizontal: 20,
-                  paddingVertical: 8,
-                  backgroundColor: colors.primary[500],
-                  borderRadius: 8,
-                }}
-              >
-                <Text
-                  style={{
-                    color: colors.text.inverse,
-                    fontSize: 16,
-                    fontWeight: "600",
-                  }}
-                >
-                  Done
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      )}
-
-      {showEndDatePicker && formData && (
-        <View
-          style={
-            Platform.OS === "ios"
-              ? {
-                  backgroundColor: colors.background.secondary,
-                  borderRadius: 12,
-                  marginVertical: 10,
-                  padding: 10,
-                }
-              : undefined
-          }
-        >
-          <DateTimePicker
-            value={formData.endsOnDate ?? new Date()}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(event, selectedDate) => {
-              if (Platform.OS === "android") {
-                setShowEndDatePicker(false);
-                if (selectedDate) {
-                  updateFormData({ endsOnDate: selectedDate });
-                }
-              } else if (selectedDate) {
-                updateFormData({ endsOnDate: selectedDate });
-              }
-            }}
-            style={
-              Platform.OS === "ios"
-                ? {
-                    backgroundColor: colors.background.secondary,
-                    height: 200,
-                  }
-                : undefined
-            }
-            textColor={colors.text.primary}
-          />
-          {Platform.OS === "ios" && (
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "flex-end",
-                paddingTop: 10,
-                borderTopWidth: 1,
-                borderTopColor: colors.border.light,
-                marginTop: 10,
-              }}
-            >
-              <TouchableOpacity
-                onPress={() => setShowEndDatePicker(false)}
-                style={{
-                  paddingHorizontal: 20,
-                  paddingVertical: 8,
-                  backgroundColor: colors.primary[500],
-                  borderRadius: 8,
-                }}
-              >
-                <Text
-                  style={{
-                    color: colors.text.inverse,
-                    fontSize: 16,
-                    fontWeight: "600",
-                  }}
-                >
-                  Done
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      )}
+      <AlarmForm
+        initialData={formData}
+        onSave={handleSave}
+        onCancel={() => router.back()}
+        isLoading={updateAlarmMutation.isPending}
+        saveButtonText="Update Alarm"
+      />
     </SafeAreaView>
   );
 }

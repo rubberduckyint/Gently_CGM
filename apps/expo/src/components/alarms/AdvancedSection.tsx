@@ -148,15 +148,49 @@ export function AdvancedSection({
   const canSnooze = formData.severityLevel !== "CRITICAL";
 
   return (
-    <View style={[cards.base, { marginBottom: spacing[6] }]}>
-      <Text style={[typography.h4, { marginBottom: spacing[4] }]}>
-        Bracelet Settings
+    <View style={[cards.base, { marginBottom: spacing[4] }]}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: spacing[2],
+          marginBottom: spacing[2],
+        }}
+      >
+        <Ionicons name="watch" size={20} color={colors.primary[500]} />
+        <Text style={[typography.h4]}>Bracelet Settings</Text>
+      </View>
+      <Text
+        style={[
+          typography.caption,
+          {
+            color: colors.text.secondary,
+            marginBottom: spacing[5],
+            lineHeight: 18,
+          },
+        ]}
+      >
+        Configure how your bracelet will alert you - from the priority level to
+        the light and vibration patterns.
       </Text>
 
       {/* Severity Level */}
-      <View style={{ marginBottom: spacing[6] }}>
-        <Text style={[typography.label, { marginBottom: spacing[3] }]}>
-          Severity Level
+      <View style={{ marginBottom: spacing[4] }}>
+        <Text style={[typography.label, { marginBottom: spacing[2] }]}>
+          Priority Level *
+        </Text>
+        <Text
+          style={[
+            typography.caption,
+            {
+              color: colors.text.secondary,
+              marginBottom: spacing[3],
+              lineHeight: 18,
+            },
+          ]}
+        >
+          Choose how important this alarm is. Higher priority alarms have more
+          restrictions to ensure you don't miss them.
         </Text>
         <View style={{ gap: spacing[3] }}>
           {SEVERITY_OPTIONS.map((option) => (
@@ -215,9 +249,22 @@ export function AdvancedSection({
 
       {/* Snooze Settings - Only show if applicable */}
       {canSnooze && (
-        <View style={{ marginBottom: spacing[6] }}>
-          <Text style={[typography.label, { marginBottom: spacing[3] }]}>
+        <View style={{ marginBottom: spacing[4] }}>
+          <Text style={[typography.label, { marginBottom: spacing[2] }]}>
             Snooze Settings
+          </Text>
+          <Text
+            style={[
+              typography.caption,
+              {
+                color: colors.text.secondary,
+                marginBottom: spacing[3],
+                lineHeight: 18,
+              },
+            ]}
+          >
+            Control how the snooze feature works when you need a few more
+            minutes.
           </Text>
           <View
             style={{
@@ -242,7 +289,8 @@ export function AdvancedSection({
                   { color: colors.text.secondary, marginBottom: spacing[3] },
                 ]}
               >
-                How long the alarm stays quiet after snoozing
+                How long the alarm waits before alerting you again after you
+                press snooze (1-60 minutes)
               </Text>
               <TextInput
                 style={[inputs.base]}
@@ -273,7 +321,8 @@ export function AdvancedSection({
                   { color: colors.text.secondary, marginBottom: spacing[3] },
                 ]}
               >
-                How long snooze is available after the alarm triggers
+                How long you have to press snooze after the alarm starts (1-120
+                minutes)
               </Text>
               <TextInput
                 style={[inputs.base]}
@@ -293,10 +342,233 @@ export function AdvancedSection({
         </View>
       )}
 
+      {/* Retrigger Settings */}
+      <View style={{ marginBottom: spacing[4] }}>
+        <Text style={[typography.label, { marginBottom: spacing[2] }]}>
+          Retrigger Settings
+        </Text>
+        <Text
+          style={[
+            typography.caption,
+            {
+              color: colors.text.secondary,
+              marginBottom: spacing[3],
+              lineHeight: 18,
+            },
+          ]}
+        >
+          Set if and when the alarm should alert you again after being dismissed
+          or acknowledged.
+        </Text>
+        <View
+          style={{
+            backgroundColor: colors.background.secondary,
+            padding: spacing[4],
+            borderRadius: 12,
+            gap: spacing[4],
+          }}
+        >
+          <View>
+            <Text
+              style={[
+                typography.body,
+                { marginBottom: spacing[2], fontWeight: "600" },
+              ]}
+            >
+              Retrigger Delay: {formData.retriggerDelay} minutes
+            </Text>
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.text.secondary, marginBottom: spacing[3] },
+              ]}
+            >
+              How long to wait before the alarm can alert you again (0 to
+              disable)
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: spacing[3],
+              }}
+            >
+              <Pressable
+                onPress={() =>
+                  onUpdateFormData({
+                    retriggerDelay: Math.max(0, formData.retriggerDelay - 1),
+                  })
+                }
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 8,
+                  backgroundColor: colors.background.primary,
+                  borderWidth: 1,
+                  borderColor: colors.border.medium,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="remove" size={24} color={colors.text.primary} />
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                <View
+                  style={{
+                    height: 8,
+                    backgroundColor: colors.border.light,
+                    borderRadius: 4,
+                    overflow: "hidden",
+                  }}
+                >
+                  <View
+                    style={{
+                      height: 8,
+                      width: `${(formData.retriggerDelay / 60) * 100}%`,
+                      backgroundColor: colors.primary[500],
+                      borderRadius: 4,
+                    }}
+                  />
+                </View>
+              </View>
+              <Pressable
+                onPress={() =>
+                  onUpdateFormData({
+                    retriggerDelay: Math.min(60, formData.retriggerDelay + 1),
+                  })
+                }
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 8,
+                  backgroundColor: colors.background.primary,
+                  borderWidth: 1,
+                  borderColor: colors.border.medium,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="add" size={24} color={colors.text.primary} />
+              </Pressable>
+            </View>
+          </View>
+          <View>
+            <Text
+              style={[
+                typography.body,
+                { marginBottom: spacing[2], fontWeight: "600" },
+              ]}
+            >
+              Max Snoozes:{" "}
+              {formData.retriggerDelay > 0 && formData.snoozePeriod > 0
+                ? Math.floor(
+                    formData.retriggerTimeout / formData.retriggerDelay,
+                  )
+                : 0}
+            </Text>
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.text.secondary, marginBottom: spacing[3] },
+              ]}
+            >
+              {formData.retriggerDelay > 0
+                ? `How many times can you snooze? (${formData.retriggerTimeout} min ÷ ${formData.retriggerDelay} min delay = ${Math.floor(formData.retriggerTimeout / formData.retriggerDelay)} snoozes)`
+                : "Set retrigger delay above 0 to enable snoozing"}
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: spacing[3],
+              }}
+            >
+              <Pressable
+                onPress={() =>
+                  onUpdateFormData({
+                    retriggerTimeout: Math.max(
+                      0,
+                      formData.retriggerTimeout -
+                        (formData.retriggerDelay || 1),
+                    ),
+                  })
+                }
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 8,
+                  backgroundColor: colors.background.primary,
+                  borderWidth: 1,
+                  borderColor: colors.border.medium,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="remove" size={24} color={colors.text.primary} />
+              </Pressable>
+              <View style={{ flex: 1 }}>
+                <View
+                  style={{
+                    height: 8,
+                    backgroundColor: colors.border.light,
+                    borderRadius: 4,
+                    overflow: "hidden",
+                  }}
+                >
+                  <View
+                    style={{
+                      height: 8,
+                      width: `${(formData.retriggerTimeout / 120) * 100}%`,
+                      backgroundColor: colors.primary[500],
+                      borderRadius: 4,
+                    }}
+                  />
+                </View>
+              </View>
+              <Pressable
+                onPress={() =>
+                  onUpdateFormData({
+                    retriggerTimeout: Math.min(
+                      120,
+                      formData.retriggerTimeout +
+                        (formData.retriggerDelay || 1),
+                    ),
+                  })
+                }
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 8,
+                  backgroundColor: colors.background.primary,
+                  borderWidth: 1,
+                  borderColor: colors.border.medium,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="add" size={24} color={colors.text.primary} />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </View>
+
       {/* LED Pattern */}
-      <View style={{ marginBottom: spacing[6] }}>
-        <Text style={[typography.label, { marginBottom: spacing[3] }]}>
-          LED Pattern
+      <View style={{ marginBottom: spacing[4] }}>
+        <Text style={[typography.label, { marginBottom: spacing[2] }]}>
+          Light Pattern
+        </Text>
+        <Text
+          style={[
+            typography.caption,
+            {
+              color: colors.text.secondary,
+              marginBottom: spacing[3],
+              lineHeight: 18,
+            },
+          ]}
+        >
+          Choose how the bracelet's LED will light up when the alarm triggers.
         </Text>
         <View style={{ gap: spacing[2] }}>
           {LED_PATTERNS.map((pattern) => (
@@ -361,15 +633,14 @@ export function AdvancedSection({
       </View>
 
       {/* LED Color */}
-      <View style={{ marginBottom: spacing[6] }}>
+      <View style={{ marginBottom: spacing[4] }}>
         <Text style={[typography.label, { marginBottom: spacing[3] }]}>
-          LED Color
+          Light Color
         </Text>
         <View
           style={{
             flexDirection: "row",
-            flexWrap: "wrap",
-            gap: spacing[3],
+            gap: spacing[2],
           }}
         >
           {LED_COLORS.map((colorOption) => (
@@ -378,58 +649,34 @@ export function AdvancedSection({
               onPress={() => onUpdateFormData({ ledColor: colorOption.key })}
               style={{
                 alignItems: "center",
-                paddingVertical: spacing[2],
-                paddingHorizontal: spacing[3],
-                borderRadius: 8,
+                justifyContent: "center",
+                flex: 1,
+                aspectRatio: 1,
+                maxWidth: 50,
+                borderRadius: 25,
                 borderWidth: 2,
                 borderColor:
                   formData.ledColor === colorOption.key
                     ? colors.primary[500]
                     : colors.border.light,
-                backgroundColor:
-                  formData.ledColor === colorOption.key
-                    ? colors.primary[50]
-                    : colors.background.secondary,
-                minWidth: 60,
+                backgroundColor: colorOption.color,
               }}
-            >
-              <View
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 10,
-                  backgroundColor: colorOption.color,
-                  marginBottom: spacing[1],
-                  borderWidth: 1,
-                  borderColor: colors.border.light,
-                }}
-              />
-              <Text
-                style={[
-                  typography.caption,
-                  {
-                    color:
-                      formData.ledColor === colorOption.key
-                        ? colors.primary[500]
-                        : colors.text.secondary,
-                    fontWeight:
-                      formData.ledColor === colorOption.key ? "600" : "400",
-                  },
-                ]}
-              >
-                {colorOption.label}
-              </Text>
-            </Pressable>
+            />
           ))}
         </View>
       </View>
 
       {/* Vibration Settings */}
-      <View style={{ marginBottom: spacing[6] }}>
+      <View style={{ marginBottom: spacing[4] }}>
         <Text style={[typography.label, { marginBottom: spacing[3] }]}>
-          Vibration Intensity
+          Vibration Strength
         </Text>
-        <View style={{ gap: spacing[2] }}>
+        <View
+          style={{
+            flexDirection: "row",
+            gap: spacing[2],
+          }}
+        >
           {VIBRATION_INTENSITIES.map((intensity) => (
             <Pressable
               key={intensity.key}
@@ -437,20 +684,23 @@ export function AdvancedSection({
                 onUpdateFormData({ vibrationIntensity: intensity.key })
               }
               style={{
+                flex: 1,
                 flexDirection: "row",
                 alignItems: "center",
+                justifyContent: "center",
                 paddingVertical: spacing[3],
-                paddingHorizontal: spacing[4],
+                paddingHorizontal: spacing[3],
                 borderRadius: 8,
                 backgroundColor:
                   formData.vibrationIntensity === intensity.key
-                    ? colors.primary[50]
-                    : "transparent",
-                borderWidth: 1,
+                    ? colors.primary[500]
+                    : colors.background.secondary,
+                borderWidth: 2,
                 borderColor:
                   formData.vibrationIntensity === intensity.key
                     ? colors.primary[500]
                     : colors.border.light,
+                gap: spacing[2],
               }}
             >
               <Ionicons
@@ -458,47 +708,48 @@ export function AdvancedSection({
                 size={20}
                 color={
                   formData.vibrationIntensity === intensity.key
-                    ? colors.primary[500]
-                    : colors.text.secondary
+                    ? colors.background.primary
+                    : colors.text.primary
                 }
-                style={{ marginRight: spacing[3] }}
               />
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[
-                    typography.body,
-                    {
-                      color:
-                        formData.vibrationIntensity === intensity.key
-                          ? colors.primary[500]
-                          : colors.text.primary,
-                      fontWeight:
-                        formData.vibrationIntensity === intensity.key
-                          ? "600"
-                          : "400",
-                    },
-                  ]}
-                >
-                  {intensity.label}
-                </Text>
-                <Text
-                  style={[
-                    typography.caption,
-                    { color: colors.text.secondary, marginTop: 2 },
-                  ]}
-                >
-                  {intensity.description}
-                </Text>
-              </View>
+              <Text
+                style={[
+                  typography.body,
+                  {
+                    color:
+                      formData.vibrationIntensity === intensity.key
+                        ? colors.background.primary
+                        : colors.text.primary,
+                    fontWeight:
+                      formData.vibrationIntensity === intensity.key
+                        ? "600"
+                        : "400",
+                  },
+                ]}
+              >
+                {intensity.label}
+              </Text>
             </Pressable>
           ))}
         </View>
       </View>
 
       {/* Vibration Pattern */}
-      <View style={{ marginBottom: spacing[6] }}>
-        <Text style={[typography.label, { marginBottom: spacing[3] }]}>
+      <View style={{ marginBottom: spacing[4] }}>
+        <Text style={[typography.label, { marginBottom: spacing[2] }]}>
           Vibration Pattern
+        </Text>
+        <Text
+          style={[
+            typography.caption,
+            {
+              color: colors.text.secondary,
+              marginBottom: spacing[3],
+              lineHeight: 18,
+            },
+          ]}
+        >
+          Choose the rhythm of the vibration pattern.
         </Text>
         <View
           style={{
@@ -507,22 +758,6 @@ export function AdvancedSection({
             borderRadius: 12,
           }}
         >
-          <Text
-            style={[
-              typography.body,
-              { marginBottom: spacing[2], fontWeight: "600" },
-            ]}
-          >
-            Pattern: {formData.vibrationPattern}
-          </Text>
-          <Text
-            style={[
-              typography.caption,
-              { color: colors.text.secondary, marginBottom: spacing[3] },
-            ]}
-          >
-            Choose from the available vibration patterns below.
-          </Text>
           <View style={{ gap: spacing[3] }}>
             {VIBRATION_PATTERNS.map((pattern) => (
               <TouchableOpacity

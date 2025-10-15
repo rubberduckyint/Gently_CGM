@@ -23,12 +23,12 @@ export const containers = {
 
   content: {
     flex: 1,
-    paddingHorizontal: spacing[6], // 24px
+    paddingHorizontal: spacing[2],
   } as ViewStyle,
 
   contentCentered: {
     flex: 1,
-    paddingHorizontal: spacing[6],
+    paddingHorizontal: spacing[3],
     justifyContent: "center",
   } as ViewStyle,
 

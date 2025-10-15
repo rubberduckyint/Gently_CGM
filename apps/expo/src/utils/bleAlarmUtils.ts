@@ -120,28 +120,29 @@ export function mapLedPatternToNumber(
 
 /**
  * Map alarm form LED color to BLE LED color number
+ * Per BLE Protocol: 0=OFF, 1=Blue, 2=Green, 3=Cyan, 4=Red, 5=Yellow, 6=Magenta, 7=White
  */
 export function mapLedColorToNumber(
   ledColor: AlarmFormData["ledColor"],
 ): number {
   // Convert LED color enum to BLE LED color number
   switch (ledColor) {
-    case "RED":
-      return 1; // Red
+    case "BLUE":
+      return 1; // Blue
     case "GREEN":
       return 2; // Green
-    case "BLUE":
-      return 3; // Blue
-    case "YELLOW":
-      return 4; // Yellow
-    case "MAGENTA":
-      return 5; // Magenta
     case "CYAN":
-      return 6; // Cyan
+      return 3; // Cyan
+    case "RED":
+      return 4; // Red
+    case "YELLOW":
+      return 5; // Yellow
+    case "MAGENTA":
+      return 6; // Magenta
     case "WHITE":
       return 7; // White
     default:
-      return 3; // Default to Blue
+      return 1; // Default to Blue
   }
 }
 

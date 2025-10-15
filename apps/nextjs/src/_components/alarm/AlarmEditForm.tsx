@@ -181,8 +181,8 @@ const alarmFormSchema = z
     vibrationIntensity: z.enum(["LOW", "MEDIUM", "HIGH"]),
     snoozePeriod: z.number().min(1).max(60),
     snoozeTimeout: z.number().min(1).max(120),
-    retriggerDelay: z.number().min(1).max(60),
-    retriggerTimeout: z.number().min(1).max(120),
+    retriggerDelay: z.number().min(0).max(60), // 0 = disabled
+    retriggerTimeout: z.number().min(0).max(120), // 0 = disabled
   })
   .superRefine((data, ctx) => {
     // Only validate ends fields if repeat is true

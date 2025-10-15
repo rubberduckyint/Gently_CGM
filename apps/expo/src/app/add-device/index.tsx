@@ -1,12 +1,10 @@
 import type { Peripheral } from "react-native-ble-manager";
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   ScrollView,
-  Share,
   Text,
   View,
 } from "react-native";
@@ -49,13 +47,6 @@ interface PairingSuccess {
   serialNumber: string;
 }
 
-interface DebugLog {
-  timestamp: string;
-  level: "info" | "warning" | "error" | "success";
-  message: string;
-  details?: Record<string, unknown>;
-}
-
 const AddDeviceScreen = () => {
   // Use BLE context
   const {
@@ -65,7 +56,7 @@ const AddDeviceScreen = () => {
   } = useBLE();
 
   // Responsive design hook
-  const { getIconSize, getSpacing, isLargeText } = useResponsive();
+  const { getIconSize, getSpacing } = useResponsive();
 
   const [isScanning, setIsScanning] = useState(false);
   const [isConnecting, setIsConnecting] = useState<string | null>(null);
@@ -79,27 +70,6 @@ const AddDeviceScreen = () => {
   const [discoveredDevices, setDiscoveredDevices] = useState(
     new Map<Peripheral["id"], DiscoveredGentlyDevice>(),
   );
-  const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
-  const [showDebugLogs, setShowDebugLogs] = useState(false);
-
-  // Debug logging functions
-  const addDebugLog = useCallback(
-    (level: DebugLog["level"], message: string, details?: unknown) => {
-      const log: DebugLog = {
-        timestamp: new Date().toLocaleTimeString(),
-        level,
-        message,
-        details: details as Record<string, unknown>,
-      };
-      setDebugLogs((prev) => [...prev, log]);
-      console.log(`[${level.toUpperCase()}] ${message}`, details ?? "");
-    },
-    [],
-  );
-
-  const clearDebugLogs = useCallback(() => {
-    setDebugLogs([]);
-  }, []);
 
   const startScan = async () => {
     if (isScanning) return;
@@ -199,23 +169,14 @@ const AddDeviceScreen = () => {
     setIsConnecting(peripheral.id);
 
     try {
-      clearDebugLogs();
-      addDebugLog(
-        "info",
-        `Starting pairing process for device: ${peripheral.id}`,
-        {
-          deviceName: peripheral.name,
-          serialNumber: advertisementData.serialNumber,
-          batteryLevel: advertisementData.batteryLevel,
-        },
-      );
+      // Start with connection step
+      setPairingStatus({
+        step: "Connecting to device...",
+        progress: 10,
+        isComplete: false,
+      });
 
-      // Use BLE context's complete pairing process (handles connection, key generation, validation, and storage)
-      addDebugLog(
-        "info",
-        "Using BLE context for complete pairing process with 20s timeout + 3 retries",
-      );
-
+      // Use BLE context's complete pairing process
       await connectToDeviceFromContext(
         advertisementData.serialNumber,
         (progress) => {
@@ -225,11 +186,6 @@ const AddDeviceScreen = () => {
             step: progress.message,
             progress: mappedProgress,
             isComplete: false,
-          });
-          addDebugLog("info", progress.message, {
-            step: progress.step,
-            progress: progress.progress,
-            deviceId: peripheral.id,
           });
         },
         {
@@ -241,63 +197,20 @@ const AddDeviceScreen = () => {
         },
       );
 
-      addDebugLog(
-        "success",
-        "BLE pairing completed via context - device is fully paired and ready!",
-      );
-
-      // Create device in database (the only step needed after BLE context handles pairing)
+      // Create device in database
       setPairingStatus({
         step: "Registering device...",
         progress: 90,
         isComplete: false,
       });
-      addDebugLog("info", "Creating device record in database");
 
-      // Create a basic device info for database since we don't need to query it again
       const newDevice = await trpc.device.create.mutate({
         title: `Gently ${advertisementData.serialNumber.slice(-4)}`,
         description: `Gently Bracelet (${advertisementData.serialNumber})`,
         serialNumber: advertisementData.serialNumber,
         batteryLevel: advertisementData.batteryLevel,
-        firmwareVersion: "1.0.0", // Default version since we can query this later if needed
+        firmwareVersion: "1.0.0",
       });
-      addDebugLog("success", "Device created in database", {
-        deviceId: newDevice?.id,
-        title: newDevice?.title,
-      });
-
-      // Set device time (optional - BLE context may have already handled this)
-      setPairingStatus({
-        step: "Synchronizing device time...",
-        progress: 95,
-        isComplete: false,
-      });
-      addDebugLog(
-        "info",
-        "Time synchronization will be handled by BLE context",
-      );
-
-      // Note: The BLE context's connectToDevice method should handle time synchronization
-      // as part of the complete pairing process. If additional time sync is needed,
-      // it can be done later using the BLE context's sendBLECommand method.
-      addDebugLog("info", "Device time synchronization completed");
-
-      // Enable notifications and confirm they're working
-      setPairingStatus({
-        step: "Enabling notifications...",
-        progress: 98,
-        isComplete: false,
-      });
-      addDebugLog("info", "BLE notifications enabled during pairing process");
-      addDebugLog(
-        "info",
-        "Device will now send battery, event, and time notifications",
-      );
-      addDebugLog(
-        "info",
-        "Check console logs for incoming notifications with detailed parsing",
-      );
 
       // Finalize pairing
       setPairingStatus({
@@ -305,13 +218,8 @@ const AddDeviceScreen = () => {
         progress: 100,
         isComplete: true,
       });
-      addDebugLog(
-        "success",
-        "Pairing process completed successfully - notifications are now active!",
-      );
 
       // Show success message
-      addDebugLog("success", `Device paired successfully: ${newDevice?.title}`);
       if (newDevice?.id) {
         setPairingSuccess({
           deviceName: newDevice.title,
@@ -322,32 +230,12 @@ const AddDeviceScreen = () => {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      addDebugLog(
-        "error",
-        `Pairing failed for device ${peripheral.id}: ${errorMessage}`,
-        {
-          error: errorMessage,
-          deviceId: peripheral.id,
-          deviceName: peripheral.name,
-          stack: error instanceof Error ? error.stack : undefined,
-        },
-      );
 
       // Cleanup on error
       try {
-        addDebugLog("info", "Attempting cleanup after error");
         await disconnectDevice();
-        addDebugLog("info", "Cleanup completed successfully");
       } catch (cleanupError) {
-        const cleanupMessage =
-          cleanupError instanceof Error
-            ? cleanupError.message
-            : "Unknown cleanup error";
-        addDebugLog(
-          "warning",
-          `Cleanup error: ${cleanupMessage}`,
-          cleanupError,
-        );
+        console.error("Cleanup error:", cleanupError);
       }
 
       // Check if this was a connection failure specifically
@@ -360,34 +248,24 @@ const AddDeviceScreen = () => {
       if (isConnectionFailure) {
         Alert.alert(
           "Connection Failed",
-          `Unable to connect to ${peripheral.name}. ${error instanceof Error ? error.message : "Please ensure the device is in pairing mode and try scanning again."}\n\nTap 'View Debug Logs' to see detailed connection information.`,
+          `Unable to connect to ${peripheral.name}. Please ensure the device is in pairing mode by holding the button for 10 seconds until it beeps, then try again.`,
           [
-            {
-              text: "View Debug Logs",
-              onPress: () => setShowDebugLogs(true),
-            },
             {
               text: "Try Again",
               onPress: () => {
-                // Reset scan state to allow user to scan again
                 setDiscoveredDevices(new Map());
                 setHasScanned(false);
                 setIsScanning(false);
               },
             },
+            { text: "OK" },
           ],
         );
       } else {
         Alert.alert(
           "Pairing Failed",
-          `Could not pair with ${peripheral.name}. ${error instanceof Error ? error.message : "Please try again."}\n\nTap 'View Debug Logs' to see detailed connection information.`,
-          [
-            {
-              text: "View Debug Logs",
-              onPress: () => setShowDebugLogs(true),
-            },
-            { text: "OK" },
-          ],
+          `Could not pair with ${peripheral.name}. ${errorMessage}`,
+          [{ text: "OK" }],
         );
       }
     } finally {
@@ -556,7 +434,8 @@ const AddDeviceScreen = () => {
               bottom: 0,
               backgroundColor: "rgba(255, 255, 255, 0.95)",
               borderRadius: 12,
-              padding: spacing[4],
+              paddingVertical: spacing[8],
+              paddingHorizontal: spacing[4],
               justifyContent: "center",
               alignItems: "center",
             }}
@@ -585,18 +464,21 @@ const AddDeviceScreen = () => {
               <View
                 style={{
                   width: "100%",
-                  height: 4,
+                  height: 8,
                   backgroundColor: colors.gray[200],
-                  borderRadius: 2,
+                  borderRadius: 4,
                   marginBottom: spacing[2],
+                  overflow: "hidden",
                 }}
               >
                 <View
                   style={{
                     width: `${pairingStatus.progress}%`,
                     height: "100%",
-                    backgroundColor: colors.primary[500],
-                    borderRadius: 2,
+                    backgroundColor: pairingStatus.isComplete
+                      ? colors.success[500]
+                      : colors.primary[500],
+                    borderRadius: 4,
                   }}
                 />
               </View>
@@ -687,7 +569,7 @@ const AddDeviceScreen = () => {
               { color: colors.text.secondary, textAlign: "center" },
             ]}
           >
-            Make sure your Gently device is in pairing mode
+            Hold the button on your device for 10 seconds until it beeps
           </Text>
         </View>
       );
@@ -736,8 +618,8 @@ const AddDeviceScreen = () => {
               { color: colors.text.secondary, textAlign: "center" },
             ]}
           >
-            Make sure your Gently device is in pairing mode and try scanning
-            again
+            Hold the button on your device for 10 seconds until it beeps and try
+            scanning again
           </Text>
         </View>
       );
@@ -750,11 +632,10 @@ const AddDeviceScreen = () => {
   const headerIconContainerSize = getIconSize(80);
   const headerIconSize = getIconSize(40);
   const scanIconSize = getIconSize(20);
-  const debugIconSize = getIconSize(16);
 
   return (
     <SafeAreaView style={containers.safeArea}>
-      <Header title="Add Device" />
+      <Header title="Add a Gently" />
 
       <ScrollView
         style={containers.content}
@@ -810,7 +691,8 @@ const AddDeviceScreen = () => {
               },
             ]}
           >
-            Make sure your Gently device is ready to pair and within range
+            Make sure your Gently device is ready to pair and within range. Hold
+            the button for ten seconds until it beeps to enter pairing mode.
           </Text>
         </View>
 
@@ -849,36 +731,10 @@ const AddDeviceScreen = () => {
               />
             )}
             <Text style={[buttonText.primary, buttonText.large]}>
-              {isScanning ? "Scanning..." : "Scan for Devices"}
+              {isScanning ? "Scanning..." : "Scan Now"}
             </Text>
           </View>
         </Pressable>
-
-        {/* Debug Logs Button */}
-        {debugLogs.length > 0 && (
-          <Pressable
-            style={[
-              buttons.secondary,
-              {
-                marginBottom: spacing[4],
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-              },
-            ]}
-            onPress={() => setShowDebugLogs(true)}
-          >
-            <Ionicons
-              name="bug-outline"
-              size={debugIconSize}
-              color={colors.text.primary}
-              style={{ marginRight: spacing[2] }}
-            />
-            <Text style={[buttonText.secondary]}>
-              View Debug Logs ({debugLogs.length})
-            </Text>
-          </Pressable>
-        )}
 
         {/* Device List */}
         {Array.from(discoveredDevices.values()).length > 0 ? (
@@ -954,7 +810,7 @@ const AddDeviceScreen = () => {
                 },
               ]}
             >
-              Device Paired Successfully!
+              Gently Paired Successfully!
             </Text>
 
             <Text
@@ -986,297 +842,29 @@ const AddDeviceScreen = () => {
             {/* Action Buttons */}
             <View style={{ width: "100%", gap: spacing[3] }}>
               <Pressable
-                style={[buttons.primary, buttons.large]}
+                style={[
+                  buttons.primary,
+                  buttons.large,
+                  { alignItems: "center", justifyContent: "center" },
+                ]}
                 onPress={() => {
-                  // Use replace instead of push to avoid keeping the pairing page in history
-                  // This prevents stale queries from running on unmounted pages
-                  router.replace({
+                  console.log(
+                    `🔗 [Pairing] Navigating to device: ${pairingSuccess.deviceId}`,
+                  );
+                  router.push({
                     pathname: "/devices/[deviceId]",
                     params: { deviceId: pairingSuccess.deviceId },
                   });
                 }}
               >
                 <Text style={[buttonText.primary, buttonText.large]}>
-                  Go to Device
-                </Text>
-              </Pressable>
-
-              {/* Debug Logs Button */}
-              {debugLogs.length > 0 && (
-                <Pressable
-                  style={[buttons.secondary, buttons.large]}
-                  onPress={() => setShowDebugLogs(true)}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Ionicons
-                      name="bug-outline"
-                      size={16}
-                      color={colors.text.primary}
-                      style={{ marginRight: spacing[2] }}
-                    />
-                    <Text style={[buttonText.secondary, buttonText.large]}>
-                      View Debug Logs ({debugLogs.length})
-                    </Text>
-                  </View>
-                </Pressable>
-              )}
-
-              <Pressable
-                style={[buttons.secondary, buttons.large]}
-                onPress={() => {
-                  setPairingSuccess(null);
-                  setDiscoveredDevices(new Map());
-                  setHasScanned(false);
-                }}
-              >
-                <Text style={[buttonText.secondary, buttonText.large]}>
-                  Pair Another Device
+                  Go to Gently
                 </Text>
               </Pressable>
             </View>
           </View>
         </View>
       )}
-
-      {/* Debug Logs Modal */}
-      <Modal
-        visible={showDebugLogs}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowDebugLogs(false)}
-      >
-        <SafeAreaView
-          style={{ flex: 1, backgroundColor: colors.background.primary }}
-        >
-          {/* Header */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              paddingHorizontal: spacing[4],
-              paddingVertical: spacing[3],
-              borderBottomWidth: 1,
-              borderBottomColor: colors.border.light,
-            }}
-          >
-            <Text style={[typography.h3, { color: colors.text.primary }]}>
-              Debug Logs
-            </Text>
-            <View style={{ flexDirection: "row", gap: spacing[3] }}>
-              <Pressable
-                style={[
-                  buttons.secondary,
-                  {
-                    paddingHorizontal: spacing[3],
-                    paddingVertical: spacing[2],
-                  },
-                ]}
-                onPress={async () => {
-                  const logText = debugLogs
-                    .map(
-                      (log) =>
-                        `[${log.timestamp}] ${log.level.toUpperCase()}: ${log.message}${
-                          log.details
-                            ? `\nDetails: ${JSON.stringify(log.details, null, 2)}`
-                            : ""
-                        }`,
-                    )
-                    .join("\n\n");
-
-                  try {
-                    await Share.share({
-                      message: `Gently App Debug Logs\n\n${logText}`,
-                      title: "Debug Logs",
-                    });
-                  } catch {
-                    Alert.alert("Error", "Could not share debug logs");
-                  }
-                }}
-              >
-                <Text style={[buttonText.secondary]}>Share</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  buttons.secondary,
-                  {
-                    paddingHorizontal: spacing[3],
-                    paddingVertical: spacing[2],
-                  },
-                ]}
-                onPress={clearDebugLogs}
-              >
-                <Text style={[buttonText.secondary]}>Clear</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  buttons.secondary,
-                  {
-                    paddingHorizontal: spacing[3],
-                    paddingVertical: spacing[2],
-                  },
-                ]}
-                onPress={() => setShowDebugLogs(false)}
-              >
-                <Text style={[buttonText.secondary]}>Close</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Debug Logs Content */}
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ padding: spacing[4] }}
-          >
-            {debugLogs.length === 0 ? (
-              <View
-                style={{
-                  flex: 1,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  paddingVertical: spacing[8],
-                }}
-              >
-                <Ionicons
-                  name="document-text-outline"
-                  size={48}
-                  color={colors.text.tertiary}
-                  style={{ marginBottom: spacing[3] }}
-                />
-                <Text
-                  style={[
-                    typography.body,
-                    { color: colors.text.secondary, textAlign: "center" },
-                  ]}
-                >
-                  No debug logs yet.{"\n"}
-                  Try connecting to a device to see logs here.
-                </Text>
-              </View>
-            ) : (
-              <View style={{ gap: spacing[3] }}>
-                {debugLogs.map((log, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      cards.base,
-                      {
-                        padding: spacing[3],
-                        borderLeftWidth: 4,
-                        borderLeftColor:
-                          log.level === "error"
-                            ? colors.error[500]
-                            : log.level === "warning"
-                              ? colors.warning[500]
-                              : log.level === "success"
-                                ? colors.success[500]
-                                : colors.primary[500],
-                      },
-                    ]}
-                  >
-                    {/* Log Header */}
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        marginBottom: spacing[2],
-                      }}
-                    >
-                      <View
-                        style={{
-                          backgroundColor:
-                            log.level === "error"
-                              ? colors.error[100]
-                              : log.level === "warning"
-                                ? colors.warning[100]
-                                : log.level === "success"
-                                  ? colors.success[100]
-                                  : colors.primary[100],
-                          paddingHorizontal: spacing[2],
-                          paddingVertical: spacing[1],
-                          borderRadius: 8,
-                          marginRight: spacing[2],
-                        }}
-                      >
-                        <Text
-                          style={[
-                            typography.caption,
-                            {
-                              color:
-                                log.level === "error"
-                                  ? colors.error[700]
-                                  : log.level === "warning"
-                                    ? colors.warning[700]
-                                    : log.level === "success"
-                                      ? colors.success[700]
-                                      : colors.primary[700],
-                              fontWeight: "600",
-                              textTransform: "uppercase",
-                            },
-                          ]}
-                        >
-                          {log.level}
-                        </Text>
-                      </View>
-                      <Text
-                        style={[
-                          typography.caption,
-                          { color: colors.text.tertiary },
-                        ]}
-                      >
-                        {log.timestamp}
-                      </Text>
-                    </View>
-
-                    {/* Log Message */}
-                    <Text
-                      style={[
-                        typography.body,
-                        {
-                          color: colors.text.primary,
-                          marginBottom: spacing[2],
-                        },
-                      ]}
-                    >
-                      {log.message}
-                    </Text>
-
-                    {/* Log Details */}
-                    {log.details && (
-                      <View
-                        style={{
-                          backgroundColor: colors.background.secondary,
-                          padding: spacing[2],
-                          borderRadius: 8,
-                          marginTop: spacing[1],
-                        }}
-                      >
-                        <Text
-                          style={[
-                            typography.caption,
-                            {
-                              color: colors.text.secondary,
-                              fontFamily: "monospace",
-                            },
-                          ]}
-                        >
-                          {JSON.stringify(log.details, null, 2)}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                ))}
-              </View>
-            )}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 };

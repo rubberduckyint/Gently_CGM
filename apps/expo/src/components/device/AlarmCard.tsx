@@ -239,71 +239,38 @@ export function AlarmCard({ alarm, compact = false, onPress }: AlarmCardProps) {
           pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] },
         ]}
       >
+        {/* Header Row */}
         <View
           style={{
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "space-between",
+            marginBottom: spacing[2],
           }}
         >
-          <View style={{ flex: 1 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                marginBottom: spacing[1],
-              }}
-            >
-              <Ionicons
-                name={alarm.isActive ? "notifications" : "notifications-off"}
-                size={16}
-                color={
-                  alarm.isActive ? colors.primary[500] : colors.text.secondary
-                }
-                style={{ marginRight: spacing[2] }}
-              />
-              <Text
-                style={[
-                  typography.labelLarge,
-                  {
-                    color: alarm.isActive
-                      ? colors.text.primary
-                      : colors.text.secondary,
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {alarm.title}
-              </Text>
-            </View>
+          <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
+            <Ionicons
+              name={alarm.isActive ? "notifications" : "notifications-off"}
+              size={18}
+              color={
+                alarm.isActive ? colors.primary[500] : colors.text.secondary
+              }
+              style={{ marginRight: spacing[2] }}
+            />
             <Text
               style={[
-                typography.caption,
+                typography.labelLarge,
                 {
-                  color: colors.text.secondary,
-                  fontWeight: "500",
-                  lineHeight: 16,
+                  flex: 1,
+                  color: alarm.isActive
+                    ? colors.text.primary
+                    : colors.text.secondary,
                 },
               ]}
-              numberOfLines={3}
+              numberOfLines={1}
             >
-              {getDetailedScheduleDescription()}
+              {alarm.title}
             </Text>
-            {scheduleInfo.timeUntilNext && (
-              <Text
-                style={[
-                  typography.caption,
-                  {
-                    color: getAlarmStatusColor(scheduleInfo),
-                    fontWeight: "600",
-                    marginTop: spacing[1],
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {scheduleInfo.timeUntilNext}
-              </Text>
-            )}
           </View>
 
           <View
@@ -311,18 +278,80 @@ export function AlarmCard({ alarm, compact = false, onPress }: AlarmCardProps) {
               flexDirection: "row",
               alignItems: "center",
               gap: spacing[2],
+              marginLeft: spacing[2],
             }}
           >
-            <Ionicons
-              name={severityConfig.icon}
-              size={16}
-              color={severityConfig.color}
-            />
+            {/* Severity Indicator */}
             <View
               style={{
-                width: 16,
-                height: 16,
-                borderRadius: 8,
+                paddingHorizontal: spacing[2],
+                paddingVertical: spacing[1],
+                borderRadius: spacing[1],
+                backgroundColor: severityConfig.bgColor,
+              }}
+            >
+              <Text
+                style={[
+                  typography.caption,
+                  {
+                    color: severityConfig.color,
+                    fontWeight: "600",
+                    fontSize: 10,
+                  },
+                ]}
+              >
+                {alarm.severityLevel.charAt(0)}
+              </Text>
+            </View>
+            {onPress && (
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={colors.text.tertiary}
+              />
+            )}
+          </View>
+        </View>
+
+        {/* Schedule Description */}
+        <Text
+          style={[
+            typography.caption,
+            {
+              color: colors.text.secondary,
+              lineHeight: 16,
+              marginBottom: spacing[2],
+            },
+          ]}
+          numberOfLines={2}
+        >
+          {getDetailedScheduleDescription()}
+        </Text>
+
+        {/* Details Row */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing[3],
+            paddingTop: spacing[2],
+            borderTopWidth: 1,
+            borderTopColor: colors.border.light,
+          }}
+        >
+          {/* LED Color */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: spacing[1],
+            }}
+          >
+            <View
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: 6,
                 backgroundColor:
                   alarm.ledColor === "RED"
                     ? "#ff3b30"
@@ -336,26 +365,115 @@ export function AlarmCard({ alarm, compact = false, onPress }: AlarmCardProps) {
                             ? "#af52de"
                             : alarm.ledColor === "CYAN"
                               ? "#00ffff"
-                              : "#ffffff", // WHITE
+                              : "#ffffff",
                 borderWidth: 1,
                 borderColor: colors.border.light,
               }}
             />
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.text.tertiary, fontSize: 10 },
+              ]}
+            >
+              {alarm.ledPattern.replace("_", " ")}
+            </Text>
+          </View>
+
+          {/* Vibration */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: spacing[1],
+            }}
+          >
+            <Ionicons
+              name="phone-portrait"
+              size={12}
+              color={colors.text.tertiary}
+            />
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.text.tertiary, fontSize: 10 },
+              ]}
+            >
+              {alarm.vibrationIntensity.slice(0, 3)}
+            </Text>
+          </View>
+
+          {/* Snooze */}
+          {alarm.snoozePeriod > 0 && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: spacing[1],
+              }}
+            >
+              <Ionicons name="time" size={12} color={colors.text.tertiary} />
+              <Text
+                style={[
+                  typography.caption,
+                  { color: colors.text.tertiary, fontSize: 10 },
+                ]}
+              >
+                {alarm.snoozePeriod}m
+              </Text>
+            </View>
+          )}
+
+          {/* Sync Status */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: spacing[1],
+              marginLeft: "auto",
+            }}
+          >
             <Ionicons
               name={syncConfig.icon}
-              size={16}
+              size={12}
               color={syncConfig.color}
             />
-            {onPress && (
-              <Ionicons
-                name="chevron-forward"
-                size={16}
-                color={colors.text.tertiary}
-                style={{ marginLeft: spacing[1] }}
-              />
-            )}
+            <Text
+              style={[
+                typography.caption,
+                { color: syncConfig.color, fontSize: 10, fontWeight: "600" },
+              ]}
+            >
+              {syncConfig.text}
+            </Text>
           </View>
         </View>
+
+        {/* Next Occurrence */}
+        {scheduleInfo.timeUntilNext && (
+          <View
+            style={{
+              marginTop: spacing[2],
+              paddingTop: spacing[2],
+              borderTopWidth: 1,
+              borderTopColor: colors.border.light,
+            }}
+          >
+            <Text
+              style={[
+                typography.caption,
+                {
+                  color: getAlarmStatusColor(scheduleInfo),
+                  fontWeight: "600",
+                  fontSize: 11,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              ⏰ {scheduleInfo.timeUntilNext}
+            </Text>
+          </View>
+        )}
       </Pressable>
     );
   }
@@ -388,13 +506,23 @@ export function AlarmCard({ alarm, compact = false, onPress }: AlarmCardProps) {
           >
             <Ionicons
               name={alarm.isActive ? "notifications" : "notifications-off"}
-              size={20}
+              size={22}
               color={
                 alarm.isActive ? colors.primary[500] : colors.text.secondary
               }
               style={{ marginRight: spacing[2] }}
             />
-            <Text style={[typography.h6, { color: colors.text.primary }]}>
+            <Text
+              style={[
+                typography.h6,
+                {
+                  flex: 1,
+                  color: alarm.isActive
+                    ? colors.text.primary
+                    : colors.text.secondary,
+                },
+              ]}
+            >
               {alarm.title}
             </Text>
           </View>
@@ -414,36 +542,43 @@ export function AlarmCard({ alarm, compact = false, onPress }: AlarmCardProps) {
           style={{
             flexDirection: "row",
             alignItems: "center",
-            paddingHorizontal: spacing[3],
-            paddingVertical: spacing[2],
-            borderRadius: spacing[2],
-            backgroundColor: severityConfig.bgColor,
+            gap: spacing[2],
           }}
         >
-          <Ionicons
-            name={severityConfig.icon}
-            size={16}
-            color={severityConfig.color}
-            style={{ marginRight: spacing[1] }}
-          />
-          <Text
-            style={[
-              typography.caption,
-              { color: severityConfig.color, fontWeight: "600" },
-            ]}
+          <View
+            style={{
+              paddingHorizontal: spacing[3],
+              paddingVertical: spacing[2],
+              borderRadius: spacing[2],
+              backgroundColor: severityConfig.bgColor,
+            }}
           >
-            {alarm.severityLevel}
-          </Text>
-        </View>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Ionicons
+                name={severityConfig.icon}
+                size={16}
+                color={severityConfig.color}
+                style={{ marginRight: spacing[1] }}
+              />
+              <Text
+                style={[
+                  typography.caption,
+                  { color: severityConfig.color, fontWeight: "600" },
+                ]}
+              >
+                {alarm.severityLevel}
+              </Text>
+            </View>
+          </View>
 
-        {onPress && (
-          <Ionicons
-            name="chevron-forward"
-            size={20}
-            color={colors.text.tertiary}
-            style={{ marginLeft: spacing[2] }}
-          />
-        )}
+          {onPress && (
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={colors.text.tertiary}
+            />
+          )}
+        </View>
       </View>
 
       {/* Schedule */}
@@ -477,24 +612,241 @@ export function AlarmCard({ alarm, compact = false, onPress }: AlarmCardProps) {
         </Text>
       </View>
 
-      {/* Alarm Details */}
+      {/* LED & Vibration Settings */}
+      <View
+        style={{
+          flexDirection: "row",
+          gap: spacing[3],
+          marginBottom: spacing[3],
+          padding: spacing[3],
+          backgroundColor: colors.background.secondary,
+          borderRadius: spacing[2],
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <Text
+            style={[
+              typography.caption,
+              { color: colors.text.secondary, marginBottom: spacing[2] },
+            ]}
+          >
+            LED Alert
+          </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: spacing[2],
+            }}
+          >
+            <View
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor:
+                  alarm.ledColor === "RED"
+                    ? "#ff3b30"
+                    : alarm.ledColor === "GREEN"
+                      ? "#34c759"
+                      : alarm.ledColor === "BLUE"
+                        ? "#007aff"
+                        : alarm.ledColor === "YELLOW"
+                          ? "#ffcc02"
+                          : alarm.ledColor === "MAGENTA"
+                            ? "#af52de"
+                            : alarm.ledColor === "CYAN"
+                              ? "#00ffff"
+                              : "#ffffff",
+                borderWidth: 2,
+                borderColor: colors.border.light,
+              }}
+            />
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[
+                  typography.caption,
+                  { color: colors.text.primary, fontWeight: "600" },
+                ]}
+              >
+                {alarm.ledColor}
+              </Text>
+              <Text
+                style={[
+                  typography.caption,
+                  { color: colors.text.tertiary, fontSize: 10 },
+                ]}
+              >
+                {alarm.ledPattern.replace(/_/g, " ")}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <Text
+            style={[
+              typography.caption,
+              { color: colors.text.secondary, marginBottom: spacing[2] },
+            ]}
+          >
+            Vibration
+          </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: spacing[2],
+            }}
+          >
+            <Ionicons
+              name="phone-portrait"
+              size={24}
+              color={colors.primary[500]}
+            />
+            <View style={{ flex: 1 }}>
+              <Text
+                style={[
+                  typography.caption,
+                  { color: colors.text.primary, fontWeight: "600" },
+                ]}
+              >
+                {alarm.vibrationIntensity}
+              </Text>
+              <Text
+                style={[
+                  typography.caption,
+                  { color: colors.text.tertiary, fontSize: 10 },
+                ]}
+              >
+                Pattern {alarm.vibrationPattern}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* Timing Settings */}
+      <View
+        style={{
+          flexDirection: "row",
+          gap: spacing[2],
+          marginBottom: spacing[3],
+        }}
+      >
+        <View
+          style={{
+            flex: 1,
+            padding: spacing[3],
+            backgroundColor: colors.background.secondary,
+            borderRadius: spacing[2],
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: spacing[1],
+            }}
+          >
+            <Ionicons
+              name="time"
+              size={16}
+              color={colors.primary[500]}
+              style={{ marginRight: spacing[1] }}
+            />
+            <Text
+              style={[typography.caption, { color: colors.text.secondary }]}
+            >
+              Snooze
+            </Text>
+          </View>
+          <Text
+            style={[
+              typography.bodySmall,
+              { color: colors.text.primary, fontWeight: "600" },
+            ]}
+          >
+            {alarm.snoozePeriod}m
+          </Text>
+          <Text
+            style={[
+              typography.caption,
+              { color: colors.text.tertiary, fontSize: 10 },
+            ]}
+          >
+            Timeout: {alarm.snoozeTimeout}m
+          </Text>
+        </View>
+
+        <View
+          style={{
+            flex: 1,
+            padding: spacing[3],
+            backgroundColor: colors.background.secondary,
+            borderRadius: spacing[2],
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: spacing[1],
+            }}
+          >
+            <Ionicons
+              name="repeat"
+              size={16}
+              color={colors.primary[500]}
+              style={{ marginRight: spacing[1] }}
+            />
+            <Text
+              style={[typography.caption, { color: colors.text.secondary }]}
+            >
+              Retrigger
+            </Text>
+          </View>
+          <Text
+            style={[
+              typography.bodySmall,
+              { color: colors.text.primary, fontWeight: "600" },
+            ]}
+          >
+            {alarm.retriggerDelay}m
+          </Text>
+          <Text
+            style={[
+              typography.caption,
+              { color: colors.text.tertiary, fontSize: 10 },
+            ]}
+          >
+            Timeout: {alarm.retriggerTimeout}m
+          </Text>
+        </View>
+      </View>
+
+      {/* Status Row */}
       <View
         style={{
           flexDirection: "row",
           justifyContent: "space-between",
-          gap: spacing[3],
+          paddingTop: spacing[3],
+          borderTopWidth: 1,
+          borderTopColor: colors.border.light,
         }}
       >
-        <View style={{ flex: 1, alignItems: "center" }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing[2],
+          }}
+        >
           <Ionicons
             name={alarm.isActive ? "checkmark-circle" : "close-circle"}
-            size={20}
+            size={18}
             color={alarm.isActive ? colors.success[500] : colors.text.secondary}
-            style={{ marginBottom: spacing[1] }}
           />
-          <Text style={[typography.caption, { color: colors.text.secondary }]}>
-            Status
-          </Text>
           <Text
             style={[
               typography.caption,
@@ -510,74 +862,14 @@ export function AlarmCard({ alarm, compact = false, onPress }: AlarmCardProps) {
           </Text>
         </View>
 
-        <View style={{ flex: 1, alignItems: "center" }}>
-          <Ionicons
-            name="phone-portrait"
-            size={20}
-            color={colors.primary[500]}
-            style={{ marginBottom: spacing[1] }}
-          />
-          <Text style={[typography.caption, { color: colors.text.secondary }]}>
-            Haptic
-          </Text>
-          <Text
-            style={[
-              typography.caption,
-              { color: colors.text.primary, fontWeight: "600" },
-            ]}
-          >
-            {alarm.vibrationIntensity}
-          </Text>
-        </View>
-
-        <View style={{ flex: 1, alignItems: "center" }}>
-          <View
-            style={{
-              width: 20,
-              height: 20,
-              borderRadius: 10,
-              backgroundColor:
-                alarm.ledColor === "RED"
-                  ? "#ff3b30"
-                  : alarm.ledColor === "GREEN"
-                    ? "#34c759"
-                    : alarm.ledColor === "BLUE"
-                      ? "#007aff"
-                      : alarm.ledColor === "YELLOW"
-                        ? "#ffcc02"
-                        : alarm.ledColor === "MAGENTA"
-                          ? "#af52de"
-                          : alarm.ledColor === "CYAN"
-                            ? "#00ffff"
-                            : "#ffffff", // WHITE
-              borderWidth: 1,
-              borderColor: colors.border.light,
-              marginBottom: spacing[1],
-            }}
-          />
-          <Text style={[typography.caption, { color: colors.text.secondary }]}>
-            LED
-          </Text>
-          <Text
-            style={[
-              typography.caption,
-              { color: colors.text.primary, fontWeight: "600" },
-            ]}
-          >
-            Color
-          </Text>
-        </View>
-
-        <View style={{ flex: 1, alignItems: "center" }}>
-          <Ionicons
-            name={syncConfig.icon}
-            size={20}
-            color={syncConfig.color}
-            style={{ marginBottom: spacing[1] }}
-          />
-          <Text style={[typography.caption, { color: colors.text.secondary }]}>
-            Sync
-          </Text>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing[2],
+          }}
+        >
+          <Ionicons name={syncConfig.icon} size={18} color={syncConfig.color} />
           <Text
             style={[
               typography.caption,
@@ -589,6 +881,19 @@ export function AlarmCard({ alarm, compact = false, onPress }: AlarmCardProps) {
           >
             {syncConfig.text}
           </Text>
+          {alarm.lastSync && (
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.text.tertiary, fontSize: 10 },
+              ]}
+            >
+              {new Date(alarm.lastSync).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </Text>
+          )}
         </View>
       </View>
     </Pressable>

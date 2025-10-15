@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Pressable,
   ScrollView,
   Text,
@@ -10,7 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useGlobalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AlarmForSync } from "~/utils/alarmSync";
 import { AlarmCard } from "~/components/device";
@@ -18,8 +19,6 @@ import { HamburgerMenu } from "~/components/ui/HamburgerMenu";
 import { Header } from "~/components/ui/Header";
 import { useBLE } from "~/contexts/BLEContext";
 import { useAlarmSync } from "~/hooks/useAlarmSync";
-import { createRemoveAllEventsRequest } from "~/services/ble/commands/removeAllEvents";
-import { ResponseStatus } from "~/services/ble/types";
 import {
   buttons,
   cards,
@@ -29,30 +28,82 @@ import {
   typography,
 } from "~/styles";
 import { trpc } from "~/utils/api";
+import { devicesBeingDeleted } from "~/utils/deviceDeletionTracker";
 
 export default function DeviceDetailPage() {
   const { deviceId } = useGlobalSearchParams<{ deviceId: string }>();
   const queryClient = useQueryClient();
   const [autoConnectAttempted, setAutoConnectAttempted] = React.useState(false);
+  const isMountedRef = React.useRef(true);
 
   // Store the initial device ID to prevent it from changing during navigation
-  const [initialDeviceId] = React.useState(deviceId);
+  // Only set it if deviceId is actually defined
+  const [initialDeviceId] = React.useState(() => {
+    console.log("🔍 [Device Detail] Initializing with deviceId:", deviceId);
+    return deviceId;
+  });
 
   // Debug logging to track device ID changes
   React.useEffect(() => {
     console.log("🔍 [Device Detail] Route deviceId:", deviceId);
     console.log("🔍 [Device Detail] Stored initialDeviceId:", initialDeviceId);
+
+    // If deviceId is not set, log it as a warning
+    if (!deviceId) {
+      console.warn(
+        "⚠️ [Device Detail] Route deviceId is missing - page may be unmounting or route params lost",
+      );
+    }
+
+    // Cleanup function to prevent stale operations
+    return () => {
+      isMountedRef.current = false;
+
+      // Mark this device as being deleted to prevent auto-connect
+      if (initialDeviceId) {
+        devicesBeingDeleted.add(initialDeviceId);
+        // Clean up after a delay to allow navigation to complete
+        setTimeout(() => {
+          devicesBeingDeleted.delete(initialDeviceId);
+        }, 2000);
+      }
+
+      console.log(
+        "🧹 [Device Detail] Cleaning up device detail page for ID:",
+        initialDeviceId,
+      );
+    };
   }, [deviceId, initialDeviceId]);
 
   // Use BLE context to show connection status
-  const {
-    connectionState,
-    connectToDevice,
-    disconnectDevice,
-    connectedDevice,
-    notifications,
-    sendBLECommand,
-  } = useBLE();
+  const { connectionState, connectToDevice, notifications } = useBLE();
+
+  // Animation for connecting status
+  const pulseAnim = React.useRef(new Animated.Value(1)).current;
+
+  // Animate the pulse when connecting
+  React.useEffect(() => {
+    if (connectionState === "connecting" || connectionState === "scanning") {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.5,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      pulse.start();
+      return () => pulse.stop();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [connectionState, pulseAnim]);
 
   // Track the latest battery status from notifications
   const [batteryStatus, setBatteryStatus] = React.useState<{
@@ -146,15 +197,24 @@ export default function DeviceDetailPage() {
   } = useQuery({
     queryKey: ["device", "getById", { id: initialDeviceId }],
     queryFn: async () => {
+      // Check if component is still mounted before fetching
+      if (!isMountedRef.current) {
+        throw new Error("Component unmounted");
+      }
+      console.log(`🔍 [Device Detail] Fetching device: ${initialDeviceId}`);
       return await trpc.device.getById.query({ id: initialDeviceId });
     },
-    enabled: !!initialDeviceId,
+    enabled: !!initialDeviceId && !!deviceId, // Only run when we have both IDs and route is valid
+    refetchOnMount: false, // Don't refetch when component mounts if we have data
+    refetchOnWindowFocus: false, // Don't refetch when window regains focus
+    staleTime: 30000, // Consider data fresh for 30 seconds
     retry: (failureCount, error) => {
       // Don't retry if the device is not found (likely deleted)
       if (
         error instanceof Error &&
         (error.message.includes("Device not found") ||
-          error.message.includes("you don't have permission"))
+          error.message.includes("you don't have permission") ||
+          error.message.includes("Component unmounted"))
       ) {
         return false;
       }
@@ -166,7 +226,7 @@ export default function DeviceDetailPage() {
   // Initialize alarm sync hook
   const alarmSync = useAlarmSync({
     deviceSerialNumber: device?.serialNumber ?? undefined,
-    enabled: true,
+    enabled: !!deviceId && !!initialDeviceId && !!device?.serialNumber, // Only enable when we have valid device data
     onSyncComplete: () => {
       // Reset the auto-sync flag so future changes can trigger new syncs
       autoSyncedRef.current = false;
@@ -269,101 +329,13 @@ export default function DeviceDetailPage() {
     }
   }, [connectionState]);
 
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      if (!initialDeviceId) throw new Error("Device ID is required");
-
-      // Check if the current connected device matches the one being deleted
-      console.log("🔍 Checking BLE connection before deletion...");
-      console.log("   └─ Connected device:", connectedDevice);
-      console.log("   └─ Device to delete:", device?.serialNumber);
-      console.log("   └─ Connection state:", connectionState);
-
-      if (connectedDevice && device?.serialNumber) {
-        // Check if the connected device's serial number matches this device
-        if (connectedDevice.serialNumber === device.serialNumber) {
-          console.log(
-            `🔌 Device ${device.serialNumber} is connected, will remove all events first...`,
-          );
-
-          // Only try to send command if actually connected
-          if (connectionState === "connected") {
-            try {
-              // First, remove all events from the peripheral
-              console.log(
-                "🗑️ Sending REMOVE_ALL_EVENTS command to peripheral...",
-              );
-              const removeAllEventsCommand = createRemoveAllEventsRequest();
-              const response = await sendBLECommand(
-                removeAllEventsCommand,
-                5000,
-              );
-
-              if (response.status === ResponseStatus.OK) {
-                console.log(
-                  "✅ Successfully removed all events from peripheral",
-                );
-              } else {
-                console.warn(
-                  "⚠️ Failed to remove all events from peripheral, continuing with deletion...",
-                );
-              }
-            } catch (removeEventsError) {
-              console.warn(
-                `⚠️ Error removing events from ${device.serialNumber}:`,
-                removeEventsError,
-              );
-              // Continue with deletion even if removing events fails
-            }
-          } else {
-            console.log(
-              `⚠️ Device state is ${connectionState}, skipping REMOVE_ALL_EVENTS command`,
-            );
-          }
-
-          // Then disconnect the device
-          try {
-            await disconnectDevice();
-            console.log(`✅ Disconnected device: ${device.serialNumber}`);
-          } catch (disconnectError) {
-            console.warn(
-              `⚠️ Failed to disconnect ${device.serialNumber}:`,
-              disconnectError,
-            );
-          }
-        }
-      }
-
-      // Delete the device from the database
-      console.log("🗑️ Deleting device from database...");
-      return await trpc.device.delete.mutate({ id: initialDeviceId });
-    },
-    onSuccess: () => {
-      console.log("✅ Device deleted successfully from database");
-      // Invalidate the devices list so it refetches on the dashboard
-      void queryClient.invalidateQueries({
-        queryKey: ["devices"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: [["device", "getAll"]],
-      });
-
-      // Navigate back to dashboard
-      router.push("/dashboard");
-    },
-    onError: (error) => {
-      console.error("❌ Device deletion failed:", error);
-      Alert.alert(
-        "Deletion Failed",
-        `Could not delete device: ${error instanceof Error ? error.message : "Unknown error"}`,
-        [{ text: "OK" }],
-      );
-    },
-  });
-
   // Handle device not found errors by navigating back automatically
   useEffect(() => {
+    // Only navigate away if we have a valid deviceId and it's an error for the current route
     if (
+      deviceId && // Make sure we're on a valid route
+      initialDeviceId && // Make sure we have an initial ID
+      deviceId === initialDeviceId && // Make sure IDs match (not a stale query)
       error?.message &&
       (error.message.includes("Device not found") ||
         error.message.includes("you don't have permission"))
@@ -374,12 +346,12 @@ export default function DeviceDetailPage() {
       console.log("   └─ Error:", error.message);
       console.log("   └─ Current route deviceId:", deviceId);
       console.log("   └─ Navigating back to dashboard");
-      
+
       // Add a small delay to prevent navigation loops and allow debugging
       const timer = setTimeout(() => {
         router.push("/dashboard");
       }, 500);
-      
+
       return () => clearTimeout(timer);
     }
   }, [error, initialDeviceId, deviceId]);
@@ -387,12 +359,24 @@ export default function DeviceDetailPage() {
   // Auto-connect to device when page loads
   useEffect(() => {
     const autoConnect = async () => {
+      // Don't auto-connect if we don't have a valid device ID or device data
       if (
-        !device?.serialNumber ||
+        !isMountedRef.current || // Page is unmounting
+        !deviceId || // No route parameter
+        !initialDeviceId || // No stored ID
+        devicesBeingDeleted.has(deviceId) || // Device is being deleted
+        !device?.serialNumber || // No device data or serial number
+        error || // Query has an error (device might be deleted)
         autoConnectAttempted ||
         connectionState === "connected" ||
         connectionState === "connecting"
       ) {
+        if (devicesBeingDeleted.has(deviceId)) {
+          console.log(
+            "🚫 Skipping auto-connect - device is being deleted:",
+            deviceId,
+          );
+        }
         return;
       }
 
@@ -407,7 +391,15 @@ export default function DeviceDetailPage() {
     };
 
     void autoConnect();
-  }, [device, autoConnectAttempted, connectionState, connectToDevice]);
+  }, [
+    device,
+    deviceId,
+    initialDeviceId,
+    autoConnectAttempted,
+    connectionState,
+    connectToDevice,
+    error,
+  ]);
 
   // Handle manual reconnect
   const handleReconnect = async () => {
@@ -428,18 +420,7 @@ export default function DeviceDetailPage() {
   };
 
   const handleDeleteDevice = () => {
-    Alert.alert(
-      "Delete Device",
-      "Are you sure you want to delete this device? This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => deleteMutation.mutate(),
-        },
-      ],
-    );
+    router.push(`/devices/${deviceId}/delete`);
   };
 
   if (isLoading) {
@@ -549,6 +530,7 @@ export default function DeviceDetailPage() {
       <Header
         title=""
         showBackButton={true}
+        onBackPress={() => router.push("/")}
         rightComponent={
           <HamburgerMenu
             options={[
@@ -623,18 +605,24 @@ export default function DeviceDetailPage() {
               >
                 {/* Connection Status */}
                 <View style={[{ flexDirection: "row", alignItems: "center" }]}>
-                  <Ionicons
-                    name="bluetooth"
-                    size={14}
-                    color={
-                      connectionState === "connected"
-                        ? colors.success[600]
-                        : connectionState === "connecting"
-                          ? colors.warning[600]
-                          : colors.gray[400]
-                    }
-                    style={{ marginRight: spacing[1] }}
-                  />
+                  <Animated.View
+                    style={{
+                      transform: [{ scale: pulseAnim }],
+                      marginRight: spacing[1],
+                    }}
+                  >
+                    <Ionicons
+                      name="bluetooth"
+                      size={14}
+                      color={
+                        connectionState === "connected"
+                          ? colors.success[600]
+                          : connectionState === "connecting"
+                            ? colors.warning[600]
+                            : colors.gray[400]
+                      }
+                    />
+                  </Animated.View>
                   <Text
                     style={[
                       typography.caption,

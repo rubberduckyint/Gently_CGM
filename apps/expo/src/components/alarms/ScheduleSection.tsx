@@ -7,18 +7,18 @@
 
 import React, { useEffect, useState } from "react";
 import {
+  Modal,
   Platform,
   Pressable,
-  Switch,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 import type { AlarmFormData } from "./BasicInfoSection";
-import { cards, colors, inputs, spacing, typography } from "~/styles";
+import { cards, colors, spacing, typography } from "~/styles";
 
 interface ScheduleSectionProps {
   formData: AlarmFormData;
@@ -29,6 +29,8 @@ interface ScheduleSectionProps {
   onToggleEndDatePicker: () => void;
   showStartDatePicker: boolean;
   onToggleStartDatePicker: () => void;
+  showEndTimePicker: boolean;
+  onToggleEndTimePicker: () => void;
 }
 
 export function ScheduleSection({
@@ -38,8 +40,10 @@ export function ScheduleSection({
   onToggleStartTimePicker,
   showEndDatePicker,
   onToggleEndDatePicker,
-  showStartDatePicker: _showStartDatePicker,
+  showStartDatePicker,
   onToggleStartDatePicker,
+  showEndTimePicker,
+  onToggleEndTimePicker,
 }: ScheduleSectionProps) {
   // Local state for temporary picker values (iOS only)
   const [tempStartDate, setTempStartDate] = useState(formData.startDate);
@@ -78,90 +82,360 @@ export function ScheduleSection({
 
   return (
     <>
-      <View style={[cards.base, { marginBottom: spacing[6] }]}>
-        <Text style={[typography.h4, { marginBottom: spacing[4] }]}>
-          Schedule
+      <View style={[cards.base, { marginBottom: spacing[4] }]}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing[2],
+            marginBottom: spacing[2],
+          }}
+        >
+          <Ionicons name="calendar" size={20} color={colors.primary[500]} />
+          <Text style={[typography.h4]}>Schedule</Text>
+        </View>
+        <Text
+          style={[
+            typography.caption,
+            {
+              color: colors.text.secondary,
+              marginBottom: spacing[5],
+              lineHeight: 18,
+            },
+          ]}
+        >
+          Set when your alarm should trigger and how often it should repeat.
         </Text>
 
-        {/* Start Date */}
+        {/* Start Date & Time - on the same line */}
         <View style={{ marginBottom: spacing[4] }}>
           <Text style={[typography.label, { marginBottom: spacing[2] }]}>
-            Start Date
+            Start Date & Time *
           </Text>
-          <Pressable
-            style={{
-              borderWidth: 1,
-              borderColor: colors.border.medium,
-              backgroundColor: colors.background.secondary,
-              paddingHorizontal: spacing[4],
-              paddingVertical: spacing[3],
-              borderRadius: 8,
-              justifyContent: "center",
-            }}
-            onPress={onToggleStartDatePicker}
-          >
-            <Text style={[typography.body, { color: colors.text.primary }]}>
-              {formatDate(formData.startDate)}
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Start Time */}
-        <View style={{ marginBottom: spacing[4] }}>
-          <Text style={[typography.label, { marginBottom: spacing[2] }]}>
-            Start Time
-          </Text>
-          <Pressable
-            style={{
-              borderWidth: 1,
-              borderColor: colors.border.medium,
-              backgroundColor: colors.background.secondary,
-              paddingHorizontal: spacing[4],
-              paddingVertical: spacing[3],
-              borderRadius: 8,
-              justifyContent: "center",
-            }}
-            onPress={onToggleStartTimePicker}
-          >
-            <Text style={[typography.body, { color: colors.text.primary }]}>
-              {formatTime(formData.startDate)}
-            </Text>
-          </Pressable>
-          {showStartTimePicker && (
-            <Text
-              style={[
-                typography.caption,
-                {
-                  color: colors.primary[600],
-                  marginTop: spacing[2],
-                  fontStyle: "italic",
-                },
-              ]}
+          <View style={{ flexDirection: "row", gap: spacing[3] }}>
+            {/* Start Date */}
+            <Pressable
+              style={{
+                flex: 1,
+                borderWidth: 1,
+                borderColor: colors.border.medium,
+                backgroundColor: colors.background.secondary,
+                paddingHorizontal: spacing[3],
+                paddingVertical: spacing[3],
+                borderRadius: 8,
+                justifyContent: "center",
+              }}
+              onPress={onToggleStartDatePicker}
             >
-              ⬇️ Time picker is shown below
-            </Text>
+              <Text
+                style={[typography.bodySmall, { color: colors.text.primary }]}
+              >
+                {formatDate(formData.startDate)}
+              </Text>
+            </Pressable>
+
+            {/* Start Time */}
+            <Pressable
+              style={{
+                flex: 1,
+                borderWidth: 1,
+                borderColor: colors.border.medium,
+                backgroundColor: colors.background.secondary,
+                paddingHorizontal: spacing[3],
+                paddingVertical: spacing[3],
+                borderRadius: 8,
+                justifyContent: "center",
+              }}
+              onPress={onToggleStartTimePicker}
+            >
+              <Text
+                style={[typography.bodySmall, { color: colors.text.primary }]}
+              >
+                {formatTime(formData.startDate)}
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Time Picker Modal Overlay - full screen grayed background */}
+          {showStartTimePicker && Platform.OS === "ios" && (
+            <Modal
+              transparent={true}
+              visible={showStartTimePicker}
+              animationType="fade"
+              onRequestClose={onToggleStartTimePicker}
+            >
+              <Pressable
+                style={{
+                  flex: 1,
+                  backgroundColor: "rgba(0, 0, 0, 0.5)",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  paddingHorizontal: spacing[4],
+                }}
+                onPress={() => {
+                  // Cancel - restore original value and close when tapping background
+                  setTempStartDate(formData.startDate);
+                  onToggleStartTimePicker();
+                }}
+              >
+                <Pressable
+                  style={{
+                    backgroundColor: colors.background.primary,
+                    borderRadius: 16,
+                    padding: spacing[4],
+                    width: "100%",
+                    maxWidth: 400,
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 12,
+                    elevation: 8,
+                  }}
+                  onPress={(e) => e.stopPropagation()} // Prevent closing when tapping the picker
+                >
+                  <Text
+                    style={[
+                      typography.h3,
+                      {
+                        color: colors.text.primary,
+                        marginBottom: spacing[4],
+                        textAlign: "center",
+                      },
+                    ]}
+                  >
+                    Select Time
+                  </Text>
+                  <DateTimePicker
+                    value={tempStartDate}
+                    mode="time"
+                    display="spinner"
+                    onChange={(event, selectedDate) => {
+                      if (selectedDate) {
+                        setTempStartDate(selectedDate);
+                      }
+                    }}
+                    style={{
+                      backgroundColor: colors.background.primary,
+                      height: 200,
+                    }}
+                    textColor={colors.text.primary}
+                  />
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      gap: spacing[3],
+                      paddingTop: spacing[4],
+                      borderTopWidth: 1,
+                      borderTopColor: colors.border.light,
+                      marginTop: spacing[4],
+                    }}
+                  >
+                    <TouchableOpacity
+                      onPress={() => {
+                        // Cancel - restore original value and close
+                        setTempStartDate(formData.startDate);
+                        onToggleStartTimePicker();
+                      }}
+                      style={{
+                        flex: 1,
+                        paddingVertical: spacing[3],
+                        backgroundColor: colors.background.secondary,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: colors.border.medium,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text
+                        style={[
+                          typography.body,
+                          { color: colors.text.primary },
+                        ]}
+                      >
+                        Cancel
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => {
+                        // Save temporary picker value to form and close
+                        onUpdateFormData({ startDate: tempStartDate });
+                        onToggleStartTimePicker();
+                      }}
+                      style={{
+                        flex: 1,
+                        paddingVertical: spacing[3],
+                        backgroundColor: colors.primary[500],
+                        borderRadius: 8,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text
+                        style={[
+                          typography.body,
+                          { color: colors.text.inverse },
+                        ]}
+                      >
+                        Done
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </Pressable>
+              </Pressable>
+            </Modal>
+          )}
+
+          {/* Android Time Picker (uses native modal) */}
+          {showStartTimePicker && Platform.OS === "android" && (
+            <View style={{ marginTop: spacing[3] }}>
+              <DateTimePicker
+                value={formData.startDate}
+                mode="time"
+                display="default"
+                onChange={(event, selectedDate) => {
+                  onToggleStartTimePicker();
+                  if (selectedDate) {
+                    onUpdateFormData({ startDate: selectedDate });
+                  }
+                }}
+                textColor={colors.text.primary}
+              />
+            </View>
           )}
         </View>
 
         {/* Repeat Toggle */}
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: spacing[4],
-          }}
-        >
-          <Text style={[typography.label]}>Repeat</Text>
-          <Switch
-            value={formData.repeat}
-            onValueChange={(value) => onUpdateFormData({ repeat: value })}
-            trackColor={{
-              false: colors.gray[300],
-              true: colors.primary[500],
-            }}
-            thumbColor={colors.background.primary}
-          />
+        <View style={{ marginBottom: spacing[4] }}>
+          <Text style={[typography.label, { marginBottom: spacing[2] }]}>
+            Repeat
+          </Text>
+          <Text
+            style={[
+              typography.caption,
+              {
+                color: colors.text.secondary,
+                marginBottom: spacing[3],
+                lineHeight: 18,
+              },
+            ]}
+          >
+            Should this alarm trigger multiple times on a schedule?
+          </Text>
+          <View style={{ flexDirection: "row", gap: spacing[3] }}>
+            <Pressable
+              onPress={() => onUpdateFormData({ repeat: false })}
+              style={{
+                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                paddingVertical: spacing[3],
+                paddingHorizontal: spacing[4],
+                borderRadius: 8,
+                borderWidth: 2,
+                borderColor: !formData.repeat
+                  ? colors.primary[500]
+                  : colors.border.light,
+                backgroundColor: !formData.repeat
+                  ? `${colors.primary[500]}15`
+                  : colors.background.secondary,
+              }}
+            >
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  borderWidth: 2,
+                  borderColor: colors.primary[500],
+                  marginRight: spacing[2],
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {!formData.repeat && (
+                  <View
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 5,
+                      backgroundColor: colors.primary[500],
+                    }}
+                  />
+                )}
+              </View>
+              <Text
+                style={[
+                  typography.body,
+                  {
+                    color: !formData.repeat
+                      ? colors.primary[500]
+                      : colors.text.primary,
+                    fontWeight: !formData.repeat ? "600" : "400",
+                  },
+                ]}
+              >
+                No
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => onUpdateFormData({ repeat: true })}
+              style={{
+                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                paddingVertical: spacing[3],
+                paddingHorizontal: spacing[4],
+                borderRadius: 8,
+                borderWidth: 2,
+                borderColor: formData.repeat
+                  ? colors.primary[500]
+                  : colors.border.light,
+                backgroundColor: formData.repeat
+                  ? `${colors.primary[500]}15`
+                  : colors.background.secondary,
+              }}
+            >
+              <View
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  borderWidth: 2,
+                  borderColor: colors.primary[500],
+                  marginRight: spacing[2],
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {formData.repeat && (
+                  <View
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 5,
+                      backgroundColor: colors.primary[500],
+                    }}
+                  />
+                )}
+              </View>
+              <Text
+                style={[
+                  typography.body,
+                  {
+                    color: formData.repeat
+                      ? colors.primary[500]
+                      : colors.text.primary,
+                    fontWeight: formData.repeat ? "600" : "400",
+                  },
+                ]}
+              >
+                Yes
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Repeat Options - Only show if repeat is enabled */}
@@ -172,91 +446,172 @@ export function ScheduleSection({
               <Text style={[typography.label, { marginBottom: spacing[2] }]}>
                 Repeat Every
               </Text>
+              <Text
+                style={[
+                  typography.caption,
+                  {
+                    color: colors.text.secondary,
+                    marginBottom: spacing[3],
+                    lineHeight: 18,
+                  },
+                ]}
+              >
+                How often should the alarm trigger? (e.g., every 2 hours, every
+                3 days)
+              </Text>
+
+              {/* Plus/Minus Controls with Value Display */}
+              <View style={{ marginBottom: spacing[3] }}>
+                <Text
+                  style={[
+                    typography.body,
+                    {
+                      marginBottom: spacing[2],
+                      fontWeight: "600",
+                      textAlign: "center",
+                    },
+                  ]}
+                >
+                  {formData.repeatEvery}
+                </Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: spacing[3],
+                  }}
+                >
+                  <Pressable
+                    onPress={() =>
+                      onUpdateFormData({
+                        repeatEvery: Math.max(1, formData.repeatEvery - 1),
+                      })
+                    }
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 8,
+                      backgroundColor: colors.background.primary,
+                      borderWidth: 1,
+                      borderColor: colors.border.medium,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Ionicons
+                      name="remove"
+                      size={24}
+                      color={colors.text.primary}
+                    />
+                  </Pressable>
+                  <View style={{ flex: 1 }}>
+                    <View
+                      style={{
+                        height: 8,
+                        backgroundColor: colors.border.light,
+                        borderRadius: 4,
+                        overflow: "hidden",
+                      }}
+                    >
+                      <View
+                        style={{
+                          height: 8,
+                          width: `${(formData.repeatEvery / 60) * 100}%`,
+                          backgroundColor: colors.primary[500],
+                          borderRadius: 4,
+                        }}
+                      />
+                    </View>
+                  </View>
+                  <Pressable
+                    onPress={() =>
+                      onUpdateFormData({
+                        repeatEvery: Math.min(60, formData.repeatEvery + 1),
+                      })
+                    }
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 8,
+                      backgroundColor: colors.background.primary,
+                      borderWidth: 1,
+                      borderColor: colors.border.medium,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Ionicons
+                      name="add"
+                      size={24}
+                      color={colors.text.primary}
+                    />
+                  </Pressable>
+                </View>
+              </View>
+
+              {/* Repeat Type Options - Full Width Buttons Below */}
               <View
                 style={{
                   flexDirection: "row",
                   gap: spacing[2],
-                  alignItems: "flex-start",
                 }}
               >
-                <TextInput
-                  style={[inputs.base, { flex: 1, minWidth: 80 }]}
-                  value={formData.repeatEvery.toString()}
-                  onChangeText={(text) => {
-                    const num = parseInt(text) || 1;
-                    onUpdateFormData({ repeatEvery: Math.max(1, num) });
-                  }}
-                  keyboardType="numeric"
-                  placeholder="1"
-                />
-                <View style={{ flex: 2 }}>
-                  {/* Repeat Type Options */}
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      flexWrap: "wrap",
-                      gap: spacing[1],
-                    }}
-                  >
-                    {(["minutes", "hours", "days", "weeks"] as const).map(
-                      (type) => {
-                        const isSelected = formData.repeatType === type;
-                        return (
-                          <Pressable
-                            key={type}
-                            onPress={() => {
-                              const updates: Partial<typeof formData> = {
-                                repeatType: type,
-                              };
-                              // Clear days of week if switching away from weeks
-                              if (
-                                formData.repeatType === "weeks" &&
-                                type !== "weeks"
-                              ) {
-                                updates.daysOfWeek = [];
+                {(["minutes", "hours", "days", "weeks"] as const).map(
+                  (type) => {
+                    const isSelected = formData.repeatType === type;
+                    return (
+                      <Pressable
+                        key={type}
+                        onPress={() => {
+                          const updates: Partial<typeof formData> = {
+                            repeatType: type,
+                          };
+                          // Clear days of week if switching away from weeks
+                          if (
+                            formData.repeatType === "weeks" &&
+                            type !== "weeks"
+                          ) {
+                            updates.daysOfWeek = [];
+                          }
+                          onUpdateFormData(updates);
+                        }}
+                        style={[
+                          {
+                            paddingVertical: spacing[3],
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            flex: 1,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          },
+                          isSelected
+                            ? {
+                                backgroundColor: colors.primary[500],
+                                borderColor: colors.primary[500],
                               }
-                              onUpdateFormData(updates);
-                            }}
-                            style={[
-                              {
-                                paddingHorizontal: spacing[3],
-                                paddingVertical: spacing[2],
-                                borderRadius: 8,
-                                borderWidth: 1,
-                                minWidth: 60,
-                                alignItems: "center",
+                            : {
+                                backgroundColor: colors.background.secondary,
+                                borderColor: colors.border.medium,
                               },
-                              isSelected
-                                ? {
-                                    backgroundColor: colors.primary[500],
-                                    borderColor: colors.primary[500],
-                                  }
-                                : {
-                                    backgroundColor:
-                                      colors.background.secondary,
-                                    borderColor: colors.border.medium,
-                                  },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                typography.caption,
-                                {
-                                  color: isSelected
-                                    ? colors.text.inverse
-                                    : colors.text.primary,
-                                  fontWeight: isSelected ? "600" : "400",
-                                },
-                              ]}
-                            >
-                              {type}
-                            </Text>
-                          </Pressable>
-                        );
-                      },
-                    )}
-                  </View>
-                </View>
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            typography.bodySmall,
+                            {
+                              color: isSelected
+                                ? colors.text.inverse
+                                : colors.text.primary,
+                              fontWeight: isSelected ? "600" : "400",
+                            },
+                          ]}
+                        >
+                          {type}
+                        </Text>
+                      </Pressable>
+                    );
+                  },
+                )}
               </View>
             </View>
 
@@ -266,23 +621,27 @@ export function ScheduleSection({
                 <Text style={[typography.label, { marginBottom: spacing[2] }]}>
                   Days of Week
                 </Text>
+                <Text
+                  style={[
+                    typography.caption,
+                    {
+                      color: colors.text.secondary,
+                      marginBottom: spacing[3],
+                      lineHeight: 18,
+                    },
+                  ]}
+                >
+                  Select which days the alarm should trigger.
+                </Text>
                 <View
                   style={{
                     flexDirection: "row",
-                    flexWrap: "wrap",
-                    gap: spacing[2],
+                    justifyContent: "space-between",
+                    gap: spacing[1],
                   }}
                 >
                   {["0", "1", "2", "3", "4", "5", "6"].map((day) => {
-                    const dayNames = [
-                      "Sun",
-                      "Mon",
-                      "Tue",
-                      "Wed",
-                      "Thu",
-                      "Fri",
-                      "Sat",
-                    ];
+                    const dayNames = ["S", "M", "T", "W", "T", "F", "S"];
                     const isSelected = formData.daysOfWeek.includes(day);
                     return (
                       <Pressable
@@ -290,10 +649,13 @@ export function ScheduleSection({
                         onPress={() => handleDayPress(day)}
                         style={[
                           {
-                            paddingHorizontal: spacing[3],
+                            flex: 1,
+                            aspectRatio: 1,
                             paddingVertical: spacing[2],
                             borderRadius: 8,
                             borderWidth: 1,
+                            alignItems: "center",
+                            justifyContent: "center",
                           },
                           isSelected
                             ? {
@@ -308,11 +670,12 @@ export function ScheduleSection({
                       >
                         <Text
                           style={[
-                            typography.bodySmall,
+                            typography.body,
                             {
                               color: isSelected
                                 ? colors.text.inverse
                                 : colors.text.primary,
+                              fontWeight: "600",
                             },
                           ]}
                         >
@@ -330,51 +693,91 @@ export function ScheduleSection({
               <Text style={[typography.label, { marginBottom: spacing[2] }]}>
                 Ends
               </Text>
-              <View style={{ gap: spacing[2] }}>
-                {(["never", "on", "after"] as const).map((option) => (
-                  <Pressable
-                    key={option}
-                    onPress={() => onUpdateFormData({ ends: option })}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      paddingVertical: spacing[2],
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 20,
-                        height: 20,
-                        borderRadius: 10,
-                        borderWidth: 2,
-                        borderColor: colors.primary[500],
-                        marginRight: spacing[2],
-                        backgroundColor:
-                          formData.ends === option
-                            ? colors.primary[500]
-                            : "transparent",
-                      }}
-                    />
-                    <Text style={[typography.body]}>
-                      {option === "never"
-                        ? "Never"
-                        : option === "on"
-                          ? "On date"
-                          : "After occurrences"}
-                    </Text>
-                  </Pressable>
-                ))}
+              <Text
+                style={[
+                  typography.caption,
+                  {
+                    color: colors.text.secondary,
+                    marginBottom: spacing[3],
+                    lineHeight: 18,
+                  },
+                ]}
+              >
+                Choose when the repeating alarm should stop triggering.
+              </Text>
+
+              {/* Three Button Radio Options */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: spacing[2],
+                  marginBottom: spacing[3],
+                }}
+              >
+                {(["never", "on", "after"] as const).map((option) => {
+                  const isSelected = formData.ends === option;
+                  return (
+                    <Pressable
+                      key={option}
+                      onPress={() => onUpdateFormData({ ends: option })}
+                      style={[
+                        {
+                          paddingVertical: spacing[3],
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          flex: 1,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        },
+                        isSelected
+                          ? {
+                              backgroundColor: colors.primary[500],
+                              borderColor: colors.primary[500],
+                            }
+                          : {
+                              backgroundColor: colors.background.secondary,
+                              borderColor: colors.border.medium,
+                            },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          typography.bodySmall,
+                          {
+                            color: isSelected
+                              ? colors.text.inverse
+                              : colors.text.primary,
+                            fontWeight: isSelected ? "600" : "400",
+                          },
+                        ]}
+                      >
+                        {option === "never"
+                          ? "Never"
+                          : option === "on"
+                            ? "On Date"
+                            : "After"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
 
-              {/* End Date Picker */}
+              {/* End Date Picker - Date and Time on same line */}
               {formData.ends === "on" && (
-                <View style={{ marginTop: spacing[2] }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    gap: spacing[2],
+                  }}
+                >
+                  {/* End Date */}
                   <Pressable
                     style={{
+                      flex: 1,
                       borderWidth: 1,
                       borderColor: colors.border.medium,
                       backgroundColor: colors.background.secondary,
-                      paddingHorizontal: spacing[4],
+                      paddingHorizontal: spacing[3],
                       paddingVertical: spacing[3],
                       borderRadius: 8,
                       justifyContent: "center",
@@ -382,30 +785,136 @@ export function ScheduleSection({
                     onPress={onToggleEndDatePicker}
                   >
                     <Text
-                      style={[typography.body, { color: colors.text.primary }]}
+                      style={[
+                        typography.bodySmall,
+                        { color: colors.text.primary },
+                      ]}
                     >
                       {formData.endsOnDate
                         ? formatDate(formData.endsOnDate)
-                        : "Select end date"}
+                        : "Select date"}
+                    </Text>
+                  </Pressable>
+
+                  {/* End Time */}
+                  <Pressable
+                    style={{
+                      flex: 1,
+                      borderWidth: 1,
+                      borderColor: colors.border.medium,
+                      backgroundColor: colors.background.secondary,
+                      paddingHorizontal: spacing[3],
+                      paddingVertical: spacing[3],
+                      borderRadius: 8,
+                      justifyContent: "center",
+                    }}
+                    onPress={onToggleEndTimePicker}
+                  >
+                    <Text
+                      style={[
+                        typography.bodySmall,
+                        { color: colors.text.primary },
+                      ]}
+                    >
+                      {formData.endsOnDate
+                        ? formatTime(formData.endsOnDate)
+                        : "Select time"}
                     </Text>
                   </Pressable>
                 </View>
               )}
 
-              {/* End After Input */}
+              {/* End After - Plus/Minus Controls */}
               {formData.ends === "after" && (
-                <View style={{ marginTop: spacing[2] }}>
-                  <TextInput
-                    style={[inputs.base]}
-                    value={formData.endsAfter?.toString() ?? ""}
-                    onChangeText={(text) => {
-                      const num = parseInt(text) || undefined;
-                      onUpdateFormData({ endsAfter: num });
+                <View>
+                  <Text
+                    style={[
+                      typography.body,
+                      {
+                        marginBottom: spacing[2],
+                        fontWeight: "600",
+                        textAlign: "center",
+                      },
+                    ]}
+                  >
+                    {formData.endsAfter ?? 1} occurrences
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: spacing[3],
                     }}
-                    keyboardType="numeric"
-                    placeholder="Number of occurrences"
-                    placeholderTextColor={colors.text.secondary}
-                  />
+                  >
+                    <Pressable
+                      onPress={() =>
+                        onUpdateFormData({
+                          endsAfter: Math.max(1, (formData.endsAfter ?? 1) - 1),
+                        })
+                      }
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 8,
+                        backgroundColor: colors.background.primary,
+                        borderWidth: 1,
+                        borderColor: colors.border.medium,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Ionicons
+                        name="remove"
+                        size={24}
+                        color={colors.text.primary}
+                      />
+                    </Pressable>
+                    <View style={{ flex: 1 }}>
+                      <View
+                        style={{
+                          height: 8,
+                          backgroundColor: colors.border.light,
+                          borderRadius: 4,
+                          overflow: "hidden",
+                        }}
+                      >
+                        <View
+                          style={{
+                            height: 8,
+                            width: `${((formData.endsAfter ?? 1) / 100) * 100}%`,
+                            backgroundColor: colors.primary[500],
+                            borderRadius: 4,
+                          }}
+                        />
+                      </View>
+                    </View>
+                    <Pressable
+                      onPress={() =>
+                        onUpdateFormData({
+                          endsAfter: Math.min(
+                            100,
+                            (formData.endsAfter ?? 1) + 1,
+                          ),
+                        })
+                      }
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 8,
+                        backgroundColor: colors.background.primary,
+                        borderWidth: 1,
+                        borderColor: colors.border.medium,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Ionicons
+                        name="add"
+                        size={24}
+                        color={colors.text.primary}
+                      />
+                    </Pressable>
+                  </View>
                 </View>
               )}
             </View>
@@ -413,152 +922,343 @@ export function ScheduleSection({
         )}
       </View>
 
-      {/* Date/Time Pickers */}
-      {showStartTimePicker && (
-        <View
-          style={
-            Platform.OS === "ios"
-              ? {
-                  backgroundColor: colors.background.secondary,
-                  borderRadius: 12,
-                  marginVertical: 10,
-                  padding: 10,
-                }
-              : undefined
-          }
+      {/* Date Pickers */}
+      {/* Start Date Picker */}
+      {showStartDatePicker && (
+        <Modal
+          transparent={true}
+          visible={showStartDatePicker}
+          animationType="fade"
+          onRequestClose={onToggleStartDatePicker}
         >
-          <DateTimePicker
-            value={Platform.OS === "ios" ? tempStartDate : formData.startDate}
-            mode="time"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(event, selectedDate) => {
-              if (Platform.OS === "android") {
-                // Android: close immediately and update
-                onToggleStartTimePicker();
-                if (selectedDate) {
-                  onUpdateFormData({ startDate: selectedDate });
-                }
-              } else if (selectedDate) {
-                // iOS: update temporary value but don't close
-                setTempStartDate(selectedDate);
-              }
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+              justifyContent: "center",
+              alignItems: "center",
+              paddingHorizontal: spacing[4],
             }}
-            style={
-              Platform.OS === "ios"
-                ? {
-                    backgroundColor: colors.background.secondary,
-                    height: 200,
-                  }
-                : undefined
-            }
-            textColor={colors.text.primary}
-          />
-          {Platform.OS === "ios" && (
-            <View
+            onPress={() => {
+              // Cancel - restore original value and close when tapping background
+              setTempStartDate(formData.startDate);
+              onToggleStartDatePicker();
+            }}
+          >
+            <Pressable
               style={{
-                flexDirection: "row",
-                justifyContent: "flex-end",
-                paddingTop: 10,
-                borderTopWidth: 1,
-                borderTopColor: colors.border.light,
-                marginTop: 10,
+                backgroundColor: colors.background.primary,
+                borderRadius: 12,
+                padding: spacing[4],
+                width: "100%",
+                maxWidth: 400,
               }}
+              onPress={(e) => e.stopPropagation()}
             >
-              <TouchableOpacity
-                onPress={() => {
-                  // Save temporary picker value to form and close
-                  onUpdateFormData({ startDate: tempStartDate });
-                  onToggleStartTimePicker();
+              <DateTimePicker
+                value={tempStartDate}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                onChange={(event, selectedDate) => {
+                  if (Platform.OS === "android") {
+                    // Android: close immediately and update
+                    onToggleStartDatePicker();
+                    if (selectedDate) {
+                      onUpdateFormData({ startDate: selectedDate });
+                    }
+                  } else if (selectedDate) {
+                    // iOS: update temporary value but don't close
+                    setTempStartDate(selectedDate);
+                  }
                 }}
-                style={{
-                  paddingHorizontal: 20,
-                  paddingVertical: 8,
-                  backgroundColor: colors.primary[500],
-                  borderRadius: 8,
-                }}
-              >
-                <Text style={[typography.body, { color: colors.text.inverse }]}>
-                  Done
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+                textColor={colors.text.primary}
+              />
+              {Platform.OS === "ios" && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    marginTop: spacing[4],
+                    gap: spacing[3],
+                  }}
+                >
+                  <TouchableOpacity
+                    onPress={() => {
+                      // Cancel - restore original value and close
+                      setTempStartDate(formData.startDate);
+                      onToggleStartDatePicker();
+                    }}
+                    style={{
+                      flex: 1,
+                      paddingVertical: spacing[3],
+                      backgroundColor: colors.background.secondary,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: colors.border.medium,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Text
+                      style={[typography.body, { color: colors.text.primary }]}
+                    >
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      // Save temporary picker value to form and close
+                      onUpdateFormData({ startDate: tempStartDate });
+                      onToggleStartDatePicker();
+                    }}
+                    style={{
+                      flex: 1,
+                      paddingVertical: spacing[3],
+                      backgroundColor: colors.primary[500],
+                      borderRadius: 8,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Text
+                      style={[typography.body, { color: colors.text.inverse }]}
+                    >
+                      Done
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
       )}
 
+      {/* End Date Picker */}
       {showEndDatePicker && (
-        <View
-          style={
-            Platform.OS === "ios"
-              ? {
-                  backgroundColor: colors.background.secondary,
-                  borderRadius: 12,
-                  marginVertical: 10,
-                  padding: 10,
-                }
-              : undefined
-          }
+        <Modal
+          transparent={true}
+          visible={showEndDatePicker}
+          animationType="fade"
+          onRequestClose={onToggleEndDatePicker}
         >
-          <DateTimePicker
-            value={
-              Platform.OS === "ios"
-                ? tempEndDate
-                : (formData.endsOnDate ?? new Date())
-            }
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(event, selectedDate) => {
-              if (Platform.OS === "android") {
-                // Android: close immediately and update
-                onToggleEndDatePicker();
-                if (selectedDate) {
-                  onUpdateFormData({ endsOnDate: selectedDate });
-                }
-              } else if (selectedDate) {
-                // iOS: update temporary value but don't close
-                setTempEndDate(selectedDate);
-              }
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+              justifyContent: "center",
+              alignItems: "center",
+              paddingHorizontal: spacing[4],
             }}
-            style={
-              Platform.OS === "ios"
-                ? {
-                    backgroundColor: colors.background.secondary,
-                    height: 200,
-                  }
-                : undefined
-            }
-            textColor={colors.text.primary}
-          />
-          {Platform.OS === "ios" && (
-            <View
+            onPress={() => {
+              // Cancel - restore original value and close when tapping background
+              setTempEndDate(formData.endsOnDate ?? new Date());
+              onToggleEndDatePicker();
+            }}
+          >
+            <Pressable
               style={{
-                flexDirection: "row",
-                justifyContent: "flex-end",
-                paddingTop: 10,
-                borderTopWidth: 1,
-                borderTopColor: colors.border.light,
-                marginTop: 10,
+                backgroundColor: colors.background.primary,
+                borderRadius: 12,
+                padding: spacing[4],
+                width: "100%",
+                maxWidth: 400,
               }}
+              onPress={(e) => e.stopPropagation()}
             >
-              <TouchableOpacity
-                onPress={() => {
-                  // Save temporary picker value to form and close
-                  onUpdateFormData({ endsOnDate: tempEndDate });
-                  onToggleEndDatePicker();
+              <DateTimePicker
+                value={tempEndDate}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                onChange={(event, selectedDate) => {
+                  if (Platform.OS === "android") {
+                    // Android: close immediately and update
+                    onToggleEndDatePicker();
+                    if (selectedDate) {
+                      onUpdateFormData({ endsOnDate: selectedDate });
+                    }
+                  } else if (selectedDate) {
+                    // iOS: update temporary value but don't close
+                    setTempEndDate(selectedDate);
+                  }
                 }}
+                textColor={colors.text.primary}
+              />
+              {Platform.OS === "ios" && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    marginTop: spacing[4],
+                    gap: spacing[3],
+                  }}
+                >
+                  <TouchableOpacity
+                    onPress={() => {
+                      // Cancel - restore original value and close
+                      setTempEndDate(formData.endsOnDate ?? new Date());
+                      onToggleEndDatePicker();
+                    }}
+                    style={{
+                      flex: 1,
+                      paddingVertical: spacing[3],
+                      backgroundColor: colors.background.secondary,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: colors.border.medium,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Text
+                      style={[typography.body, { color: colors.text.primary }]}
+                    >
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      // Save temporary picker value to form and close
+                      onUpdateFormData({ endsOnDate: tempEndDate });
+                      onToggleEndDatePicker();
+                    }}
+                    style={{
+                      flex: 1,
+                      paddingVertical: spacing[3],
+                      backgroundColor: colors.primary[500],
+                      borderRadius: 8,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Text
+                      style={[typography.body, { color: colors.text.inverse }]}
+                    >
+                      Done
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* End Time Picker */}
+      {showEndTimePicker && Platform.OS === "ios" && (
+        <Modal
+          transparent={true}
+          visible={showEndTimePicker}
+          animationType="fade"
+          onRequestClose={onToggleEndTimePicker}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+              justifyContent: "center",
+              alignItems: "center",
+              paddingHorizontal: spacing[4],
+            }}
+            onPress={() => {
+              // Cancel - restore original value and close when tapping background
+              setTempEndDate(formData.endsOnDate ?? new Date());
+              onToggleEndTimePicker();
+            }}
+          >
+            <Pressable
+              style={{
+                backgroundColor: colors.background.primary,
+                borderRadius: 12,
+                padding: spacing[4],
+                width: "100%",
+                maxWidth: 400,
+              }}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <DateTimePicker
+                value={tempEndDate}
+                mode="time"
+                display="spinner"
+                onChange={(event, selectedDate) => {
+                  if (selectedDate) {
+                    setTempEndDate(selectedDate);
+                  }
+                }}
+                textColor={colors.text.primary}
+              />
+              <View
                 style={{
-                  paddingHorizontal: 20,
-                  paddingVertical: 8,
-                  backgroundColor: colors.primary[500],
-                  borderRadius: 8,
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  marginTop: spacing[4],
+                  gap: spacing[3],
                 }}
               >
-                <Text style={[typography.body, { color: colors.text.inverse }]}>
-                  Done
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
+                <TouchableOpacity
+                  onPress={() => {
+                    // Cancel - restore original value and close
+                    setTempEndDate(formData.endsOnDate ?? new Date());
+                    onToggleEndTimePicker();
+                  }}
+                  style={{
+                    flex: 1,
+                    paddingVertical: spacing[3],
+                    backgroundColor: colors.background.secondary,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: colors.border.medium,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text
+                    style={[typography.body, { color: colors.text.primary }]}
+                  >
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    // Save temporary picker value to form and close
+                    onUpdateFormData({ endsOnDate: tempEndDate });
+                    onToggleEndTimePicker();
+                  }}
+                  style={{
+                    flex: 1,
+                    paddingVertical: spacing[3],
+                    backgroundColor: colors.primary[500],
+                    borderRadius: 8,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text
+                    style={[typography.body, { color: colors.text.inverse }]}
+                  >
+                    Done
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Android End Time Picker (uses native modal) */}
+      {showEndTimePicker && Platform.OS === "android" && (
+        <View style={{ marginTop: spacing[3] }}>
+          <DateTimePicker
+            value={formData.endsOnDate ?? new Date()}
+            mode="time"
+            display="default"
+            onChange={(event, selectedDate) => {
+              onToggleEndTimePicker();
+              if (selectedDate) {
+                onUpdateFormData({ endsOnDate: selectedDate });
+              }
+            }}
+            textColor={colors.text.primary}
+          />
         </View>
       )}
     </>

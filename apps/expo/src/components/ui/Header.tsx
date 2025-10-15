@@ -8,6 +8,7 @@ import { colors, spacing, typography } from "~/styles";
 interface HeaderProps {
   title: string;
   showBackButton?: boolean;
+  onBackPress?: () => void;
   rightButton?: {
     icon: keyof typeof Ionicons.glyphMap;
     onPress: () => void;
@@ -19,6 +20,7 @@ interface HeaderProps {
 export function Header({
   title,
   showBackButton = true,
+  onBackPress,
   rightButton,
   rightComponent,
 }: HeaderProps) {
@@ -39,13 +41,13 @@ export function Header({
       <View style={{ width: 40 }}>
         {showBackButton && (
           <Pressable
-            onPress={() => router.push("/dashboard")}
+            onPress={() => (onBackPress ? onBackPress() : router.back())}
             style={({ pressed }) => ({
               opacity: pressed ? 0.7 : 1,
               padding: spacing[2],
               marginLeft: -spacing[2],
             })}
-            accessibilityLabel="Go to dashboard"
+            accessibilityLabel="Go back"
           >
             <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
           </Pressable>
