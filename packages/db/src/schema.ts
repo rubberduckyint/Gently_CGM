@@ -100,7 +100,7 @@ export const Alarm = pgTable("Alarm", (t) => ({
 
 export const CreateDeviceSchema = createInsertSchema(Device, {
   title: z.string().min(1),
-  description: z.string().min(1),
+  description: z.string(),
   serialNumber: z.string().optional(),
 }).omit({
   id: true,
@@ -111,7 +111,7 @@ export const CreateDeviceSchema = createInsertSchema(Device, {
 
 export const UpdateDeviceSchema = createInsertSchema(Device, {
   title: z.string().min(1).optional(),
-  description: z.string().min(1).optional(),
+  description: z.string().optional(),
   serialNumber: z.string().optional(),
 })
   .omit({

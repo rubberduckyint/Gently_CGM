@@ -808,32 +808,6 @@ const AddDeviceScreen = () => {
               >
                 Found Devices
               </Text>
-              {isScanning && (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    backgroundColor: colors.warning[100],
-                    paddingVertical: spacing[1],
-                    paddingHorizontal: spacing[2],
-                    borderRadius: 8,
-                  }}
-                >
-                  <ActivityIndicator
-                    size="small"
-                    color={colors.warning[600]}
-                    style={{ marginRight: spacing[1] }}
-                  />
-                  <Text
-                    style={[
-                      typography.caption,
-                      { color: colors.warning[700], fontWeight: "500" },
-                    ]}
-                  >
-                    Scanning...
-                  </Text>
-                </View>
-              )}
             </View>
             {Array.from(discoveredDevices.values()).map(renderDeviceCard)}
           </View>
