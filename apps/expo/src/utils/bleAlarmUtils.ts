@@ -221,6 +221,7 @@ export function alarmFormDataToBleParameters(
 export function alarmDatabaseToBleParameters(
   alarm: {
     title: string;
+    peripheralId?: string | null;
     cronExpression: string;
     severityLevel: "CRITICAL" | "WARNING" | "INFORMATIONAL";
     ledPattern: "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE";
@@ -254,8 +255,9 @@ export function alarmDatabaseToBleParameters(
 
   return {
     eventIndex,
-    eventName: alarm.title.substring(0, 10), // Truncate to BLE limit
-    cronExpression: alarm.cronExpression || "0 9 * * *", // Default if missing
+    // Use peripheralId as event name for verification, fallback to title if not available
+    eventName: alarm.peripheralId ?? alarm.title.substring(0, 10),
+    cronExpression: alarm.cronExpression,
     severityLevel,
     vibrationIntensity,
     vibrationPattern,

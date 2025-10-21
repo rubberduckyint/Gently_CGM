@@ -17,6 +17,7 @@ import { alarmDatabaseToBleParameters } from "~/utils/bleAlarmUtils";
 export interface AlarmForSync {
   id: string;
   title: string;
+  peripheralId?: string | null;
   cronExpression: string;
   isActive: boolean;
   severityLevel: "CRITICAL" | "WARNING" | "INFORMATIONAL";

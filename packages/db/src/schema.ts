@@ -113,6 +113,7 @@ export const Alarm = pgTable("Alarm", (t) => ({
   syncStatus: syncStatusEnum().default("NOT_SYNCED").notNull(),
   lastSync: t.timestamp(),
   deviceIndex: t.integer(), // The slot index on the physical device (0-49), null if not synced
+  peripheralId: t.text(), // 10-character alphanumeric unique ID used to verify alarm on device
   // BLE Protocol fields (consolidated - these replace legacy color, priority, hapticChoice)
   severityLevel: severityLevelEnum().default("INFORMATIONAL").notNull(),
   ledPattern: ledPatternEnum().default("BLINK_SLOW").notNull(),
@@ -287,5 +288,11 @@ export const userPreferencesRelations = relations(
     }),
   }),
 );
+
+// Export enum value types for type-safe usage
+export type SeverityLevel = typeof Alarm.$inferSelect.severityLevel;
+export type LedPattern = typeof Alarm.$inferSelect.ledPattern;
+export type LedColor = typeof Alarm.$inferSelect.ledColor;
+export type VibrationIntensity = typeof Alarm.$inferSelect.vibrationIntensity;
 
 export * from "./auth-schema";

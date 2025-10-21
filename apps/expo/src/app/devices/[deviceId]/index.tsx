@@ -278,9 +278,32 @@ export default function DeviceDetailPage() {
       connectionState === "connected" &&
       !alarmSync.isSyncing
     ) {
-      const alarmsForSync: AlarmForSync[] = device.alarms.map((alarm) => ({
+      // Filter out expired/completed alarms before syncing
+      const activeAlarms = device.alarms.filter((alarm) => {
+        const scheduleInfo = calculateNextAlarmOccurrence({
+          isActive: alarm.isActive,
+          startDate: alarm.startDate,
+          endDate: alarm.endDate,
+          repeat: alarm.repeat,
+          cronExpression: alarm.cronExpression,
+        });
+
+        // Only include alarms that have future occurrences (not completed/expired)
+        return (
+          scheduleInfo.status !== "completed" &&
+          scheduleInfo.status !== "overdue"
+        );
+      });
+
+      console.log(
+        `📊 Alarm sync filter - Total: ${device.alarms.length}, Active: ${activeAlarms.length}, Filtered out: ${device.alarms.length - activeAlarms.length}`,
+      );
+
+      // Map to the format expected by incremental sync (with deviceIndex)
+      const alarmsForSync = activeAlarms.map((alarm) => ({
         id: alarm.id,
         title: alarm.title,
+        peripheralId: alarm.peripheralId,
         cronExpression: alarm.cronExpression,
         isActive: alarm.isActive,
         severityLevel: alarm.severityLevel,
@@ -293,9 +316,13 @@ export default function DeviceDetailPage() {
         retriggerDelay: alarm.retriggerDelay,
         retriggerTimeout: alarm.retriggerTimeout,
         syncStatus: alarm.syncStatus,
+        deviceIndex: alarm.deviceIndex,
+        startDate: alarm.startDate,
+        endDate: alarm.endDate,
+        repeat: alarm.repeat,
       }));
 
-      const currentAlarmCount = device.alarms.length;
+      const currentAlarmCount = activeAlarms.length;
       const previousAlarmCount = previousAlarmCountRef.current;
 
       // Create a hash of the current alarms to detect changes
@@ -317,7 +344,7 @@ export default function DeviceDetailPage() {
 
       // Reset the auto-sync flag if alarms have changed
       if (alarmsChanged) {
-        console.log("📝 Alarms changed, triggering sync");
+        console.log("📝 Alarms changed, triggering incremental sync");
         autoSyncedRef.current = false;
       }
 
@@ -333,11 +360,11 @@ export default function DeviceDetailPage() {
           autoSyncedRef.current = true;
 
           console.log(
-            `🔄 Triggering sync - changed: ${alarmsChanged}, deleted: ${alarmWasDeleted}`,
+            `🔄 Triggering incremental sync - changed: ${alarmsChanged}, deleted: ${alarmWasDeleted}`,
           );
 
-          // Force sync of all alarms to peripheral
-          void alarmSync.performSync(alarmsForSync, true);
+          // Use incremental sync instead of blanket delete-and-recreate
+          void alarmSync.performIncrementalSync(alarmsForSync, true);
         }
       }
 

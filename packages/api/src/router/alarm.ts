@@ -74,6 +74,16 @@ export const alarmRouter = {
         }
       }
 
+      // Generate unique 10-character alphanumeric peripheral ID
+      const generatePeripheralId = () => {
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        let result = "";
+        for (let i = 0; i < 10; i++) {
+          result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return result;
+      };
+
       // Get user preferences for default values
       const userPreferences = await ctx.db.query.UserPreferences.findFirst({
         where: eq(UserPreferences.userId, ctx.session.user.id),
@@ -83,6 +93,7 @@ export const alarmRouter = {
       const alarmData = {
         ...input,
         userId: ctx.session.user.id,
+        peripheralId: generatePeripheralId(),
         startDate: input.startDate ? new Date(input.startDate) : undefined,
         endDate: input.endDate ? new Date(input.endDate) : undefined,
         // Apply user preferences as defaults if values not provided in input

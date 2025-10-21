@@ -1,6 +1,7 @@
 /**
  * Alarm Preferences Section
  * UI component for managing user's default alarm settings
+ * Matches the design and behavior of the AdvancedSection in alarm forms
  */
 
 import React from "react";
@@ -11,6 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import {
   buttons,
@@ -22,8 +24,6 @@ import {
 } from "~/styles";
 
 interface AlarmPreferencesSectionProps {
-  severityLevel: "INFORMATIONAL" | "WARNING" | "CRITICAL";
-  setSeverityLevel: (value: "INFORMATIONAL" | "WARNING" | "CRITICAL") => void;
   ledPattern: "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE";
   setLedPattern: (
     value: "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE",
@@ -36,68 +36,82 @@ interface AlarmPreferencesSectionProps {
   setVibrationIntensity: (value: "LOW" | "MEDIUM" | "HIGH" | "MAXIMUM") => void;
   snoozePeriod: string;
   setSnoozePeriod: (value: string) => void;
-  snoozeTimeout: string;
-  setSnoozeTimeout: (value: string) => void;
-  retriggerDelay: string;
-  setRetriggerDelay: (value: string) => void;
-  retriggerTimeout: string;
-  setRetriggerTimeout: (value: string) => void;
   onSave: () => void;
   isSaving: boolean;
 }
 
-const OptionButton = ({
-  label,
-  selected,
-  onPress,
-  color,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-  color?: string;
-}) => (
-  <Pressable
-    onPress={onPress}
-    style={{
-      paddingHorizontal: spacing[3],
-      paddingVertical: spacing[2],
-      backgroundColor: selected ? colors.primary[500] : colors.gray[100],
-      borderRadius: 6,
-      marginRight: spacing[2],
-      marginBottom: spacing[2],
-      borderWidth: 1,
-      borderColor: selected ? colors.primary[600] : colors.gray[200],
-    }}
-  >
-    <Text
-      style={[
-        typography.caption,
-        {
-          color: selected ? "#FFFFFF" : colors.text.primary,
-          fontWeight: selected ? "600" : "normal",
-        },
-      ]}
-    >
-      {color && (
-        <View
-          style={{
-            width: 12,
-            height: 12,
-            borderRadius: 6,
-            backgroundColor: color,
-            marginRight: spacing[1],
-          }}
-        />
-      )}
-      {label}
-    </Text>
-  </Pressable>
-);
+// Constants matching AdvancedSection
+const LED_PATTERNS = [
+  {
+    key: "SOLID" as const,
+    label: "Solid",
+    description: "Continuous steady light",
+    icon: "ellipse" as const,
+  },
+  {
+    key: "BLINK_SLOW" as const,
+    label: "Slow Blink",
+    description: "Gentle pulsing light",
+    icon: "ellipse-outline" as const,
+  },
+  {
+    key: "BLINK_FAST" as const,
+    label: "Fast Blink",
+    description: "Rapid attention-getting flashes",
+    icon: "flash" as const,
+  },
+  {
+    key: "PULSE" as const,
+    label: "Pulse",
+    description: "Smooth breathing effect",
+    icon: "heart" as const,
+  },
+  {
+    key: "STROBE" as const,
+    label: "Strobe",
+    description: "Intense flashing pattern",
+    icon: "flash-outline" as const,
+  },
+] as const;
+
+const LED_COLORS = [
+  { key: "RED" as const, label: "Red", color: colors.error[500] },
+  { key: "GREEN" as const, label: "Green", color: colors.success[500] },
+  { key: "BLUE" as const, label: "Blue", color: colors.primary[500] },
+  { key: "YELLOW" as const, label: "Yellow", color: colors.warning[400] },
+  { key: "MAGENTA" as const, label: "Magenta", color: "#FF1493" },
+  { key: "CYAN" as const, label: "Cyan", color: "#00BFFF" },
+  { key: "WHITE" as const, label: "White", color: colors.gray[100] },
+] as const;
+
+const VIBRATION_INTENSITIES = [
+  {
+    key: "LOW" as const,
+    label: "Low",
+    description: "Gentle vibration",
+    icon: "radio-button-off" as const,
+  },
+  {
+    key: "MEDIUM" as const,
+    label: "Med",
+    description: "Moderate vibration",
+    icon: "remove" as const,
+  },
+  {
+    key: "HIGH" as const,
+    label: "High",
+    description: "Strong vibration",
+    icon: "reorder-three" as const,
+  },
+  {
+    key: "MAXIMUM" as const,
+    label: "Max",
+    description: "Maximum vibration",
+    icon: "reorder-four" as const,
+  },
+] as const;
 
 export function AlarmPreferencesSection({
-  severityLevel,
-  setSeverityLevel,
   ledPattern,
   setLedPattern,
   ledColor,
@@ -106,174 +120,184 @@ export function AlarmPreferencesSection({
   setVibrationIntensity,
   snoozePeriod,
   setSnoozePeriod,
-  snoozeTimeout,
-  setSnoozeTimeout,
-  retriggerDelay,
-  setRetriggerDelay,
-  retriggerTimeout,
-  setRetriggerTimeout,
   onSave,
   isSaving,
 }: AlarmPreferencesSectionProps) {
-  const ledColorMap: Record<string, string> = {
-    RED: "#FF0000",
-    GREEN: "#00FF00",
-    BLUE: "#0000FF",
-    YELLOW: "#FFFF00",
-    MAGENTA: "#FF00FF",
-    CYAN: "#00FFFF",
-    WHITE: "#FFFFFF",
-  };
+  const currentLedPattern = LED_PATTERNS.find((p) => p.key === ledPattern);
+  const currentVibrationIntensity = VIBRATION_INTENSITIES.find(
+    (v) => v.key === vibrationIntensity,
+  );
 
   return (
-    <View
-      style={{
-        marginTop: spacing[10],
-        paddingTop: spacing[6],
-        borderTopWidth: 1,
-        borderTopColor: colors.border.light,
-      }}
-    >
-      <Text style={[typography.h5, { marginBottom: spacing[4] }]}>
-        Default Alarm Settings
-      </Text>
-      <Text
-        style={[
-          typography.caption,
-          { color: colors.text.secondary, marginBottom: spacing[6] },
-        ]}
-      >
-        These settings will be used as defaults when creating new alarms
-      </Text>
-
-      {/* Severity Level */}
-      <View style={{ marginBottom: spacing[6] }}>
-        <Text style={[inputs.label, { marginBottom: spacing[2] }]}>
-          Severity Level
+    <View>
+      {/* Light Pattern */}
+      <View style={{ marginBottom: spacing[4] }}>
+        <Text style={[typography.label, { marginBottom: spacing[2] }]}>
+          Light Pattern
         </Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-          <OptionButton
-            label="Info"
-            selected={severityLevel === "INFORMATIONAL"}
-            onPress={() => setSeverityLevel("INFORMATIONAL")}
-          />
-          <OptionButton
-            label="Warning"
-            selected={severityLevel === "WARNING"}
-            onPress={() => setSeverityLevel("WARNING")}
-          />
-          <OptionButton
-            label="Critical"
-            selected={severityLevel === "CRITICAL"}
-            onPress={() => setSeverityLevel("CRITICAL")}
-          />
+        <View
+          style={{
+            flexDirection: "row",
+            gap: spacing[2],
+            marginBottom: spacing[2],
+          }}
+        >
+          {LED_PATTERNS.map((pattern) => (
+            <Pressable
+              key={pattern.key}
+              onPress={() => setLedPattern(pattern.key)}
+              style={{
+                flex: 1,
+                paddingVertical: spacing[2],
+                paddingHorizontal: spacing[1],
+                borderRadius: 8,
+                backgroundColor:
+                  ledPattern === pattern.key
+                    ? colors.primary[500]
+                    : colors.background.secondary,
+                borderWidth: 1,
+                borderColor:
+                  ledPattern === pattern.key
+                    ? colors.primary[500]
+                    : colors.border.light,
+                alignItems: "center",
+              }}
+            >
+              <Ionicons
+                name={pattern.icon}
+                size={20}
+                color={
+                  ledPattern === pattern.key
+                    ? colors.background.primary
+                    : colors.text.secondary
+                }
+              />
+            </Pressable>
+          ))}
         </View>
-      </View>
-
-      {/* LED Pattern */}
-      <View style={{ marginBottom: spacing[6] }}>
-        <Text style={[inputs.label, { marginBottom: spacing[2] }]}>
-          LED Pattern
+        <Text
+          style={[
+            typography.caption,
+            { color: colors.text.secondary, lineHeight: 18 },
+          ]}
+        >
+          {currentLedPattern?.description}
         </Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-          <OptionButton
-            label="Solid"
-            selected={ledPattern === "SOLID"}
-            onPress={() => setLedPattern("SOLID")}
-          />
-          <OptionButton
-            label="Blink Slow"
-            selected={ledPattern === "BLINK_SLOW"}
-            onPress={() => setLedPattern("BLINK_SLOW")}
-          />
-          <OptionButton
-            label="Blink Fast"
-            selected={ledPattern === "BLINK_FAST"}
-            onPress={() => setLedPattern("BLINK_FAST")}
-          />
-          <OptionButton
-            label="Pulse"
-            selected={ledPattern === "PULSE"}
-            onPress={() => setLedPattern("PULSE")}
-          />
-          <OptionButton
-            label="Strobe"
-            selected={ledPattern === "STROBE"}
-            onPress={() => setLedPattern("STROBE")}
-          />
-        </View>
       </View>
 
       {/* LED Color */}
-      <View style={{ marginBottom: spacing[6] }}>
-        <Text style={[inputs.label, { marginBottom: spacing[2] }]}>
-          LED Color
+      <View style={{ marginBottom: spacing[4] }}>
+        <Text style={[typography.label, { marginBottom: spacing[2] }]}>
+          Light Color
         </Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-          {(
-            [
-              "RED",
-              "GREEN",
-              "BLUE",
-              "YELLOW",
-              "MAGENTA",
-              "CYAN",
-              "WHITE",
-            ] as const
-          ).map((color) => (
-            <OptionButton
-              key={color}
-              label={color}
-              selected={ledColor === color}
-              onPress={() => setLedColor(color)}
-              color={ledColorMap[color]}
+        <View
+          style={{
+            flexDirection: "row",
+            gap: spacing[2],
+          }}
+        >
+          {LED_COLORS.map((colorOption) => (
+            <Pressable
+              key={colorOption.key}
+              onPress={() => setLedColor(colorOption.key)}
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                flex: 1,
+                aspectRatio: 1,
+                maxWidth: 50,
+                borderRadius: 25,
+                borderWidth: 3,
+                borderColor:
+                  ledColor === colorOption.key
+                    ? colors.primary[500]
+                    : colors.border.light,
+                backgroundColor: colorOption.color,
+              }}
             />
           ))}
         </View>
       </View>
 
       {/* Vibration Intensity */}
-      <View style={{ marginBottom: spacing[6] }}>
-        <Text style={[inputs.label, { marginBottom: spacing[2] }]}>
-          Vibration Intensity
+      <View style={{ marginBottom: spacing[4] }}>
+        <Text style={[typography.label, { marginBottom: spacing[2] }]}>
+          Vibration Strength
         </Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-          <OptionButton
-            label="Low"
-            selected={vibrationIntensity === "LOW"}
-            onPress={() => setVibrationIntensity("LOW")}
-          />
-          <OptionButton
-            label="Medium"
-            selected={vibrationIntensity === "MEDIUM"}
-            onPress={() => setVibrationIntensity("MEDIUM")}
-          />
-          <OptionButton
-            label="High"
-            selected={vibrationIntensity === "HIGH"}
-            onPress={() => setVibrationIntensity("HIGH")}
-          />
-          <OptionButton
-            label="Maximum"
-            selected={vibrationIntensity === "MAXIMUM"}
-            onPress={() => setVibrationIntensity("MAXIMUM")}
-          />
+        <View
+          style={{
+            flexDirection: "row",
+            gap: spacing[2],
+            marginBottom: spacing[2],
+          }}
+        >
+          {VIBRATION_INTENSITIES.map((intensity) => (
+            <Pressable
+              key={intensity.key}
+              onPress={() => setVibrationIntensity(intensity.key)}
+              style={{
+                flex: 1,
+                paddingVertical: spacing[3],
+                paddingHorizontal: spacing[2],
+                borderRadius: 8,
+                backgroundColor:
+                  vibrationIntensity === intensity.key
+                    ? colors.primary[500]
+                    : colors.background.secondary,
+                borderWidth: 1,
+                borderColor:
+                  vibrationIntensity === intensity.key
+                    ? colors.primary[500]
+                    : colors.border.light,
+                alignItems: "center",
+                gap: spacing[1],
+              }}
+            >
+              <Ionicons
+                name={intensity.icon}
+                size={20}
+                color={
+                  vibrationIntensity === intensity.key
+                    ? colors.background.primary
+                    : colors.text.secondary
+                }
+              />
+              <Text
+                style={[
+                  typography.caption,
+                  {
+                    color:
+                      vibrationIntensity === intensity.key
+                        ? colors.background.primary
+                        : colors.text.primary,
+                    fontWeight:
+                      vibrationIntensity === intensity.key ? "600" : "normal",
+                  },
+                ]}
+              >
+                {intensity.label}
+              </Text>
+            </Pressable>
+          ))}
         </View>
+        <Text
+          style={[
+            typography.caption,
+            { color: colors.text.secondary, lineHeight: 18 },
+          ]}
+        >
+          {currentVibrationIntensity?.description}
+        </Text>
       </View>
 
       {/* Time Settings */}
       <View style={{ marginBottom: spacing[6] }}>
-        <Text
-          style={[
-            typography.body,
-            { marginBottom: spacing[4], fontWeight: "600" },
-          ]}
-        >
-          Time Settings (minutes)
+        <Text style={[typography.label, { marginBottom: spacing[3] }]}>
+          Time Settings
         </Text>
 
         <View style={inputs.container}>
-          <Text style={inputs.label}>Snooze Period</Text>
+          <Text style={inputs.label}>Snooze Period (minutes)</Text>
           <TextInput
             style={inputs.base}
             value={snoozePeriod}
@@ -282,42 +306,14 @@ export function AlarmPreferencesSection({
             keyboardType="numeric"
             placeholderTextColor={colors.text.tertiary}
           />
-        </View>
-
-        <View style={inputs.container}>
-          <Text style={inputs.label}>Snooze Timeout</Text>
-          <TextInput
-            style={inputs.base}
-            value={snoozeTimeout}
-            onChangeText={setSnoozeTimeout}
-            placeholder="15"
-            keyboardType="numeric"
-            placeholderTextColor={colors.text.tertiary}
-          />
-        </View>
-
-        <View style={inputs.container}>
-          <Text style={inputs.label}>Retrigger Delay</Text>
-          <TextInput
-            style={inputs.base}
-            value={retriggerDelay}
-            onChangeText={setRetriggerDelay}
-            placeholder="1"
-            keyboardType="numeric"
-            placeholderTextColor={colors.text.tertiary}
-          />
-        </View>
-
-        <View style={inputs.container}>
-          <Text style={inputs.label}>Retrigger Timeout</Text>
-          <TextInput
-            style={inputs.base}
-            value={retriggerTimeout}
-            onChangeText={setRetriggerTimeout}
-            placeholder="5"
-            keyboardType="numeric"
-            placeholderTextColor={colors.text.tertiary}
-          />
+          <Text
+            style={[
+              typography.caption,
+              { color: colors.text.secondary, marginTop: spacing[1] },
+            ]}
+          >
+            How long the alarm snoozes when dismissed (1-60 minutes)
+          </Text>
         </View>
       </View>
 

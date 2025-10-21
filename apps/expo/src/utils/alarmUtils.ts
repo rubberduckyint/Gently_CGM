@@ -5,6 +5,19 @@
 import { addDays, format, isAfter, isBefore } from "date-fns";
 
 /**
+ * Generate a unique 10-character alphanumeric peripheral ID for an alarm
+ * Used to verify alarm identity on the BLE device
+ */
+export function generatePeripheralId(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
+  for (let i = 0; i < 10; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+/**
  * Helper function to validate and log invalid dates
  */
 function validateDate(date: Date, context: string): boolean {
@@ -268,7 +281,7 @@ function calculateNextCronOccurrence(
     }
   }
 
-  // For hourly alarms (e.g., "0 */12 * * *" for every 12 hours)
+  // For hourly alarms (e.g., "15 */12 * * *" for every 12 hours at :15)
   if (
     hour &&
     hour.startsWith("*/") &&
@@ -290,67 +303,38 @@ function calculateNextCronOccurrence(
         return null;
       }
 
-      // Start from current time
-      let checkDate = new Date();
+      // Calculate next occurrence based on startDate and interval
+      // The pattern repeats from the startDate's time, not from midnight
 
-      // Round up to the next interval
-      const currentHour = checkDate.getHours();
-      const currentMinute = checkDate.getMinutes();
+      // Calculate how many hours have passed since startDate
+      const hoursSinceStart =
+        (now.getTime() - startDate.getTime()) / (1000 * 60 * 60);
 
-      // Calculate the next occurrence based on the interval
-      // For example, if interval is 12 and current hour is 10:
-      // Next occurrences would be at 12:00, 0:00, 12:00, etc.
-      let nextHour = Math.ceil(currentHour / hourInterval) * hourInterval;
-
-      // If we're past the minute mark in the current interval, move to next interval
-      if (nextHour === currentHour && currentMinute >= minuteNum) {
-        nextHour += hourInterval;
+      // If we haven't reached the start date yet, the next occurrence is the start date
+      if (hoursSinceStart < 0) {
+        return startDate;
       }
 
-      // Handle day overflow
-      let daysToAdd = 0;
-      while (nextHour >= 24) {
-        nextHour -= 24;
-        daysToAdd++;
-      }
+      // Calculate how many complete intervals have passed
+      const intervalsPassed = Math.floor(hoursSinceStart / hourInterval);
 
-      checkDate.setHours(nextHour, minuteNum, 0, 0);
-      if (daysToAdd > 0) {
-        checkDate = addDays(checkDate, daysToAdd);
-      }
+      // Calculate the next interval
+      const nextIntervalCount = intervalsPassed + 1;
+
+      // Calculate the next occurrence time
+      const nextOccurrence = new Date(
+        startDate.getTime() + nextIntervalCount * hourInterval * 60 * 60 * 1000,
+      );
 
       // Validate the constructed date
-      if (isNaN(checkDate.getTime())) {
-        console.warn("Invalid constructed hourly alarm date:", checkDate);
+      if (isNaN(nextOccurrence.getTime())) {
+        console.warn("Invalid constructed hourly alarm date:", nextOccurrence);
         return null;
       }
 
-      // Respect start date - if checkDate is before startDate, use startDate as base
-      if (isBefore(checkDate, startDate)) {
-        checkDate = new Date(startDate);
-        const startHour = checkDate.getHours();
-
-        // Find next interval from start date
-        nextHour = Math.ceil(startHour / hourInterval) * hourInterval;
-        if (nextHour === startHour && checkDate.getMinutes() >= minuteNum) {
-          nextHour += hourInterval;
-        }
-
-        daysToAdd = 0;
-        while (nextHour >= 24) {
-          nextHour -= 24;
-          daysToAdd++;
-        }
-
-        checkDate.setHours(nextHour, minuteNum, 0, 0);
-        if (daysToAdd > 0) {
-          checkDate = addDays(checkDate, daysToAdd);
-        }
-      }
-
       // Check if within end date range
-      if (!endDate || isBefore(checkDate, endDate)) {
-        return checkDate;
+      if (!endDate || isBefore(nextOccurrence, endDate)) {
+        return nextOccurrence;
       }
 
       return null;
