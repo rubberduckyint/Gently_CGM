@@ -735,7 +735,7 @@ export default function DeviceDetailPage() {
   return (
     <SafeAreaView style={containers.safeArea}>
       <Header
-        title=""
+        title={device.title ? (device.title.length > 20 ? `${device.title.slice(0, 20)}...` : device.title) : "Gently Device"}
         showBackButton={true}
         onBackPress={() => router.push("/")}
         rightComponent={
@@ -771,175 +771,155 @@ export default function DeviceDetailPage() {
           />
         }
       />
+      
+      {/* Device Status Bar */}
+      <View
+        style={{
+          paddingHorizontal: spacing[4],
+          paddingVertical: spacing[2],
+          backgroundColor: colors.background.secondary,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border.light,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: spacing[2],
+        }}
+      >
+        {/* Connection Status */}
+        <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+          <Animated.View
+            style={{
+              transform: [{ scale: pulseAnim }],
+              marginRight: spacing[1],
+            }}
+          >
+            <Ionicons
+              name="bluetooth"
+              size={14}
+              color={
+                connectionState === "connected"
+                  ? colors.success[600]
+                  : connectionState === "connecting" ||
+                      connectionState === "scanning"
+                    ? colors.warning[600]
+                    : connectionState === "error"
+                      ? colors.error[600]
+                      : colors.gray[400]
+              }
+            />
+          </Animated.View>
+          <Text
+            style={[
+              typography.caption,
+              {
+                color:
+                  connectionState === "connected"
+                    ? colors.success[600]
+                    : connectionState === "connecting" ||
+                        connectionState === "scanning"
+                      ? colors.warning[600]
+                      : connectionState === "error"
+                        ? colors.error[600]
+                        : colors.gray[500],
+                fontWeight: "500",
+              },
+            ]}
+            numberOfLines={1}
+          >
+            {connectionProgress?.message ??
+              connectionState.charAt(0).toUpperCase() +
+                connectionState.slice(1)}
+          </Text>
+        </View>
+
+        {/* Battery Status */}
+        {batteryStatus && (
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Ionicons
+              name={getBatteryInfo(batteryStatus).icon}
+              size={14}
+              color={getBatteryInfo(batteryStatus).color}
+              style={{ marginRight: spacing[1] }}
+            />
+            <Text
+              style={[
+                typography.caption,
+                {
+                  color: getBatteryInfo(batteryStatus).color,
+                  fontWeight: "500",
+                },
+              ]}
+            >
+              {getBatteryInfo(batteryStatus).text}
+              {batteryStatus.isCharging && " ⚡"}
+            </Text>
+          </View>
+        )}
+
+        {/* Serial Number (last 5 chars) */}
+        {device.serialNumber && (
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Ionicons
+              name="barcode-outline"
+              size={14}
+              color={colors.gray[500]}
+              style={{ marginRight: spacing[1] }}
+            />
+            <Text
+              style={[
+                typography.caption,
+                { color: colors.gray[500], fontWeight: "500" },
+              ]}
+            >
+              {device.serialNumber.slice(-5)}
+            </Text>
+          </View>
+        )}
+
+        {/* Reconnect Button - compact version */}
+        {autoConnectAttempted &&
+          connectionState !== "connecting" &&
+          connectionState !== "scanning" &&
+          connectionState !== "connected" &&
+          device.serialNumber && (
+            <Pressable
+              style={[
+                buttons.base,
+                buttons.primary,
+                {
+                  paddingVertical: spacing[1],
+                  paddingHorizontal: spacing[2],
+                },
+              ]}
+              onPress={handleReconnect}
+            >
+              <Text
+                style={[
+                  typography.caption,
+                  { color: colors.text.inverse, fontSize: 11 },
+                ]}
+              >
+                {connectionState === "error" ? "Retry" : "Reconnect"}
+              </Text>
+            </Pressable>
+          )}
+      </View>
+      
       <ScrollView
         style={containers.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Device Header */}
-        <View style={[cards.base]}>
-          <View>
-            <Text style={[typography.h4, { marginBottom: spacing[1] }]}>
-              {device.title}
-            </Text>
-            {device.description && (
-              <Text
-                style={[
-                  typography.body,
-                  { color: colors.text.secondary, marginBottom: spacing[3] },
-                ]}
-              >
-                {device.description}
-              </Text>
-            )}
-
-            {/* Device Stats */}
-            <View
-              style={{
-                gap: spacing[2],
-                marginTop: device.description ? 0 : spacing[2],
-              }}
-            >
-              {device.serialNumber && (
-                <View style={[{ flexDirection: "row", alignItems: "center" }]}>
-                  <Ionicons
-                    name="barcode-outline"
-                    size={14}
-                    color={colors.gray[500]}
-                    style={{ marginRight: spacing[1] }}
-                  />
-                  <Text
-                    style={[
-                      typography.caption,
-                      { color: colors.gray[500], fontWeight: "500" },
-                    ]}
-                  >
-                    {device.serialNumber}
-                  </Text>
-                </View>
-              )}
-              {/* Connection Status and Battery on same line */}
-              <View
-                style={[
-                  {
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: spacing[4],
-                  },
-                ]}
-              >
-                {/* Connection Status */}
-                <View style={[{ flexDirection: "row", alignItems: "center" }]}>
-                  <Animated.View
-                    style={{
-                      transform: [{ scale: pulseAnim }],
-                      marginRight: spacing[1],
-                    }}
-                  >
-                    <Ionicons
-                      name="bluetooth"
-                      size={14}
-                      color={
-                        connectionState === "connected"
-                          ? colors.success[600]
-                          : connectionState === "connecting" ||
-                              connectionState === "scanning"
-                            ? colors.warning[600]
-                            : connectionState === "error"
-                              ? colors.error[600]
-                              : colors.gray[400]
-                      }
-                    />
-                  </Animated.View>
-                  <Text
-                    style={[
-                      typography.caption,
-                      {
-                        color:
-                          connectionState === "connected"
-                            ? colors.success[600]
-                            : connectionState === "connecting" ||
-                                connectionState === "scanning"
-                              ? colors.warning[600]
-                              : connectionState === "error"
-                                ? colors.error[600]
-                                : colors.gray[500],
-                        fontWeight: "500",
-                      },
-                    ]}
-                  >
-                    {connectionProgress?.message ??
-                      connectionState.charAt(0).toUpperCase() +
-                        connectionState.slice(1)}
-                  </Text>
-                </View>
-
-                {/* Reconnect Button - inline with status, only show when disconnected/error and not attempting connection */}
-                {autoConnectAttempted &&
-                  connectionState !== "connecting" &&
-                  connectionState !== "scanning" &&
-                  connectionState !== "connected" &&
-                  device.serialNumber && (
-                    <Pressable
-                      style={[
-                        buttons.base,
-                        buttons.primary,
-                        {
-                          paddingVertical: spacing[1],
-                          paddingHorizontal: spacing[3],
-                        },
-                      ]}
-                      onPress={handleReconnect}
-                    >
-                      <Text
-                        style={[
-                          typography.caption,
-                          { color: colors.text.inverse },
-                        ]}
-                      >
-                        {connectionState === "error" ? "Retry" : "Reconnect"}
-                      </Text>
-                    </Pressable>
-                  )}
-
-                {/* Battery Status */}
-                {batteryStatus && (
-                  <View
-                    style={[{ flexDirection: "row", alignItems: "center" }]}
-                  >
-                    <Ionicons
-                      name={getBatteryInfo(batteryStatus).icon}
-                      size={14}
-                      color={getBatteryInfo(batteryStatus).color}
-                      style={{ marginRight: spacing[1] }}
-                    />
-                    <Text
-                      style={[
-                        typography.caption,
-                        {
-                          color: getBatteryInfo(batteryStatus).color,
-                          fontWeight: "500",
-                        },
-                      ]}
-                    >
-                      {getBatteryInfo(batteryStatus).text}
-                      {batteryStatus.isCharging && " ⚡"}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </View>
-        </View>
 
         {/* Alarms Section */}
-        <View style={containers.section}>
+        <View style={[containers.section, { paddingTop: spacing[3] }]}>
           <View
             style={[
               {
                 flexDirection: "row",
                 justifyContent: "space-between",
                 alignItems: "center",
-                marginBottom: spacing[4],
+                marginBottom: spacing[3],
               },
             ]}
           >

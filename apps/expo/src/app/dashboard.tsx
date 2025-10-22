@@ -26,15 +26,12 @@ import { HelpModal } from "~/components/ui/HelpModal";
 import { YearOfBirthModal } from "~/components/ui/YearOfBirthModal";
 // Import the new design system
 import {
-  avatars,
   buttons,
   buttonText,
-  cards,
   colors,
   commonStyles,
   containers,
   emptyStates,
-  flex,
   spacing,
   typography,
 } from "~/styles";
@@ -43,10 +40,8 @@ import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 import { devicesBeingDeleted } from "~/utils/deviceDeletionTracker";
 import {
-  hasProvidedYearOfBirth,
   hasSeenOnboarding,
   markOnboardingComplete,
-  markYearOfBirthProvided,
   resetOnboarding,
 } from "~/utils/userPreferences";
 
@@ -146,7 +141,7 @@ function DeviceCard({
   };
 
   return (
-    <View style={{ marginBottom: spacing[4] }}>
+    <View style={{ marginBottom: spacing[6] }}>
       <Link
         href={{
           pathname: "/devices/[deviceId]",
@@ -156,71 +151,50 @@ function DeviceCard({
       >
         <Pressable
           style={({ pressed }) => [
-            cards.base,
-            cards.interactive,
-            { minHeight: 140 },
-            pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] },
+            {
+              backgroundColor: "#FFFFFF",
+              borderRadius: 16,
+              padding: spacing[6],
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.15,
+              shadowRadius: 16,
+              elevation: 12,
+              borderWidth: 2,
+              borderColor: colors.primary[300],
+            },
+            pressed && { 
+              opacity: 0.95, 
+              transform: [{ scale: 0.98 }],
+              shadowOpacity: 0.2,
+            },
           ]}
         >
-          {/* Device Header */}
-          <View
-            style={[flex.row, flex.itemsCenter, { marginBottom: spacing[4] }]}
-          >
-            {/* Device Avatar */}
-            <View
+          {/* Device Header - Centered */}
+          <View style={{ alignItems: "center", marginBottom: spacing[4] }}>
+            {/* Device Title */}
+            <Text
               style={[
-                avatars.base,
-                avatars.large,
-                { backgroundColor: colors.primary[500] },
+                typography.h3,
+                {
+                  color: colors.text.primary,
+                  fontWeight: "700",
+                  textAlign: "center",
+                  marginBottom: spacing[2],
+                },
               ]}
             >
-              <Text style={[avatars.text, avatars.textLarge]}>
-                {device.title.slice(0, 2).toUpperCase()}
-              </Text>
-            </View>
+              {device.title}
+            </Text>
 
-            {/* Device Info */}
-            <View style={[flex.flex1, { marginLeft: spacing[4] }]}>
-              <Text style={typography.h5}>{device.title}</Text>
-              {device.description && (
-                <Text
-                  style={[
-                    typography.bodySmall,
-                    { color: colors.text.secondary, marginTop: spacing[1] },
-                  ]}
-                >
-                  {device.description}
-                </Text>
-              )}
-            </View>
-
-            {/* Clickable indicator */}
-            <View style={{ marginLeft: spacing[2] }}>
-              <Ionicons
-                name="chevron-forward"
-                size={24}
-                color={colors.text.secondary}
-              />
-            </View>
-          </View>
-
-          {/* Alarm Count */}
-          <View
-            style={[
-              flex.row,
-              flex.itemsCenter,
-              { marginBottom: nextAlarm ? spacing[3] : 0 },
-            ]}
-          >
-            <Ionicons
-              name="alarm-outline"
-              size={18}
-              color={colors.text.secondary}
-            />
+            {/* Alarm Count - directly under title */}
             <Text
               style={[
                 typography.body,
-                { color: colors.text.secondary, marginLeft: spacing[2] },
+                {
+                  color: colors.text.secondary,
+                  textAlign: "center",
+                },
               ]}
             >
               {device._count.alarms === 0
@@ -231,55 +205,79 @@ function DeviceCard({
             </Text>
           </View>
 
-          {/* Next Alarm */}
+          {/* Next Alarm - Prominent */}
           {nextAlarm?.scheduleInfo.nextOccurrence && (
             <View
-              style={[
-                {
-                  backgroundColor: colors.primary[50],
-                  padding: spacing[3],
-                  borderRadius: 8,
-                  borderLeftWidth: 3,
-                  borderLeftColor: colors.primary[500],
-                },
-              ]}
+              style={{
+                backgroundColor: colors.primary[50],
+                padding: spacing[4],
+                borderRadius: 12,
+                borderWidth: 2,
+                borderColor: colors.primary[200],
+              }}
             >
-              <Text
-                style={[
-                  typography.caption,
-                  {
-                    color: colors.text.secondary,
-                    marginBottom: spacing[1],
-                    textTransform: "uppercase",
-                  },
-                ]}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: spacing[2],
+                }}
               >
-                Next Alarm
-              </Text>
+                <Ionicons
+                  name="notifications"
+                  size={18}
+                  color={colors.primary[600]}
+                />
+                <Text
+                  style={[
+                    typography.caption,
+                    {
+                      color: colors.primary[600],
+                      marginLeft: spacing[1],
+                      textTransform: "uppercase",
+                      fontWeight: "700",
+                      letterSpacing: 1,
+                    },
+                  ]}
+                >
+                  Next Alarm
+                </Text>
+              </View>
+              
               <Text
                 style={[
-                  typography.h6,
+                  typography.h5,
                   {
                     color: colors.text.primary,
-                    marginBottom: spacing[1],
+                    textAlign: "center",
+                    marginBottom: spacing[2],
+                    fontWeight: "600",
                   },
                 ]}
               >
                 {nextAlarm.alarm.title}
               </Text>
-              <View style={[flex.row, flex.itemsCenter]}>
+              
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
                 <Ionicons
-                  name="time-outline"
-                  size={14}
-                  color={colors.primary[600]}
+                  name="time"
+                  size={16}
+                  color={colors.primary[700]}
                 />
                 <Text
                   style={[
-                    typography.bodySmall,
+                    typography.body,
                     {
-                      color: colors.primary[600],
-                      marginLeft: spacing[1],
-                      fontWeight: "600",
+                      color: colors.primary[700],
+                      marginLeft: spacing[2],
+                      fontWeight: "700",
                     },
                   ]}
                 >
@@ -288,6 +286,33 @@ function DeviceCard({
               </View>
             </View>
           )}
+
+          {/* Tap to view indicator */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: spacing[4],
+            }}
+          >
+            <Text
+              style={[
+                typography.caption,
+                {
+                  color: colors.text.tertiary,
+                  marginRight: spacing[1],
+                },
+              ]}
+            >
+              Tap to view details
+            </Text>
+            <Ionicons
+              name="chevron-forward"
+              size={14}
+              color={colors.text.tertiary}
+            />
+          </View>
         </Pressable>
       </Link>
     </View>
@@ -300,23 +325,32 @@ export default function DashboardPage() {
   const [showYearOfBirthModal, setShowYearOfBirthModal] = React.useState(false);
   const [showHelpModal, setShowHelpModal] = React.useState(false);
 
+  // Fetch user profile to check year of birth
+  const { data: userProfile } = useQuery({
+    queryKey: ["userProfile"],
+    queryFn: () => trpc.auth.getProfile.query(),
+    enabled: !!session?.user,
+  });
+
   // Check if user needs to provide year of birth and/or see onboarding
   React.useEffect(() => {
     const checkUserStatus = async () => {
-      const hasProvidedYob = await hasProvidedYearOfBirth();
+      // Wait for user profile to load
+      if (!userProfile) return;
+
       const hasSeenHelp = await hasSeenOnboarding();
 
-      // First check: show year of birth modal if not provided
-      if (!hasProvidedYob) {
+      // First check: show year of birth modal if not in database
+      if (!userProfile.yearOfBirth) {
         setShowYearOfBirthModal(true);
       }
-      // Second check: show help modal if year of birth provided but haven't seen help
+      // Second check: show help modal if year of birth exists but haven't seen help
       else if (!hasSeenHelp) {
         setShowHelpModal(true);
       }
     };
     void checkUserStatus();
-  }, []);
+  }, [userProfile]);
 
   const {
     data: devices,
@@ -365,7 +399,9 @@ export default function DashboardPage() {
       return await trpc.auth.update.mutate({ yearOfBirth });
     },
     onSuccess: async () => {
-      await markYearOfBirthProvided();
+      // Invalidate user profile to refetch with updated year of birth
+      await queryClient.invalidateQueries({ queryKey: ["userProfile"] });
+      
       setShowYearOfBirthModal(false);
 
       // Check if user needs to see help modal
@@ -382,17 +418,6 @@ export default function DashboardPage() {
 
   const handleYearOfBirthComplete = (yearOfBirth: number) => {
     updateYearOfBirthMutation.mutate(yearOfBirth);
-  };
-
-  const handleYearOfBirthSkip = async () => {
-    await markYearOfBirthProvided();
-    setShowYearOfBirthModal(false);
-
-    // Check if user needs to see help modal
-    const hasSeenHelp = await hasSeenOnboarding();
-    if (!hasSeenHelp) {
-      setShowHelpModal(true);
-    }
   };
 
   useFocusEffect(
@@ -572,7 +597,6 @@ export default function DashboardPage() {
       <YearOfBirthModal
         visible={showYearOfBirthModal}
         onComplete={handleYearOfBirthComplete}
-        onSkip={handleYearOfBirthSkip}
         isLoading={updateYearOfBirthMutation.isPending}
       />
 
