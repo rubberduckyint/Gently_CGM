@@ -20,7 +20,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   newArchEnabled: true,
   assetBundlePatterns: ["**/*"],
   ios: {
-    bundleIdentifier: "com.gentlyus.gently",
+    bundleIdentifier: "com.gentlyus.gently-dev",
     supportsTablet: true,
     icon: {
       light: "./assets/gently-ios-blue.png",
@@ -63,6 +63,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   experiments: {
     tsconfigPaths: true,
     typedRoutes: true,
+    autolinkingModuleResolution: true,
   },
   plugins: [
     "expo-router",

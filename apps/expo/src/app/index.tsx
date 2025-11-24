@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { AntDesign, FontAwesome } from "@expo/vector-icons";
 
 import {
   buttons,
@@ -79,11 +80,11 @@ export default function LoginPage() {
     }
   };
 
-  const handleVerifyOTP = async () => {
+  const handleVerifyOTP = async (otpToVerify?: string) => {
     // Clear any previous errors
     setOtpError("");
 
-    const otpString = otp.join("");
+    const otpString = otpToVerify ?? otp.join("");
 
     if (!otpString.trim()) {
       setOtpError("Please enter the verification code");
@@ -154,10 +155,9 @@ export default function LoginPage() {
 
     // Auto-submit when all 6 digits are entered
     if (value && newOtp.every((digit) => digit !== "")) {
-      // Small delay to ensure state is updated
-      setTimeout(() => {
-        void handleVerifyOTP();
-      }, 100);
+      // Submit immediately with the complete OTP
+      const completeOtp = newOtp.join("");
+      void handleVerifyOTP(completeOtp);
     }
   };
 
@@ -291,7 +291,7 @@ export default function LoginPage() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={containers.screen}
       >
-        <View style={containers.contentCentered}>
+        <View style={otpSent ? containers.content : containers.contentCentered}>
           {/* Header */}
           <View style={commonStyles.headerSection}>
             <Text style={typography.h1}>Welcome to Gently</Text>
@@ -357,34 +357,54 @@ export default function LoginPage() {
                 <View style={dividers.line} />
               </View>
 
-              {/* Google Sign In Button */}
-              <Pressable
-                style={[
-                  buttons.base,
-                  buttons.large,
-                  buttons.secondary,
-                  isLoading && buttons.disabled,
-                ]}
-                onPress={handleGoogleAuth}
-                disabled={isLoading}
+              {/* Social Sign In Buttons Row */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: spacing[3],
+                  width: "100%",
+                }}
               >
-                <Text style={buttonText.secondary}>Continue with Google</Text>
-              </Pressable>
+                {/* Google Sign In Button */}
+                <Pressable
+                  style={[
+                    buttons.base,
+                    buttons.large,
+                    buttons.secondary,
+                    isLoading && buttons.disabled,
+                    { flex: 1, flexDirection: "row", gap: spacing[2] },
+                  ]}
+                  onPress={handleGoogleAuth}
+                  disabled={isLoading}
+                >
+                  <AntDesign
+                    name="google"
+                    size={20}
+                    color={colors.text.primary}
+                  />
+                  <Text style={buttonText.secondary}>Google</Text>
+                </Pressable>
 
-              {/* Apple Sign In Button */}
-              <Pressable
-                style={[
-                  buttons.base,
-                  buttons.large,
-                  buttons.secondary,
-                  isLoading && buttons.disabled,
-                  { marginTop: spacing[4] },
-                ]}
-                onPress={handleAppleAuth}
-                disabled={isLoading}
-              >
-                <Text style={buttonText.secondary}>Continue with Apple</Text>
-              </Pressable>
+                {/* Apple Sign In Button */}
+                <Pressable
+                  style={[
+                    buttons.base,
+                    buttons.large,
+                    buttons.secondary,
+                    isLoading && buttons.disabled,
+                    { flex: 1, flexDirection: "row", gap: spacing[2] },
+                  ]}
+                  onPress={handleAppleAuth}
+                  disabled={isLoading}
+                >
+                  <FontAwesome
+                    name="apple"
+                    size={20}
+                    color={colors.text.primary}
+                  />
+                  <Text style={buttonText.secondary}>Apple</Text>
+                </Pressable>
+              </View>
             </>
           )}
 
@@ -484,23 +504,24 @@ export default function LoginPage() {
                 </View>
               ) : null}
 
-              {/* Verify Button */}
-              <Pressable
-                style={[
-                  buttons.base,
-                  buttons.large,
-                  buttons.primary,
-                  otpLoading && buttons.disabled,
-                ]}
-                onPress={handleVerifyOTP}
-                disabled={otpLoading}
-              >
-                {otpLoading ? (
-                  <ActivityIndicator color={colors.text.inverse} />
-                ) : (
-                  <Text style={buttonText.primary}>Verify & Sign In</Text>
-                )}
-              </Pressable>
+              {/* Loading Indicator */}
+              {otpLoading && (
+                <View style={{ marginTop: spacing[4], marginBottom: spacing[4] }}>
+                  <ActivityIndicator size="large" color={colors.primary[500]} />
+                  <Text
+                    style={[
+                      typography.bodySmall,
+                      {
+                        marginTop: spacing[2],
+                        color: colors.text.secondary,
+                        textAlign: "center",
+                      },
+                    ]}
+                  >
+                    Verifying...
+                  </Text>
+                </View>
+              )}
 
               {/* Back Button */}
               <Pressable

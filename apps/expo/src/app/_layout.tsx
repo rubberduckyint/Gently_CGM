@@ -2,6 +2,8 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider } from "@tanstack/react-query";
 
+import "react-native-reanimated";
+
 import { BLEProvider } from "~/contexts/BLEContext";
 import { queryClient } from "~/utils/api";
 

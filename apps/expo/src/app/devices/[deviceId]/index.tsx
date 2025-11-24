@@ -2,12 +2,19 @@ import React, { useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
+import Animated, {
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useGlobalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -101,8 +108,8 @@ export default function DeviceDetailPage() {
     encryptionKey,
   } = useBLE();
 
-  // Animation for connecting status
-  const pulseAnim = React.useRef(new Animated.Value(1)).current;
+  // Animation for connecting status using Reanimated
+  const pulseScale = useSharedValue(1);
 
   // Animate the pulse when connecting or showing progress
   React.useEffect(() => {
@@ -113,26 +120,23 @@ export default function DeviceDetailPage() {
       connectionProgress !== null;
 
     if (shouldAnimate) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.5,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ]),
+      pulseScale.value = withRepeat(
+        withSequence(
+          withTiming(1.5, { duration: 800 }),
+          withTiming(1, { duration: 800 }),
+        ),
+        -1, // infinite loop
+        false,
       );
-      pulse.start();
-      return () => pulse.stop();
     } else {
-      pulseAnim.setValue(1);
+      cancelAnimation(pulseScale);
+      pulseScale.value = withTiming(1, { duration: 200 });
     }
-  }, [connectionState, connectionProgress, pulseAnim]);
+  }, [connectionState, connectionProgress]);
+
+  const pulseAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseScale.value }],
+  }));
 
   // Track the latest battery status from notifications
   const [batteryStatus, setBatteryStatus] = React.useState<{
@@ -795,10 +799,7 @@ export default function DeviceDetailPage() {
         {/* Connection Status */}
         <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
           <Animated.View
-            style={{
-              transform: [{ scale: pulseAnim }],
-              marginRight: spacing[1],
-            }}
+            style={[{ marginRight: spacing[1] }, pulseAnimatedStyle]}
           >
             <Ionicons
               name="bluetooth"
