@@ -5,7 +5,7 @@
  * Handles all form state and validation internally.
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -39,6 +39,11 @@ export function AlarmForm({
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [showValidationErrors, setShowValidationErrors] = useState(false);
+
+  // Sync internal state when initialData changes (e.g., when isActive is toggled)
+  useEffect(() => {
+    setFormData(initialData);
+  }, [initialData]);
 
   const isFormValid = formData.title.trim().length > 0;
 

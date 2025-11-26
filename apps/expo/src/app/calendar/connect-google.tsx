@@ -1,21 +1,21 @@
 /**
  * Google Calendar OAuth Connection Screen
- * Handles the OAuth flow for connecting Google Calendar
+ * Handles the OAuth flow for connecting Google Calendar using native Google Sign-In
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import * as AuthSession from "expo-auth-session";
 
 import { Header } from "~/components/ui/Header";
 import {
@@ -27,27 +27,14 @@ import {
   spacing,
   typography,
 } from "~/styles";
-import {
-  getOAuthDiscovery,
-  getOAuthRequest,
-  exchangeCodeForToken,
-  getUserEmail,
-} from "~/services/googleCalendar";
+import { signInWithGoogle } from "~/services/googleCalendar";
 import { trpc } from "~/utils/api";
 
 export default function ConnectGooglePage() {
   const queryClient = useQueryClient();
-  const params = useLocalSearchParams();
   const [isProcessing, setIsProcessing] = useState(false);
   const [step, setStep] = useState<"initial" | "authorizing" | "saving">(
     "initial",
-  );
-
-  // Setup OAuth
-  const discovery = getOAuthDiscovery();
-  const [request, , promptAsync] = AuthSession.useAuthRequest(
-    getOAuthRequest(),
-    discovery,
   );
 
   // Save connection mutation
@@ -72,78 +59,33 @@ export default function ConnectGooglePage() {
     },
   });
 
-  // Handle OAuth redirect
-  useEffect(() => {
-    const code = params.code as string | undefined;
-
-    if (code && request?.codeVerifier && !isProcessing) {
-      void handleOAuthCallback(code, request.codeVerifier);
-    }
-  }, [params.code, request]);
-
-  const handleOAuthCallback = async (code: string, codeVerifier: string) => {
-    setIsProcessing(true);
-    setStep("saving");
-
-    try {
-      // Exchange code for tokens
-      const tokenData = await exchangeCodeForToken(code, codeVerifier);
-
-      // Get user's email
-      const email = await getUserEmail(tokenData.accessToken);
-
-      // Calculate token expiration
-      const expiresAt = new Date();
-      expiresAt.setSeconds(expiresAt.getSeconds() + tokenData.expiresIn);
-
-      // Ensure we have a refresh token
-      if (!tokenData.refreshToken) {
-        throw new Error("No refresh token received from Google");
-      }
-
-      // Save to database
-      saveConnectionMutation.mutate({
-        provider: "google",
-        accountEmail: email,
-        accessToken: tokenData.accessToken,
-        refreshToken: tokenData.refreshToken,
-        tokenExpiresAt: expiresAt,
-      });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      Alert.alert("Authentication Failed", errorMessage);
-      setIsProcessing(false);
-      setStep("initial");
-    }
-  };
-
   const handleConnect = async () => {
-    if (!request) {
-      Alert.alert("Error", "OAuth request not ready. Please try again.");
-      return;
-    }
-
     setIsProcessing(true);
     setStep("authorizing");
 
     try {
-      const result = await promptAsync();
+      // Sign in with Google and get calendar access
+      const result = await signInWithGoogle();
+      
+      setStep("saving");
 
-      if (result.type === "success") {
-        // OAuth flow completed - the redirect will trigger handleOAuthCallback
-        // via useEffect when the page reloads with the code parameter
-      } else if (result.type === "cancel") {
-        Alert.alert("Cancelled", "Google Calendar connection was cancelled");
-        setIsProcessing(false);
-        setStep("initial");
-      } else {
-        throw new Error("OAuth flow failed");
-      }
+      // Save to database - note: native sign-in doesn't provide refresh tokens directly
+      // The GoogleSignin library handles token refresh internally
+      saveConnectionMutation.mutate({
+        provider: "google",
+        accountEmail: result.email,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken ?? result.accessToken, // Use access token as fallback
+        tokenExpiresAt: result.expiresAt,
+      });
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to start OAuth flow";
-      Alert.alert("Error", errorMessage);
+        error instanceof Error ? error.message : "Failed to connect Google Calendar";
+      
+      if (errorMessage !== "Sign in cancelled") {
+        Alert.alert("Authentication Failed", errorMessage);
+      }
+      
       setIsProcessing(false);
       setStep("initial");
     }
@@ -161,17 +103,18 @@ export default function ConnectGooglePage() {
   };
 
   return (
-    <SafeAreaView style={containers.screen}>
-      <Header title="Connect Google Calendar" showBackButton />
+    <SafeAreaView style={containers.safeArea}>
+      <Header
+        title="Connect Google Calendar"
+        showBackButton
+      />
 
-      <View
-        style={[
-          containers.content,
-          containers.contentCentered,
-          { padding: spacing[4] },
-        ]}
+      <ScrollView
+        style={containers.content}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={{ alignItems: "center", maxWidth: 400 }}>
+        <View style={{ paddingVertical: spacing[4], alignItems: "center" }}>
+        <View style={{ alignItems: "center", maxWidth: 400, width: "100%" }}>
           {/* Icon */}
           <View
             style={{
@@ -224,7 +167,7 @@ export default function ConnectGooglePage() {
             </Text>
 
             {[
-              "View your calendar events",
+              "View your calendar events (read-only)",
               "Read event details (title, time, location)",
               "Access your Google account email",
             ].map((permission, index) => (
@@ -252,6 +195,25 @@ export default function ConnectGooglePage() {
                 </Text>
               </View>
             ))}
+
+            <View
+              style={{
+                marginTop: spacing[3],
+                paddingTop: spacing[3],
+                borderTopWidth: 1,
+                borderTopColor: colors.border.light,
+              }}
+            >
+              <Text
+                style={[
+                  typography.caption,
+                  { color: colors.text.secondary, fontStyle: "italic" },
+                ]}
+              >
+                Note: We cannot create, modify, or delete any calendar events.
+                This is read-only access.
+              </Text>
+            </View>
           </View>
 
           {/* Status Message */}
@@ -314,7 +276,8 @@ export default function ConnectGooglePage() {
             third parties.
           </Text>
         </View>
-      </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

@@ -100,6 +100,27 @@ export default function RootLayout() {
               headerShown: false,
             }}
           />
+          <Stack.Screen
+            name="calendar/index"
+            options={{
+              title: "Calendar Connections",
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="calendar/connect-google"
+            options={{
+              title: "Connect Google Calendar",
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="calendar/select-events"
+            options={{
+              title: "Select Events",
+              headerShown: false,
+            }}
+          />
         </Stack>
         <StatusBar style="dark" />
         {/* Global alarm notification modal - shows when BLE context has activeAlarm */}

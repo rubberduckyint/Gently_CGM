@@ -318,6 +318,7 @@ export const CreateCalendarConnectionSchema = createInsertSchema(
   CalendarConnection,
 ).omit({
   id: true,
+  userId: true,
   createdAt: true,
   updatedAt: true,
 });

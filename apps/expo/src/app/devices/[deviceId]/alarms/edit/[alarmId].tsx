@@ -264,12 +264,6 @@ export default function EditAlarmPage() {
         retriggerTimeout: data.retriggerTimeout,
       });
 
-      // Mark as NOT_SYNCED to ensure sync happens even when disabled
-      await trpc.alarm.update.mutate({
-        id: alarmId,
-        syncStatus: "NOT_SYNCED" as const,
-      });
-
       return result;
     },
     onSuccess: () => {

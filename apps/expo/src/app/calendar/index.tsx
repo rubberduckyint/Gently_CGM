@@ -93,8 +93,11 @@ export default function CalendarConnectionsPage() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={containers.screen}>
-        <Header title="Calendar Connections" showBackButton />
+      <SafeAreaView style={containers.safeArea}>
+        <Header
+          title="Calendar Connections"
+          showBackButton
+        />
         <View style={containers.contentCentered}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
         </View>
@@ -103,13 +106,17 @@ export default function CalendarConnectionsPage() {
   }
 
   return (
-    <SafeAreaView style={containers.screen}>
-      <Header title="Calendar Connections" showBackButton />
+    <SafeAreaView style={containers.safeArea}>
+      <Header
+        title="Calendar Connections"
+        showBackButton
+      />
 
       <ScrollView
         style={containers.content}
-        contentContainerStyle={{ padding: spacing[4] }}
+        showsVerticalScrollIndicator={false}
       >
+        <View style={{ paddingVertical: spacing[4], gap: spacing[4] }}>
         {/* Info Card */}
         <View style={[cards.base, { marginBottom: spacing[4] }]}>
           <View
@@ -260,6 +267,7 @@ export default function CalendarConnectionsPage() {
             </>
           )}
         </Pressable>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

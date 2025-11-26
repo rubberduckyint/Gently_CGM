@@ -946,8 +946,9 @@ export default function DeviceDetailPage() {
                 Alarms (
                 {
                   device.alarms.filter((alarm) => {
+                    // Check if alarm has a next occurrence when enabled
                     const scheduleInfo = calculateNextAlarmOccurrence({
-                      isActive: alarm.isActive,
+                      isActive: true, // Force active to check if it would have next occurrence
                       startDate: new Date(alarm.startDate),
                       endDate: alarm.endDate ? new Date(alarm.endDate) : null,
                       repeat: alarm.repeat,
@@ -1019,19 +1020,33 @@ export default function DeviceDetailPage() {
                 repeat: alarm.repeat,
                 cronExpression: alarm.cronExpression,
               });
-              return { alarm, scheduleInfo };
+              
+              // For disabled alarms, calculate what the next occurrence would be if enabled
+              const scheduleInfoIfEnabled = !alarm.isActive ? calculateNextAlarmOccurrence({
+                isActive: true, // Force active to see if it would have a next occurrence
+                startDate: new Date(alarm.startDate),
+                endDate: alarm.endDate ? new Date(alarm.endDate) : null,
+                repeat: alarm.repeat,
+                cronExpression: alarm.cronExpression,
+              }) : scheduleInfo;
+              
+              return { alarm, scheduleInfo, scheduleInfoIfEnabled };
             });
 
+            // Active alarms: has next occurrence OR is disabled but would have next occurrence if enabled
             const activeAlarms = sortedAlarms
-              .filter(({ scheduleInfo }) => scheduleInfo.nextOccurrence)
+              .filter(({ scheduleInfo, scheduleInfoIfEnabled }) => 
+                scheduleInfo.nextOccurrence || scheduleInfoIfEnabled.nextOccurrence
+              )
               .sort((a, b) => {
-                const timeA = a.scheduleInfo.nextOccurrence?.getTime() ?? 0;
-                const timeB = b.scheduleInfo.nextOccurrence?.getTime() ?? 0;
+                const timeA = a.scheduleInfo.nextOccurrence?.getTime() ?? a.scheduleInfoIfEnabled.nextOccurrence?.getTime() ?? 0;
+                const timeB = b.scheduleInfo.nextOccurrence?.getTime() ?? b.scheduleInfoIfEnabled.nextOccurrence?.getTime() ?? 0;
                 return timeA - timeB;
               });
 
+            // Expired alarms: truly expired (no next occurrence even if enabled)
             const expiredAlarms = sortedAlarms
-              .filter(({ scheduleInfo }) => !scheduleInfo.nextOccurrence)
+              .filter(({ scheduleInfoIfEnabled }) => !scheduleInfoIfEnabled.nextOccurrence)
               .sort((a, b) => {
                 return (
                   new Date(b.alarm.createdAt).getTime() -

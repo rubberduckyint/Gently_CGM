@@ -1,22 +1,12 @@
 /**
  * Google Calendar Integration Service
- * Handles OAuth flow and fetching calendar events
+ * Uses the same Google Sign-In flow as login (@react-native-google-signin)
  */
 
-import * as AuthSession from "expo-auth-session";
-import * as WebBrowser from "expo-web-browser";
-
-// Enable browser session completion
-WebBrowser.maybeCompleteAuthSession();
-
-const GOOGLE_OAUTH_CONFIG = {
-  clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "",
-  scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
-  redirectUri: AuthSession.makeRedirectUri({
-    scheme: "gently",
-    path: "oauth/callback",
-  }),
-};
+import {
+  GoogleSignin,
+  statusCodes,
+} from "@react-native-google-signin/google-signin";
 
 export interface GoogleCalendarEvent {
   id: string;
@@ -45,101 +35,131 @@ export interface GoogleCalendar {
   backgroundColor?: string;
 }
 
-/**
- * Create OAuth discovery configuration
- */
-export const getOAuthDiscovery = () => ({
-  authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
-  tokenEndpoint: "https://oauth2.googleapis.com/token",
-  revocationEndpoint: "https://oauth2.googleapis.com/revoke",
-});
-
-/**
- * Create OAuth request configuration
- */
-export const getOAuthRequest = () => ({
-  clientId: GOOGLE_OAUTH_CONFIG.clientId,
-  scopes: GOOGLE_OAUTH_CONFIG.scopes,
-  redirectUri: GOOGLE_OAUTH_CONFIG.redirectUri,
-  responseType: AuthSession.ResponseType.Code,
-  usePKCE: true,
-});
-
-/**
- * Exchange authorization code for access token
- */
-export async function exchangeCodeForToken(
-  code: string,
-  codeVerifier: string,
-): Promise<{
+export interface GoogleSignInResult {
   accessToken: string;
   refreshToken?: string;
-  expiresIn: number;
-}> {
-  const tokenEndpoint = "https://oauth2.googleapis.com/token";
-
-  const response = await fetch(tokenEndpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      code,
-      client_id: GOOGLE_OAUTH_CONFIG.clientId,
-      redirect_uri: GOOGLE_OAUTH_CONFIG.redirectUri,
-      grant_type: "authorization_code",
-      code_verifier: codeVerifier,
-    }).toString(),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(`Token exchange failed: ${JSON.stringify(error)}`);
-  }
-
-  const data = await response.json();
-
-  return {
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token,
-    expiresIn: data.expires_in,
-  };
+  email: string;
+  expiresAt: Date;
 }
 
 /**
- * Refresh an expired access token
+ * Configure Google Sign-In with calendar scope
+ */
+export function configureGoogleSignIn() {
+  GoogleSignin.configure({
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+    offlineAccess: true, // Request refresh token
+  });
+}
+
+/**
+ * Sign in with Google and get calendar access
+ */
+export async function signInWithGoogle(): Promise<GoogleSignInResult> {
+  try {
+    // Configure before signing in
+    configureGoogleSignIn();
+
+    // Check if already signed in
+    const isSignedIn = GoogleSignin.hasPreviousSignIn();
+    
+    let userInfo;
+    if (isSignedIn) {
+      // Try silent sign in first
+      try {
+        userInfo = await GoogleSignin.signInSilently();
+      } catch {
+        // Silent sign in failed, do regular sign in
+        userInfo = await GoogleSignin.signIn();
+      }
+    } else {
+      userInfo = await GoogleSignin.signIn();
+    }
+
+    if (!userInfo.data) {
+      throw new Error("No user data received from Google Sign-In");
+    }
+
+    // Get access token
+    const tokens = await GoogleSignin.getTokens();
+    
+    if (!tokens.accessToken) {
+      throw new Error("No access token received from Google");
+    }
+
+    // Calculate expiration (tokens typically expire in 1 hour)
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1);
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: userInfo.data.serverAuthCode || undefined,
+      email: userInfo.data.user.email,
+      expiresAt,
+    };
+  } catch (error: unknown) {
+    const googleError = error as { code?: string };
+    
+    if (googleError.code === "SIGN_IN_CANCELLED") {
+      throw new Error("Sign in cancelled");
+    } else if (googleError.code === statusCodes.IN_PROGRESS) {
+      throw new Error("Sign in already in progress");
+    } else if (googleError.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      throw new Error("Google Play Services not available");
+    }
+    
+    throw error;
+  }
+}
+
+/**
+ * Get current access token (refreshes if needed)
+ */
+export async function getAccessToken(): Promise<string> {
+  try {
+    const tokens = await GoogleSignin.getTokens();
+    return tokens.accessToken;
+  } catch {
+    // Token might be expired, try to refresh
+    await GoogleSignin.signInSilently();
+    const tokens = await GoogleSignin.getTokens();
+    return tokens.accessToken;
+  }
+}
+
+/**
+ * Refresh access token
+ * Note: GoogleSignin.getTokens() handles refresh automatically
  */
 export async function refreshAccessToken(
-  refreshToken: string,
+  _refreshToken: string,
 ): Promise<{
   accessToken: string;
   expiresIn: number;
 }> {
-  const tokenEndpoint = "https://oauth2.googleapis.com/token";
-
-  const response = await fetch(tokenEndpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      refresh_token: refreshToken,
-      client_id: GOOGLE_OAUTH_CONFIG.clientId,
-      grant_type: "refresh_token",
-    }).toString(),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(`Token refresh failed: ${JSON.stringify(error)}`);
+  try {
+    await GoogleSignin.signInSilently();
+    const tokens = await GoogleSignin.getTokens();
+    
+    return {
+      accessToken: tokens.accessToken,
+      expiresIn: 3600, // 1 hour
+    };
+  } catch (error) {
+    throw new Error("Failed to refresh token. Please reconnect your calendar.");
   }
+}
 
-  const data = await response.json();
-
-  return {
-    accessToken: data.access_token,
-    expiresIn: data.expires_in,
-  };
+/**
+ * Sign out from Google (for calendar purposes)
+ */
+export async function signOutFromGoogle(): Promise<void> {
+  try {
+    await GoogleSignin.signOut();
+  } catch (error) {
+    console.error("Error signing out from Google:", error);
+  }
 }
 
 /**

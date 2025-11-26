@@ -314,10 +314,21 @@ export default function SelectEventsPage() {
 
   if (isLoadingConnection || isLoadingEvents) {
     return (
-      <SafeAreaView style={containers.screen}>
-        <Header title="Select Events" showBackButton />
+      <SafeAreaView style={containers.safeArea}>
+        <Header
+          title="Select Events"
+          showBackButton
+        />
         <View style={containers.contentCentered}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
+          <Text
+            style={[
+              typography.body,
+              { marginTop: spacing[3], color: colors.text.secondary },
+            ]}
+          >
+            Loading calendar events...
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -325,8 +336,11 @@ export default function SelectEventsPage() {
 
   if (!connection) {
     return (
-      <SafeAreaView style={containers.screen}>
-        <Header title="Select Events" showBackButton />
+      <SafeAreaView style={containers.safeArea}>
+        <Header
+          title="Select Events"
+          showBackButton
+        />
         <View style={containers.contentCentered}>
           <Text style={typography.body}>Connection not found</Text>
         </View>
@@ -335,52 +349,54 @@ export default function SelectEventsPage() {
   }
 
   return (
-    <SafeAreaView style={containers.screen}>
-      <Header title="Select Events" showBackButton />
+    <SafeAreaView style={containers.safeArea}>
+      <Header
+        title="Select Events"
+        showBackButton
+      />
 
-      <View style={containers.content}>
-        {/* Info Header */}
-        <View style={{ padding: spacing[4], paddingBottom: spacing[2] }}>
-          <Text style={[typography.body, { color: colors.text.secondary }]}>
-            Select events to create alarms for. Choose how many minutes before
-            each event you want to be reminded.
-          </Text>
-        </View>
-
-        {/* Events List */}
-        <FlatList
-          data={events ?? []}
-          renderItem={renderEvent}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: spacing[4], paddingTop: spacing[2] }}
-          ListEmptyComponent={
-            <View style={containers.contentCentered}>
-              <Ionicons
-                name="calendar-outline"
-                size={64}
-                color={colors.gray[400]}
-                style={{ marginBottom: spacing[3] }}
-              />
-              <Text
-                style={[
-                  typography.body,
-                  { color: colors.text.secondary, textAlign: "center" },
-                ]}
-              >
-                No upcoming events found in your calendar
-              </Text>
-            </View>
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefetching}
-              onRefresh={() => void refetch()}
-              tintColor={colors.primary[500]}
+      <FlatList
+        data={events ?? []}
+        renderItem={renderEvent}
+        keyExtractor={(item) => item.id}
+        style={containers.content}
+        contentContainerStyle={{ paddingVertical: spacing[4] }}
+        ListHeaderComponent={
+          <View style={{ marginBottom: spacing[3] }}>
+            <Text style={[typography.body, { color: colors.text.secondary }]}>
+              Select events to create alarms for. Choose how many minutes before
+              each event you want to be reminded.
+            </Text>
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={containers.contentCentered}>
+            <Ionicons
+              name="calendar-outline"
+              size={64}
+              color={colors.gray[400]}
+              style={{ marginBottom: spacing[3] }}
             />
-          }
-        />
+            <Text
+              style={[
+                typography.body,
+                { color: colors.text.secondary, textAlign: "center" },
+              ]}
+            >
+              No upcoming events found in your calendar
+            </Text>
+          </View>
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => void refetch()}
+            tintColor={colors.primary[500]}
+          />
+        }
+      />
 
-        {/* Create Alarms Button */}
+      {/* Create Alarms Button */}
         {selectedEvents.size > 0 && (
           <View
             style={{
@@ -413,7 +429,6 @@ export default function SelectEventsPage() {
             </Pressable>
           </View>
         )}
-      </View>
     </SafeAreaView>
   );
 }
