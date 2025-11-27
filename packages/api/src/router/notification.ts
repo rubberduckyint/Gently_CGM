@@ -1,8 +1,8 @@
 import type { TRPCRouterRecord } from "@trpc/server";
+import Expo from "expo-server-sdk";
 import { render } from "@react-email/components";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
-import Expo from "expo-server-sdk";
 import { z } from "zod/v4";
 
 import type { DbClient } from "@gently/db";
@@ -64,7 +64,9 @@ export async function sendPushNotificationToUser(
 
     // Validate the token
     if (!Expo.isExpoPushToken(pushToken)) {
-      console.error(`Invalid Expo push token for user ${userId}: ${String(pushToken)}`);
+      console.error(
+        `Invalid Expo push token for user ${userId}: ${String(pushToken)}`,
+      );
       return { success: false, message: "Invalid push token" };
     }
 
@@ -90,11 +92,17 @@ export async function sendPushNotificationToUser(
     // Check for errors in tickets
     const ticket = tickets[0];
     if (ticket?.status === "error") {
-      console.error(`Push notification error for user ${userId}:`, ticket.message);
+      console.error(
+        `Push notification error for user ${userId}:`,
+        ticket.message,
+      );
       return { success: false, message: ticket.message };
     }
 
-    console.log(`Push notification sent to user ${userId}:`, notification.title);
+    console.log(
+      `Push notification sent to user ${userId}:`,
+      notification.title,
+    );
     return { success: true, message: "Push notification sent" };
   } catch (error) {
     console.error(`Failed to send push notification to user ${userId}:`, error);

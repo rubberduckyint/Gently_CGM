@@ -50,7 +50,11 @@ async function checkDeviceEditPermission(
   });
 
   if (share) {
-    return { canEdit: true, isOwner: false, deviceOwnerId: share.device.userId };
+    return {
+      canEdit: true,
+      isOwner: false,
+      deviceOwnerId: share.device.userId,
+    };
   }
 
   return { canEdit: false, isOwner: false };
@@ -75,11 +79,17 @@ async function notifyDeviceOwnerOfChange(
       where: eq(Device.id, deviceId),
     });
 
-    const sharedUserName = sharedUser?.name ?? sharedUser?.email ?? "A shared user";
+    const sharedUserName =
+      sharedUser?.name ?? sharedUser?.email ?? "A shared user";
     const deviceName = device?.title ?? "your device";
 
     // Build the notification message
-    const actionVerb = action === "created" ? "added" : action === "updated" ? "modified" : "removed";
+    const actionVerb =
+      action === "created"
+        ? "added"
+        : action === "updated"
+          ? "modified"
+          : "removed";
     const title = `Alarm ${actionVerb} on ${deviceName}`;
     const body = `${sharedUserName} ${actionVerb} the alarm "${alarmTitle}"`;
 
@@ -97,7 +107,10 @@ async function notifyDeviceOwnerOfChange(
       },
     });
 
-    console.log(`[NOTIFICATION] Device owner ${deviceOwnerId}: ${body}`, result);
+    console.log(
+      `[NOTIFICATION] Device owner ${deviceOwnerId}: ${body}`,
+      result,
+    );
   } catch (error) {
     // Don't fail the alarm operation if notification fails
     console.error("Failed to notify device owner:", error);
@@ -382,7 +395,8 @@ export const alarmRouter = {
         if (!permission.canEdit) {
           throw new TRPCError({
             code: "NOT_FOUND",
-            message: "Alarm not found or you don't have permission to delete it",
+            message:
+              "Alarm not found or you don't have permission to delete it",
           });
         }
 

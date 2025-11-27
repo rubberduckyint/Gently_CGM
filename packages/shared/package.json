@@ -1,0 +1,37 @@
+{
+  "name": "@gently/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./alarm": {
+      "types": "./dist/alarm/index.d.ts",
+      "default": "./src/alarm/index.ts"
+    }
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "clean": "git clean -xdf .cache .turbo dist node_modules",
+    "dev": "tsc --watch",
+    "format": "prettier --check . --ignore-path ../../.gitignore",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false"
+  },
+  "dependencies": {
+    "cronstrue": "catalog:"
+  },
+  "devDependencies": {
+    "@gently/eslint-config": "workspace:*",
+    "@gently/prettier-config": "workspace:*",
+    "@gently/tsconfig": "workspace:*",
+    "eslint": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:"
+  },
+  "prettier": "@gently/prettier-config"
+}

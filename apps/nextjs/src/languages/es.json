@@ -2,6 +2,7 @@
   "common": {
     "save": "Guardar Cambios",
     "saving": "Guardando...",
+    "create": "Crear",
     "cancel": "Cancelar",
     "confirm": "Confirmar",
     "delete": "Eliminar",
@@ -46,6 +47,7 @@
     "noDevices": "No se encontraron dispositivos",
     "addDevice": "Agregar Dispositivo",
     "downloadApp": "Descargar App",
+    "errorLoadingDevices": "Error al cargar dispositivos",
     "appDownload": {
       "title": "Descarga la App de Gently",
       "description": "Obtén la aplicación móvil para gestionar tus alarmas sobre la marcha.",
@@ -71,6 +73,7 @@
   },
   "alarms": {
     "title": "Alarmas",
+    "braceletSettings": "Configuración del Brazalete",
     "yourAlarms": "Tus Alarmas",
     "addAlarm": "Agregar Alarma",
     "editAlarm": "Editar Alarma",
@@ -100,6 +103,42 @@
       "pulse": "Pulso",
       "wave": "Onda"
     },
+    "vibration": {
+      "low": "Baja",
+      "medium": "Media",
+      "high": "Alta",
+      "maximum": "Máxima"
+    },
+    "severity": {
+      "informational": "Informativo",
+      "warning": "Advertencia",
+      "critical": "Crítico"
+    },
+    "led": {
+      "solid": "Sólido",
+      "blinkSlow": "Parpadeo Lento",
+      "blinkFast": "Parpadeo Rápido",
+      "pulse": "Pulso",
+      "strobe": "Estroboscópico"
+    },
+    "colorOptions": {
+      "red": "Rojo",
+      "green": "Verde",
+      "blue": "Azul",
+      "yellow": "Amarillo",
+      "magenta": "Magenta",
+      "cyan": "Cian",
+      "white": "Blanco"
+    },
+    "color": {
+      "red": "Rojo",
+      "green": "Verde",
+      "blue": "Azul",
+      "yellow": "Amarillo",
+      "magenta": "Magenta",
+      "cyan": "Cian",
+      "white": "Blanco"
+    },
     "form": {
       "title": "Título",
       "titlePlaceholder": "Introduce el título de la alarma",
@@ -123,7 +162,23 @@
       "on": "En",
       "after": "Después de",
       "occurrences": "repeticiones",
-      "chooseWhenToStop": "Elige cuándo debe parar la alarma repetitiva"
+      "chooseWhenToStop": "Elige cuándo debe parar la alarma repetitiva",
+      "severityLevel": "Nivel de Severidad",
+      "ledColor": "Color del LED",
+      "chooseLedColor": "Elige un color para el LED",
+      "ledPattern": "Patrón del LED",
+      "selectLedPattern": "Selecciona cómo debe parpadear el LED",
+      "vibrationIntensity": "Intensidad de Vibración",
+      "selectVibrationIntensity": "Selecciona qué tan fuerte debe ser la vibración",
+      "vibrationPatternDesc": "Selecciona el patrón de vibración para esta alarma",
+      "snoozePeriod": "Período de Repetición (min)",
+      "snoozePeriodDesc": "Tiempo entre recordatorios de repetición",
+      "snoozeTimeout": "Tiempo Límite de Repetición (min)",
+      "snoozeTimeoutDesc": "Tiempo máximo para recordatorios de repetición",
+      "retriggerDelay": "Retraso de Reactivación (min)",
+      "retriggerDelayDesc": "Retraso antes de que la alarma pueda reactivarse",
+      "retriggerTimeout": "Tiempo Límite de Reactivación (min)",
+      "retriggerTimeoutDesc": "Tiempo máximo para intentos de reactivación"
     }
   },
   "settings": {

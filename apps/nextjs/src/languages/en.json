@@ -47,6 +47,7 @@
     "noDevices": "No devices found",
     "addDevice": "Add Device",
     "downloadApp": "Download App",
+    "errorLoadingDevices": "Error loading devices",
     "appDownload": {
       "title": "Download the Gently App",
       "description": "Get the mobile app to manage your alarms on the go.",
@@ -72,6 +73,7 @@
   },
   "alarms": {
     "title": "Alarms",
+    "braceletSettings": "Bracelet Settings",
     "yourAlarms": "Your Alarms",
     "addAlarm": "Add Alarm",
     "editAlarm": "Edit Alarm",
@@ -101,6 +103,42 @@
       "pulse": "Pulse",
       "wave": "Wave"
     },
+    "vibration": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "maximum": "Maximum"
+    },
+    "severity": {
+      "informational": "Informational",
+      "warning": "Warning",
+      "critical": "Critical"
+    },
+    "led": {
+      "solid": "Solid",
+      "blinkSlow": "Blink Slow",
+      "blinkFast": "Blink Fast",
+      "pulse": "Pulse",
+      "strobe": "Strobe"
+    },
+    "colorOptions": {
+      "red": "Red",
+      "green": "Green",
+      "blue": "Blue",
+      "yellow": "Yellow",
+      "magenta": "Magenta",
+      "cyan": "Cyan",
+      "white": "White"
+    },
+    "color": {
+      "red": "Red",
+      "green": "Green",
+      "blue": "Blue",
+      "yellow": "Yellow",
+      "magenta": "Magenta",
+      "cyan": "Cyan",
+      "white": "White"
+    },
     "form": {
       "title": "Title",
       "titlePlaceholder": "Enter alarm title",
@@ -124,7 +162,23 @@
       "on": "On",
       "after": "After",
       "occurrences": "occurrences",
-      "chooseWhenToStop": "Choose when the repeating alarm should stop"
+      "chooseWhenToStop": "Choose when the repeating alarm should stop",
+      "severityLevel": "Severity Level",
+      "ledColor": "LED Color",
+      "chooseLedColor": "Choose a color for the LED",
+      "ledPattern": "LED Pattern",
+      "selectLedPattern": "Select how the LED should blink",
+      "vibrationIntensity": "Vibration Intensity",
+      "selectVibrationIntensity": "Select how strong the vibration should be",
+      "vibrationPatternDesc": "Select the vibration pattern for this alarm",
+      "snoozePeriod": "Snooze Period (min)",
+      "snoozePeriodDesc": "Time between snooze reminders",
+      "snoozeTimeout": "Snooze Timeout (min)",
+      "snoozeTimeoutDesc": "Maximum time for snooze reminders",
+      "retriggerDelay": "Retrigger Delay (min)",
+      "retriggerDelayDesc": "Delay before alarm can retrigger",
+      "retriggerTimeout": "Retrigger Timeout (min)",
+      "retriggerTimeoutDesc": "Maximum time for retrigger attempts"
     }
   },
   "settings": {

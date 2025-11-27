@@ -1,5 +1,15 @@
 "use client";
 
+import {
+  Activity,
+  Bell,
+  Circle,
+  CircleOff,
+  Heart,
+  Music,
+  Watch,
+  Zap,
+} from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
@@ -9,7 +19,9 @@ import { z } from "zod";
 
 import type { Alarm } from "@gently/db";
 
+import { cn } from "~/lib/utils";
 import { Button } from "~/_components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "~/_components/ui/card";
 import { DialogClose, DialogFooter } from "~/_components/ui/dialog";
 import {
   Form,
@@ -30,16 +42,55 @@ import {
   SelectValue,
 } from "~/_components/ui/select";
 import { Switch } from "~/_components/ui/switch";
-import { Textarea } from "~/_components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "~/_components/ui/toggle-group";
 import { authClient } from "~/auth/client";
 import { useTRPC } from "~/trpc/react";
 
 // Type aliases for cleaner code
-type SeverityLevel = Alarm["severityLevel"];
 type LedPattern = Alarm["ledPattern"];
 type LedColor = Alarm["ledColor"];
 type VibrationIntensity = Alarm["vibrationIntensity"];
+type VibrationPattern = "QUICK" | "HEARTBEAT" | "RAPID" | "SYMPHONY";
+
+// LED Pattern options with icons (matching mobile app)
+const LED_PATTERNS = [
+  { key: "OFF" as LedPattern, label: "Off", description: "LED disabled", icon: CircleOff },
+  { key: "SOLID" as LedPattern, label: "Solid", description: "Continuous steady light", icon: Circle },
+  { key: "BLINK_SLOW" as LedPattern, label: "Slow", description: "Gentle pulsing light", icon: Circle },
+  { key: "BLINK_FAST" as LedPattern, label: "Fast", description: "Rapid attention-getting flashes", icon: Zap },
+  { key: "PULSE" as LedPattern, label: "Pulse", description: "Smooth breathing effect", icon: Heart },
+  { key: "STROBE" as LedPattern, label: "Strobe", description: "Intense flashing pattern", icon: Zap },
+] as const;
+
+// LED Color options (matching mobile app)
+const LED_COLORS = [
+  { key: "RED" as LedColor, label: "Red", color: "#ef4444" },
+  { key: "GREEN" as LedColor, label: "Green", color: "#22c55e" },
+  { key: "BLUE" as LedColor, label: "Blue", color: "#3b82f6" },
+  { key: "YELLOW" as LedColor, label: "Yellow", color: "#eab308" },
+  { key: "MAGENTA" as LedColor, label: "Magenta", color: "#FF1493" },
+  { key: "CYAN" as LedColor, label: "Cyan", color: "#00BFFF" },
+  { key: "WHITE" as LedColor, label: "White", color: "#f3f4f6" },
+] as const;
+
+// Vibration intensity options (matching mobile app)
+const VIBRATION_INTENSITIES = [
+  { key: "LOW" as VibrationIntensity, label: "Low", description: "Gentle vibration" },
+  { key: "MEDIUM" as VibrationIntensity, label: "Med", description: "Moderate vibration" },
+  { key: "HIGH" as VibrationIntensity, label: "High", description: "Strong vibration" },
+  { key: "MAXIMUM" as VibrationIntensity, label: "Max", description: "Maximum vibration" },
+] as const;
+
+// Vibration pattern options (matching mobile app)
+const VIBRATION_PATTERNS = [
+  { key: "QUICK" as VibrationPattern, label: "Quick", description: "Short, sharp vibrations", icon: Zap, value: 1 },
+  { key: "HEARTBEAT" as VibrationPattern, label: "Heart", description: "Rhythmic double pulses", icon: Heart, value: 2 },
+  { key: "RAPID" as VibrationPattern, label: "Rapid", description: "Fast continuous pulses", icon: Activity, value: 3 },
+  { key: "SYMPHONY" as VibrationPattern, label: "Symphony", description: "Complex musical pattern", icon: Music, value: 4 },
+] as const;
+
+// Snooze period options (matching mobile app)
+const SNOOZE_OPTIONS = [1, 3, 5, 10, 15] as const;
 
 // Constants that will be translated
 const getDaysOfWeek = (t: ReturnType<typeof useTranslations>) =>
@@ -81,69 +132,6 @@ const getDaysOfWeek = (t: ReturnType<typeof useTranslations>) =>
     },
   ] as const;
 
-const getVibrationIntensityOptions = (
-  t: ReturnType<typeof useTranslations>,
-) => [
-  {
-    value: "LOW" as VibrationIntensity,
-    label: t("alarms.vibration.low") || "Low",
-  },
-  {
-    value: "MEDIUM" as VibrationIntensity,
-    label: t("alarms.vibration.medium") || "Medium",
-  },
-  {
-    value: "HIGH" as VibrationIntensity,
-    label: t("alarms.vibration.high") || "High",
-  },
-  {
-    value: "MAXIMUM" as VibrationIntensity,
-    label: t("alarms.vibration.maximum") || "Maximum",
-  },
-];
-
-const getSeverityLevelOptions = (t: ReturnType<typeof useTranslations>) => [
-  {
-    value: "INFORMATIONAL" as SeverityLevel,
-    label: t("alarms.severity.informational") || "Informational",
-  },
-  {
-    value: "WARNING" as SeverityLevel,
-    label: t("alarms.severity.warning") || "Warning",
-  },
-  {
-    value: "CRITICAL" as SeverityLevel,
-    label: t("alarms.severity.critical") || "Critical",
-  },
-];
-
-const getLedPatternOptions = (t: ReturnType<typeof useTranslations>) => [
-  { value: "SOLID" as LedPattern, label: t("alarms.led.solid") || "Solid" },
-  {
-    value: "BLINK_SLOW" as LedPattern,
-    label: t("alarms.led.blinkSlow") || "Blink Slow",
-  },
-  {
-    value: "BLINK_FAST" as LedPattern,
-    label: t("alarms.led.blinkFast") || "Blink Fast",
-  },
-  { value: "PULSE" as LedPattern, label: t("alarms.led.pulse") || "Pulse" },
-  { value: "STROBE" as LedPattern, label: t("alarms.led.strobe") || "Strobe" },
-];
-
-const getLedColorOptions = (t: ReturnType<typeof useTranslations>) => [
-  { value: "RED" as LedColor, label: t("alarms.color.red") || "Red" },
-  { value: "GREEN" as LedColor, label: t("alarms.color.green") || "Green" },
-  { value: "BLUE" as LedColor, label: t("alarms.color.blue") || "Blue" },
-  { value: "YELLOW" as LedColor, label: t("alarms.color.yellow") || "Yellow" },
-  {
-    value: "MAGENTA" as LedColor,
-    label: t("alarms.color.magenta") || "Magenta",
-  },
-  { value: "CYAN" as LedColor, label: t("alarms.color.cyan") || "Cyan" },
-  { value: "WHITE" as LedColor, label: t("alarms.color.white") || "White" },
-];
-
 const getRepeatTypeOptions = (t: ReturnType<typeof useTranslations>) => [
   { value: "minutes" as const, label: t("common.minutes") || "Minutes" },
   { value: "hours" as const, label: t("common.hours") || "Hours" },
@@ -155,7 +143,6 @@ const getRepeatTypeOptions = (t: ReturnType<typeof useTranslations>) => [
 const alarmFormSchema = z
   .object({
     title: z.string().min(1, "Title is required").max(50, "Title too long"),
-    description: z.string().max(128, "Description too long").optional(),
     startDate: z.string().min(1, "Start date is required"),
     repeat: z.boolean(),
     repeatType: z.enum(["minutes", "hours", "days", "weeks"]),
@@ -164,7 +151,7 @@ const alarmFormSchema = z
     ends: z.enum(["never", "on", "after"]),
     endsOnDate: z.string().optional(),
     endsAfter: z.number().min(1, "Must be at least 1").optional(),
-    severityLevel: z.enum(["INFORMATIONAL", "WARNING", "CRITICAL"]),
+    // Bracelet settings
     ledPattern: z.enum([
       "OFF",
       "SOLID",
@@ -185,9 +172,6 @@ const alarmFormSchema = z
     vibrationPattern: z.number().min(1).max(10),
     vibrationIntensity: z.enum(["LOW", "MEDIUM", "HIGH", "MAXIMUM"]),
     snoozePeriod: z.number().min(1).max(60),
-    snoozeTimeout: z.number().min(1).max(120),
-    retriggerDelay: z.number().min(0).max(60), // 0 = disabled
-    retriggerTimeout: z.number().min(0).max(120), // 0 = disabled
   })
   .superRefine((data, ctx) => {
     // Only validate ends fields if repeat is true
@@ -319,11 +303,20 @@ export function AlarmEditForm({
 
   // Get translated constants
   const DAYS_OF_WEEK = getDaysOfWeek(t);
-  const VIBRATION_INTENSITY_OPTIONS = getVibrationIntensityOptions(t);
-  const SEVERITY_LEVEL_OPTIONS = getSeverityLevelOptions(t);
-  const LED_PATTERN_OPTIONS = getLedPatternOptions(t);
-  const LED_COLOR_OPTIONS = getLedColorOptions(t);
   const REPEAT_TYPE_OPTIONS = getRepeatTypeOptions(t);
+
+  // Get current LED pattern for description display
+  const watchedLedPattern = form.watch("ledPattern");
+  const watchedVibrationIntensity = form.watch("vibrationIntensity");
+  const watchedVibrationPattern = form.watch("vibrationPattern");
+
+  const currentLedPattern = LED_PATTERNS.find((p) => p.key === watchedLedPattern);
+  const currentVibrationIntensity = VIBRATION_INTENSITIES.find(
+    (i) => i.key === watchedVibrationIntensity
+  );
+  const currentVibrationPatternObj = VIBRATION_PATTERNS.find(
+    (p) => p.value === watchedVibrationPattern
+  );
 
   // Generate default values
   const getDefaultValues = (): AlarmFormValues => {
@@ -340,12 +333,9 @@ export function AlarmEditForm({
         ends = "on";
         endsOnDate = formatDateTimeLocal(alarm.endDate);
       }
-      // Note: "after X occurrences" would need additional data from the alarm system
-      // For now, we'll default to "never" if endDate is not set
 
       return {
         title: alarm.title,
-        description: alarm.description ?? undefined,
         startDate: formatDateTimeLocal(alarm.startDate),
         repeat: alarm.repeat,
         repeatType: "days",
@@ -354,21 +344,16 @@ export function AlarmEditForm({
         ends,
         endsOnDate,
         endsAfter,
-        severityLevel: alarm.severityLevel,
         ledPattern: alarm.ledPattern,
         ledColor: alarm.ledColor,
         vibrationPattern: alarm.vibrationPattern,
         vibrationIntensity: alarm.vibrationIntensity,
         snoozePeriod: alarm.snoozePeriod,
-        snoozeTimeout: alarm.snoozeTimeout,
-        retriggerDelay: alarm.retriggerDelay,
-        retriggerTimeout: alarm.retriggerTimeout,
       };
     }
 
     return {
       title: "",
-      description: undefined,
       startDate: formatDateTimeLocal(defaultStart),
       repeat: false,
       repeatType: "days",
@@ -377,15 +362,11 @@ export function AlarmEditForm({
       ends: "never" as const,
       endsOnDate: undefined,
       endsAfter: undefined,
-      severityLevel: "INFORMATIONAL" as const,
       ledPattern: "BLINK_SLOW" as const,
       ledColor: "BLUE" as const,
       vibrationPattern: 1,
       vibrationIntensity: "MEDIUM" as const,
       snoozePeriod: 5,
-      snoozeTimeout: 15,
-      retriggerDelay: 1,
-      retriggerTimeout: 5,
     };
   };
 
@@ -413,51 +394,34 @@ export function AlarmEditForm({
         endDateString = endDate.toISOString();
       }
 
-      // Handle "after X occurrences" case
-      if (values.repeat && values.ends === "after" && values.endsAfter) {
-        // Note: This requires backend logic to track occurrences and automatically
-        // deactivate the alarm after the specified number of executions
-        console.log(`Alarm should end after ${values.endsAfter} occurrences`);
-        // TODO: Implement occurrence tracking in the alarm system
-      }
+      // Common values for create/update
+      const alarmData = {
+        title: values.title,
+        startDate: startDateString,
+        endDate: endDateString,
+        repeat: values.repeat,
+        cronExpression,
+        ledPattern: values.ledPattern,
+        ledColor: values.ledColor,
+        vibrationPattern: values.vibrationPattern,
+        vibrationIntensity: values.vibrationIntensity,
+        snoozePeriod: values.snoozePeriod,
+        // Use default values for removed fields
+        severityLevel: "INFORMATIONAL" as const,
+        snoozeTimeout: 15,
+        retriggerDelay: values.snoozePeriod,
+        retriggerTimeout: 5,
+      };
 
       if (mode === "edit" && alarmId) {
         updateMutation.mutate({
           id: alarmId,
-          title: values.title,
-          description: values.description,
-          startDate: startDateString,
-          endDate: endDateString,
-          repeat: values.repeat,
-          cronExpression,
-          severityLevel: values.severityLevel,
-          ledPattern: values.ledPattern,
-          ledColor: values.ledColor,
-          vibrationPattern: values.vibrationPattern,
-          vibrationIntensity: values.vibrationIntensity,
-          snoozePeriod: values.snoozePeriod,
-          snoozeTimeout: values.snoozeTimeout,
-          retriggerDelay: values.retriggerDelay,
-          retriggerTimeout: values.retriggerTimeout,
+          ...alarmData,
         });
       } else if (mode === "create" && deviceId && userId) {
         createMutation.mutate({
-          title: values.title,
-          description: values.description,
+          ...alarmData,
           isActive: true,
-          startDate: startDateString,
-          endDate: endDateString,
-          repeat: values.repeat,
-          cronExpression,
-          severityLevel: values.severityLevel,
-          ledPattern: values.ledPattern,
-          ledColor: values.ledColor,
-          vibrationPattern: values.vibrationPattern,
-          vibrationIntensity: values.vibrationIntensity,
-          snoozePeriod: values.snoozePeriod,
-          snoozeTimeout: values.snoozeTimeout,
-          retriggerDelay: values.retriggerDelay,
-          retriggerTimeout: values.retriggerTimeout,
           deviceId: deviceId,
         });
       }
@@ -472,539 +436,446 @@ export function AlarmEditForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-        {/* Title */}
-        <FormField
-          control={form.control}
-          name="title"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t("alarms.form.title")}</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder={t("alarms.form.titlePlaceholder")}
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Description */}
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t("alarms.form.description")}</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder={t("alarms.form.descriptionPlaceholder")}
-                  {...field}
-                  value={field.value ?? ""}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Start Date */}
-        <FormField
-          control={form.control}
-          name="startDate"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t("alarms.form.startDate")}</FormLabel>
-              <FormControl>
-                <Input type="datetime-local" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Severity Level */}
-        <FormField
-          control={form.control}
-          name="severityLevel"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>
-                {t("alarms.form.severityLevel") || "Severity Level"}
-              </FormLabel>
-              <FormDescription>
-                {t("alarms.form.setImportanceLevel") ||
-                  "Set the importance level of this alarm"}
-              </FormDescription>
-              <FormControl>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SEVERITY_LEVEL_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* LED Color */}
-        <FormField
-          control={form.control}
-          name="ledColor"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t("alarms.form.ledColor") || "LED Color"}</FormLabel>
-              <FormDescription>
-                {t("alarms.form.chooseLedColor") ||
-                  "Choose the LED color for this alarm"}
-              </FormDescription>
-              <FormControl>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LED_COLOR_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* LED Pattern */}
-        <FormField
-          control={form.control}
-          name="ledPattern"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>
-                {t("alarms.form.ledPattern") || "LED Pattern"}
-              </FormLabel>
-              <FormDescription>
-                {t("alarms.form.selectLedPattern") ||
-                  "Select the LED flashing pattern"}
-              </FormDescription>
-              <FormControl>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LED_PATTERN_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Vibration Intensity */}
-        <FormField
-          control={form.control}
-          name="vibrationIntensity"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>
-                {t("alarms.form.vibrationIntensity") || "Vibration Intensity"}
-              </FormLabel>
-              <FormDescription>
-                {t("alarms.form.selectVibrationIntensity") ||
-                  "Select the vibration intensity"}
-              </FormDescription>
-              <FormControl>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VIBRATION_INTENSITY_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Vibration Pattern */}
-        <FormField
-          control={form.control}
-          name="vibrationPattern"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>
-                {t("alarms.form.vibrationPattern") || "Vibration Pattern"}
-              </FormLabel>
-              <FormDescription>
-                {t("alarms.form.vibrationPatternDesc") ||
-                  "Pattern number (1-10)"}
-              </FormDescription>
-              <FormControl>
-                <Input
-                  type="number"
-                  min={1}
-                  max={10}
-                  {...field}
-                  onChange={(e) => field.onChange(parseInt(e.target.value))}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Snooze Settings */}
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="snoozePeriod"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  {t("alarms.form.snoozePeriod") || "Snooze Period (min)"}
-                </FormLabel>
-                <FormDescription>
-                  {t("alarms.form.snoozePeriodDesc") ||
-                    "Minutes between snoozes"}
-                </FormDescription>
-                <FormControl>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={60}
-                    {...field}
-                    onChange={(e) => field.onChange(parseInt(e.target.value))}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="snoozeTimeout"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  {t("alarms.form.snoozeTimeout") || "Snooze Timeout (min)"}
-                </FormLabel>
-                <FormDescription>
-                  {t("alarms.form.snoozeTimeoutDesc") ||
-                    "How long snooze lasts"}
-                </FormDescription>
-                <FormControl>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={120}
-                    {...field}
-                    onChange={(e) => field.onChange(parseInt(e.target.value))}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        {/* Retrigger Settings */}
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="retriggerDelay"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  {t("alarms.form.retriggerDelay") || "Retrigger Delay (min)"}
-                </FormLabel>
-                <FormDescription>
-                  {t("alarms.form.retriggerDelayDesc") ||
-                    "Delay before retriggering"}
-                </FormDescription>
-                <FormControl>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={60}
-                    {...field}
-                    onChange={(e) => field.onChange(parseInt(e.target.value))}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="retriggerTimeout"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  {t("alarms.form.retriggerTimeout") ||
-                    "Retrigger Timeout (min)"}
-                </FormLabel>
-                <FormDescription>
-                  {t("alarms.form.retriggerTimeoutDesc") ||
-                    "How long retrigger lasts"}
-                </FormDescription>
-                <FormControl>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={120}
-                    {...field}
-                    onChange={(e) => field.onChange(parseInt(e.target.value))}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        {/* Repeat */}
-        <FormField
-          control={form.control}
-          name="repeat"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-              <div className="space-y-0.5">
-                <FormLabel className="text-base">
-                  {t("alarms.form.repeat")}
-                </FormLabel>
-                <FormDescription>
-                  {t("alarms.form.makeAlarmRepeat")}
-                </FormDescription>
-              </div>
-              <FormControl>
-                <Switch
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-            </FormItem>
-          )}
-        />
-
-        {/* Repeat Options */}
-        {repeat && (
-          <div className="space-y-4 rounded-lg border p-4">
-            <h3 className="text-sm font-medium">
-              {t("alarms.form.repeatOptions")}
-            </h3>
-
-            <div className="flex items-center gap-2">
-              <span className="text-sm">{t("alarms.form.every")}</span>
-              <FormField
-                control={form.control}
-                name="repeatEvery"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={999}
-                        className="w-20"
-                        {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="repeatType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                      >
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {REPEAT_TYPE_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Days of Week Selection */}
-            {repeatType === "weeks" && (
-              <FormField
-                control={form.control}
-                name="daysOfWeek"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("alarms.form.daysOfWeek")}</FormLabel>
-                    <FormControl>
-                      <ToggleGroup
-                        type="multiple"
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        className="justify-start"
-                      >
-                        {DAYS_OF_WEEK.map((day) => (
-                          <ToggleGroupItem
-                            key={day.value}
-                            value={day.value}
-                            aria-label={day.label}
-                            className="h-10 w-12"
-                          >
-                            {day.short}
-                          </ToggleGroupItem>
-                        ))}
-                      </ToggleGroup>
-                    </FormControl>
-                    <FormDescription>
-                      {t("alarms.form.selectDaysOfWeek")}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {/* Ends */}
+        {/* Basic Information Section */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base font-medium">
+              <Bell className="h-5 w-5 text-primary" />
+              {t("alarms.form.title")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Title */}
             <FormField
               control={form.control}
-              name="ends"
+              name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t("alarms.form.ends")}</FormLabel>
+                  <FormLabel>{t("alarms.form.title")} *</FormLabel>
                   <FormControl>
-                    <RadioGroup
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      className="space-y-3"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="never" id="never" />
-                        <label
-                          htmlFor="never"
-                          className="cursor-pointer text-sm font-normal"
-                        >
-                          {t("alarms.form.never")}
-                        </label>
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="on" id="on" />
-                        <label
-                          htmlFor="on"
-                          className="cursor-pointer text-sm font-normal"
-                        >
-                          {t("alarms.form.on")}
-                        </label>
-                        <FormField
-                          control={form.control}
-                          name="endsOnDate"
-                          render={({ field: dateField }) => (
-                            <FormItem className="ml-2">
-                              <FormControl>
-                                <Input
-                                  type="datetime-local"
-                                  disabled={ends !== "on"}
-                                  className="w-48"
-                                  {...dateField}
-                                  value={dateField.value ?? ""}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="after" id="after" />
-                        <label
-                          htmlFor="after"
-                          className="cursor-pointer text-sm font-normal"
-                        >
-                          {t("alarms.form.after")}
-                        </label>
-                        <FormField
-                          control={form.control}
-                          name="endsAfter"
-                          render={({ field: countField }) => (
-                            <FormItem className="ml-2">
-                              <FormControl>
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    max={9999}
-                                    disabled={ends !== "after"}
-                                    className="w-20"
-                                    {...countField}
-                                    value={countField.value ?? ""}
-                                    onChange={(e) =>
-                                      countField.onChange(
-                                        Number(e.target.value) || undefined,
-                                      )
-                                    }
-                                  />
-                                  <span className="text-muted-foreground text-sm">
-                                    {t("alarms.form.occurrences")}
-                                  </span>
-                                </div>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    </RadioGroup>
+                    <Input
+                      placeholder={t("alarms.form.titlePlaceholder")}
+                      {...field}
+                    />
                   </FormControl>
-                  <FormDescription>
-                    {t("alarms.form.chooseWhenToStop")}
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          </div>
-        )}
+
+            {/* Start Date */}
+            <FormField
+              control={form.control}
+              name="startDate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("alarms.form.startDate")}</FormLabel>
+                  <FormControl>
+                    <Input type="datetime-local" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Repeat Toggle */}
+            <FormField
+              control={form.control}
+              name="repeat"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">
+                      {t("alarms.form.repeat")}
+                    </FormLabel>
+                    <FormDescription>
+                      {t("alarms.form.makeAlarmRepeat")}
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {/* Repeat Options */}
+            {repeat && (
+              <div className="space-y-4 rounded-lg border p-4">
+                <h4 className="text-sm font-medium">
+                  {t("alarms.form.repeatOptions")}
+                </h4>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{t("alarms.form.every")}</span>
+                  <FormField
+                    control={form.control}
+                    name="repeatEvery"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={999}
+                            className="w-20"
+                            {...field}
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="repeatType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Select
+                            value={field.value}
+                            onValueChange={field.onChange}
+                          >
+                            <SelectTrigger className="w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {REPEAT_TYPE_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Days of Week Selection */}
+                {repeatType === "weeks" && (
+                  <FormField
+                    control={form.control}
+                    name="daysOfWeek"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("alarms.form.daysOfWeek")}</FormLabel>
+                        <FormControl>
+                          <ToggleGroup
+                            type="multiple"
+                            value={field.value}
+                            onValueChange={field.onChange}
+                            className="justify-start"
+                          >
+                            {DAYS_OF_WEEK.map((day) => (
+                              <ToggleGroupItem
+                                key={day.value}
+                                value={day.value}
+                                aria-label={day.label}
+                                className="h-10 w-12"
+                              >
+                                {day.short}
+                              </ToggleGroupItem>
+                            ))}
+                          </ToggleGroup>
+                        </FormControl>
+                        <FormDescription>
+                          {t("alarms.form.selectDaysOfWeek")}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {/* Ends */}
+                <FormField
+                  control={form.control}
+                  name="ends"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("alarms.form.ends")}</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          className="space-y-3"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="never" id="never" />
+                            <label
+                              htmlFor="never"
+                              className="cursor-pointer text-sm font-normal"
+                            >
+                              {t("alarms.form.never")}
+                            </label>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="on" id="on" />
+                            <label
+                              htmlFor="on"
+                              className="cursor-pointer text-sm font-normal"
+                            >
+                              {t("alarms.form.on")}
+                            </label>
+                            <FormField
+                              control={form.control}
+                              name="endsOnDate"
+                              render={({ field: dateField }) => (
+                                <FormItem className="ml-2">
+                                  <FormControl>
+                                    <Input
+                                      type="datetime-local"
+                                      disabled={ends !== "on"}
+                                      className="w-48"
+                                      {...dateField}
+                                      value={dateField.value ?? ""}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="after" id="after" />
+                            <label
+                              htmlFor="after"
+                              className="cursor-pointer text-sm font-normal"
+                            >
+                              {t("alarms.form.after")}
+                            </label>
+                            <FormField
+                              control={form.control}
+                              name="endsAfter"
+                              render={({ field: countField }) => (
+                                <FormItem className="ml-2">
+                                  <FormControl>
+                                    <div className="flex items-center gap-2">
+                                      <Input
+                                        type="number"
+                                        min={1}
+                                        max={9999}
+                                        disabled={ends !== "after"}
+                                        className="w-20"
+                                        {...countField}
+                                        value={countField.value ?? ""}
+                                        onChange={(e) =>
+                                          countField.onChange(
+                                            Number(e.target.value) || undefined,
+                                          )
+                                        }
+                                      />
+                                      <span className="text-muted-foreground text-sm">
+                                        {t("alarms.form.occurrences")}
+                                      </span>
+                                    </div>
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        </RadioGroup>
+                      </FormControl>
+                      <FormDescription>
+                        {t("alarms.form.chooseWhenToStop")}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Bracelet Settings Section */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base font-medium">
+              <Watch className="h-5 w-5 text-primary" />
+              {t("alarms.braceletSettings") || "Bracelet Settings"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Snooze Period - Button Options */}
+            <FormField
+              control={form.control}
+              name="snoozePeriod"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("alarms.form.snoozePeriod") || "Snooze Period"}</FormLabel>
+                  <FormControl>
+                    <div className="flex gap-2">
+                      {SNOOZE_OPTIONS.map((minutes) => (
+                        <Button
+                          key={minutes}
+                          type="button"
+                          variant={field.value === minutes ? "default" : "outline"}
+                          className="flex-1"
+                          onClick={() => field.onChange(minutes)}
+                        >
+                          {minutes}m
+                        </Button>
+                      ))}
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Light Pattern - Icon Buttons */}
+            <FormField
+              control={form.control}
+              name="ledPattern"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("alarms.form.ledPattern") || "Light Pattern"}</FormLabel>
+                  <FormControl>
+                    <div className="flex gap-2">
+                      {LED_PATTERNS.map((pattern) => {
+                        const Icon = pattern.icon;
+                        return (
+                          <Button
+                            key={pattern.key}
+                            type="button"
+                            variant={field.value === pattern.key ? "default" : "outline"}
+                            className="flex-1 p-2"
+                            onClick={() => field.onChange(pattern.key)}
+                            title={pattern.label}
+                          >
+                            <Icon className="h-5 w-5" />
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </FormControl>
+                  {currentLedPattern && (
+                    <FormDescription>
+                      {currentLedPattern.description}
+                    </FormDescription>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* LED Color - Color Circles (only if pattern is not OFF) */}
+            {watchedLedPattern !== "OFF" && (
+              <FormField
+                control={form.control}
+                name="ledColor"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("alarms.form.ledColor") || "Light Color"}</FormLabel>
+                    <FormControl>
+                      <div className="flex gap-2">
+                        {LED_COLORS.map((colorOption) => (
+                          <button
+                            key={colorOption.key}
+                            type="button"
+                            className={cn(
+                              "h-10 w-10 rounded-full border-2 transition-all",
+                              field.value === colorOption.key
+                                ? "border-primary ring-2 ring-primary ring-offset-2"
+                                : "border-muted"
+                            )}
+                            style={{ backgroundColor: colorOption.color }}
+                            onClick={() => field.onChange(colorOption.key)}
+                            title={colorOption.label}
+                          />
+                        ))}
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Vibration Intensity - Button Options */}
+            <FormField
+              control={form.control}
+              name="vibrationIntensity"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    {t("alarms.form.vibrationIntensity") || "Vibration Strength"}
+                  </FormLabel>
+                  <FormControl>
+                    <div className="flex gap-2">
+                      {VIBRATION_INTENSITIES.map((intensity) => (
+                        <Button
+                          key={intensity.key}
+                          type="button"
+                          variant={field.value === intensity.key ? "default" : "outline"}
+                          className="flex-1"
+                          onClick={() => field.onChange(intensity.key)}
+                        >
+                          {intensity.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </FormControl>
+                  {currentVibrationIntensity && (
+                    <FormDescription>
+                      {currentVibrationIntensity.description}
+                    </FormDescription>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Vibration Pattern - Icon Buttons */}
+            <FormField
+              control={form.control}
+              name="vibrationPattern"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    {t("alarms.form.vibrationPattern") || "Vibration Pattern"}
+                  </FormLabel>
+                  <FormControl>
+                    <div className="flex gap-2">
+                      {VIBRATION_PATTERNS.map((pattern) => {
+                        const Icon = pattern.icon;
+                        return (
+                          <Button
+                            key={pattern.key}
+                            type="button"
+                            variant={field.value === pattern.value ? "default" : "outline"}
+                            className="flex-1 p-2"
+                            onClick={() => field.onChange(pattern.value)}
+                            title={pattern.label}
+                          >
+                            <Icon className="h-5 w-5" />
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </FormControl>
+                  {currentVibrationPatternObj && (
+                    <FormDescription>
+                      {currentVibrationPatternObj.description}
+                    </FormDescription>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </CardContent>
+        </Card>
 
         {/* Form Actions */}
         <DialogFooter>

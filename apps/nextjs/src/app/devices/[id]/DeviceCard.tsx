@@ -386,14 +386,13 @@ export function DeviceCard({ deviceId }: { deviceId: string }) {
                   {format(new Date(device.createdAt), "MMMM d, yyyy, h:mm a")}
                 </span>
                 {(() => {
-                  const BatteryIcon = getBatteryIcon(device.batteryLevel ?? 0);
-                  const batteryColor = getBatteryColor(device.batteryLevel ?? 0);
+                  const batteryLevel = device.batteryLevel;
+                  const BatteryIcon = getBatteryIcon(batteryLevel);
+                  const batteryColor = getBatteryColor(batteryLevel);
                   return (
                     <span className="flex items-center gap-1">
                       <BatteryIcon className={`h-4 w-4 ${batteryColor}`} />
-                      <span className={batteryColor}>
-                        {device.batteryLevel ?? 0}%
-                      </span>
+                      <span className={batteryColor}>{batteryLevel}%</span>
                     </span>
                   );
                 })()}
