@@ -148,48 +148,89 @@ const avatarSize = getIconSize(48);
 
 ## Typography
 
-Your typography system already handles font scaling automatically. React Native respects the user's font scale settings by default for all `<Text>` components.
+Your typography system handles font scaling automatically. React Native respects the user's font scale settings by default.
 
-No need to manually apply `getFontSize()` unless you want to cap extremely large sizes:
+### Accessible Text Components
+
+Use the accessible text components that cap scaling to prevent UI breaking:
 
 ```tsx
-// Normal usage (auto-scales):
-<Text style={typography.h2}>Title</Text>
+import { Heading, BodyText, Caption, Label } from "~/components/ui";
 
-// Capped scaling (if needed):
-<Text style={[typography.h2, { fontSize: getFontSize(30, 1.3) }]}>
-  Title
-</Text>
+// Headings cap at 1.3x scale
+<Heading level={2}>Section Title</Heading>
+
+// Body text caps at 1.5x scale
+<BodyText size="medium">Description</BodyText>
+```
+
+### Font Scale Thresholds
+
+```tsx
+const { isLargeText, isVeryLargeText, isExtremeText } = useResponsive();
+
+// isLargeText: fontScale > 1.2
+// isVeryLargeText: fontScale > 1.5
+// isExtremeText: fontScale > 2.0
+```
+
+### Capped Scaling
+
+Use `getFontSize()` to cap extremely large sizes:
+
+```tsx
+<Text style={[typography.h2, { fontSize: getFontSize(30, 1.3) }]}>Title</Text>
 ```
 
 ## Testing Accessibility
 
-### iOS Simulator:
+### iOS Simulator
 
 1. Settings → Accessibility → Display & Text Size → Larger Text
-2. Drag slider to test different font scales
+2. Enable "Larger Accessibility Sizes" for full range
+3. Drag slider to test different font scales
 
-### Android Emulator:
+### Android Emulator
 
 1. Settings → Accessibility → Font size
 2. Settings → Display → Display size
 
-### Code Testing:
+### Code Testing
 
 ```tsx
-// Check current font scale
-const { fontScale } = useResponsive();
-console.log("Font scale:", fontScale); // 1.0 = normal, 1.5 = 150%
+const { fontScale, isLargeText, isVeryLargeText } = useResponsive();
+console.log("Font scale:", fontScale);
+
+if (isVeryLargeText) {
+  // Adjust layout for accessibility
+}
 ```
+
+## Large Font Best Practices
+
+### ✅ DO
+
+- Use `flex: 1` and `flexShrink: 1` with `minWidth: 0`
+- Use `numberOfLines` with `ellipsizeMode="tail"`
+- Increase spacing with `getSpacing()`
+- Stack horizontal layouts vertically when needed
+- Ensure touch targets are at least 44x44pt
+
+### ❌ DON'T
+
+- Use fixed pixel widths for text containers
+- Hide important information for large text users
+- Use `allowFontScaling={false}` unless necessary
 
 ## Migration Checklist
 
 When updating existing components:
 
 - [ ] Replace hard-coded icon sizes with `getIconSize()`
-- [ ] Add `flexShrink: 1` to text containers
+- [ ] Add `flexShrink: 1` and `minWidth: 0` to text containers
 - [ ] Add `numberOfLines` to text that might overflow
 - [ ] Replace fixed width/height with flex-based layouts
 - [ ] Add `flexWrap: "wrap"` to horizontal layouts
 - [ ] Add `paddingHorizontal` to prevent edge overflow
-- [ ] Test with iOS accessibility "Larger Text" at maximum
+- [ ] Ensure all buttons are at least 44pt tall
+- [ ] Test with maximum font scaling

@@ -6,11 +6,10 @@
  * Used by both add and edit alarm forms.
  */
 
-import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import type { AlarmFormData } from "./BasicInfoSection";
+import type { AlarmFormData } from "~/types";
 import { cards, colors, spacing, typography } from "~/styles";
 
 interface AdvancedSectionProps {

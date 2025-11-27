@@ -259,7 +259,13 @@ export function alarmDatabaseToBleParameters(
     startDate: Date;
     repeat: boolean;
     severityLevel: "CRITICAL" | "WARNING" | "INFORMATIONAL";
-    ledPattern: "OFF" | "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE";
+    ledPattern:
+      | "OFF"
+      | "SOLID"
+      | "BLINK_SLOW"
+      | "BLINK_FAST"
+      | "PULSE"
+      | "STROBE";
     ledColor:
       | "RED"
       | "GREEN"

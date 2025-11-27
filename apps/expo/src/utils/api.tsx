@@ -1,4 +1,4 @@
-import React from "react";
+import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createTRPCProxyClient, httpBatchLink, loggerLink } from "@trpc/client";
 import superjson from "superjson";
@@ -61,7 +61,7 @@ export const trpc = createTRPCProxyClient<AppRouter>({
 /**
  * Provider component to wrap the app with React Query.
  */
-export function TRPCProvider({ children }: { children: React.ReactNode }) {
+export function TRPCProvider({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );

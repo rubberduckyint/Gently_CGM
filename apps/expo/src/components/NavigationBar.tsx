@@ -4,13 +4,14 @@
  * Reusable navigation bar with back button, title, and hamburger menu
  */
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { Alert, Modal, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 
 import { colors, spacing, typography } from "~/styles";
+import { buttonA11y } from "~/utils/accessibility";
 import { authClient } from "~/utils/auth";
 
 interface NavigationBarProps {
@@ -83,6 +84,9 @@ export function NavigationBar({
                 alignItems: "center",
                 justifyContent: "center",
               }}
+              {...buttonA11y("Go back", {
+                hint: "Returns to the previous screen",
+              })}
             >
               <Feather
                 name="arrow-left"
@@ -120,6 +124,9 @@ export function NavigationBar({
                 alignItems: "center",
                 justifyContent: "center",
               }}
+              {...buttonA11y("Open menu", {
+                hint: "Opens settings and navigation menu",
+              })}
             >
               <Feather name="menu" size={22} color={colors.text.primary} />
             </Pressable>

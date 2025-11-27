@@ -1,11 +1,12 @@
 import type { DateTimePickerEvent } from "@react-native-community/datetimepicker";
-import React from "react";
+import { useState } from "react";
 import { Alert, Modal, Platform, Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
 
 import { buttons, cards, colors, spacing, typography } from "~/styles";
+import { buttonA11y } from "~/utils/accessibility";
 import { trpc } from "~/utils/api";
 
 interface QuickReminderModalProps {
@@ -21,11 +22,12 @@ export function QuickReminderModal({
   onClose,
   onSuccess,
 }: QuickReminderModalProps) {
-  const [selectedReminderTime, setSelectedReminderTime] =
-    React.useState<Date | null>(null);
-  const [showDateTimePicker, setShowDateTimePicker] = React.useState(false);
-  const [pickerMode, setPickerMode] = React.useState<"date" | "time">("date");
-  const [isCreating, setIsCreating] = React.useState(false);
+  const [selectedReminderTime, setSelectedReminderTime] = useState<Date | null>(
+    null,
+  );
+  const [showDateTimePicker, setShowDateTimePicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState<"date" | "time">("date");
+  const [isCreating, setIsCreating] = useState(false);
 
   // Fetch user preferences
   const { data: userPreferences } = useQuery({
@@ -167,6 +169,7 @@ export function QuickReminderModal({
               style={{
                 padding: spacing[1],
               }}
+              {...buttonA11y("Close", { hint: "Closes this reminder dialog" })}
             >
               <Ionicons name="close" size={24} color={colors.text.secondary} />
             </Pressable>

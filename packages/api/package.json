@@ -21,7 +21,9 @@
   "dependencies": {
     "@gently/auth": "workspace:*",
     "@gently/db": "workspace:*",
+    "@gently/email": "workspace:*",
     "@gently/validators": "workspace:*",
+    "@react-email/components": "^0.0.34",
     "@trpc/server": "catalog:",
     "minimatch": "catalog:",
     "superjson": "catalog:",

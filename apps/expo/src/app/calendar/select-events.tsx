@@ -4,25 +4,29 @@
  * Supports recurring events - shows schedule and allows selecting all instances
  */
 
-import { useMemo, useState, useRef, useCallback } from "react";
+import type { FlatList as FlatListType } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
   RefreshControl,
-  SectionList,
   Text,
   TextInput,
   View,
 } from "react-native";
-import type { FlatList as FlatListType } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { GoogleCalendarEvent } from "~/services/googleCalendar";
 import { Header } from "~/components/ui/Header";
+import {
+  fetchCalendarEvents,
+  refreshAccessToken,
+} from "~/services/googleCalendar";
 import {
   buttons,
   buttonText,
@@ -32,11 +36,6 @@ import {
   spacing,
   typography,
 } from "~/styles";
-import {
-  fetchCalendarEvents,
-  refreshAccessToken,
-  type GoogleCalendarEvent,
-} from "~/services/googleCalendar";
 import { trpc } from "~/utils/api";
 
 interface SelectedEvent extends GoogleCalendarEvent {
@@ -57,21 +56,21 @@ interface RecurringEventGroup {
 // Parse RRULE to human-readable schedule
 function parseRecurrenceRule(rrule: string): string {
   if (!rrule) return "";
-  
+
   const rule = rrule.replace("RRULE:", "");
   const parts: Record<string, string> = {};
-  
+
   rule.split(";").forEach((part) => {
     const [key, value] = part.split("=");
     if (key && value) parts[key] = value;
   });
-  
+
   const freq = parts.FREQ;
   const interval = parts.INTERVAL ? parseInt(parts.INTERVAL) : 1;
   const byDay = parts.BYDAY;
   const count = parts.COUNT;
   const until = parts.UNTIL;
-  
+
   const dayMap: Record<string, string> = {
     MO: "Monday",
     TU: "Tuesday",
@@ -81,7 +80,7 @@ function parseRecurrenceRule(rrule: string): string {
     SA: "Saturday",
     SU: "Sunday",
   };
-  
+
   const shortDayMap: Record<string, string> = {
     MO: "Mon",
     TU: "Tue",
@@ -91,28 +90,40 @@ function parseRecurrenceRule(rrule: string): string {
     SA: "Sat",
     SU: "Sun",
   };
-  
+
   let result = "";
-  
+
   switch (freq) {
     case "DAILY":
       result = interval === 1 ? "Every day" : `Every ${interval} days`;
       break;
     case "WEEKLY":
       if (byDay) {
-        const days = byDay.split(",").map((d) => shortDayMap[d] || d);
-        if (days.length === 5 && !days.includes("Sat") && !days.includes("Sun")) {
-          result = interval === 1 ? "Weekdays" : `Every ${interval} weeks on weekdays`;
-        } else if (days.length === 2 && days.includes("Sat") && days.includes("Sun")) {
-          result = interval === 1 ? "Weekends" : `Every ${interval} weeks on weekends`;
+        const days = byDay.split(",").map((d) => shortDayMap[d] ?? d);
+        if (
+          days.length === 5 &&
+          !days.includes("Sat") &&
+          !days.includes("Sun")
+        ) {
+          result =
+            interval === 1 ? "Weekdays" : `Every ${interval} weeks on weekdays`;
+        } else if (
+          days.length === 2 &&
+          days.includes("Sat") &&
+          days.includes("Sun")
+        ) {
+          result =
+            interval === 1 ? "Weekends" : `Every ${interval} weeks on weekends`;
         } else if (days.length === 1) {
-          result = interval === 1 
-            ? `Every ${dayMap[byDay] || byDay}` 
-            : `Every ${interval} weeks on ${dayMap[byDay] || byDay}`;
+          result =
+            interval === 1
+              ? `Every ${dayMap[byDay] ?? byDay}`
+              : `Every ${interval} weeks on ${dayMap[byDay] ?? byDay}`;
         } else {
-          result = interval === 1 
-            ? `Every ${days.join(", ")}` 
-            : `Every ${interval} weeks on ${days.join(", ")}`;
+          result =
+            interval === 1
+              ? `Every ${days.join(", ")}`
+              : `Every ${interval} weeks on ${days.join(", ")}`;
         }
       } else {
         result = interval === 1 ? "Weekly" : `Every ${interval} weeks`;
@@ -127,14 +138,16 @@ function parseRecurrenceRule(rrule: string): string {
     default:
       result = "Recurring";
   }
-  
+
   if (count) {
     result += ` (${count} times)`;
   } else if (until) {
-    const untilDate = new Date(until.slice(0, 4) + "-" + until.slice(4, 6) + "-" + until.slice(6, 8));
+    const untilDate = new Date(
+      until.slice(0, 4) + "-" + until.slice(4, 6) + "-" + until.slice(6, 8),
+    );
     result += ` until ${untilDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
   }
-  
+
   return result;
 }
 
@@ -151,15 +164,20 @@ export default function SelectEventsPage() {
   const connectionId = params.connectionId as string;
   const deviceId = params.deviceId as string;
   const queryClient = useQueryClient();
-  const [selectedEvents, setSelectedEvents] = useState<Map<string, SelectedEvent>>(
-    new Map(),
-  );
+  const [selectedEvents, setSelectedEvents] = useState<
+    Map<string, SelectedEvent>
+  >(new Map());
   const [isCreatingAlarms, setIsCreatingAlarms] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   // Ref for FlatList to enable scrolling
-  const flatListRef = useRef<FlatListType<{ type: "recurring" | "event"; data: RecurringEventGroup | GoogleCalendarEvent }>>(null);
+  const flatListRef = useRef<
+    FlatListType<{
+      type: "recurring" | "event";
+      data: RecurringEventGroup | GoogleCalendarEvent;
+    }>
+  >(null);
 
   // Fetch connection details
   const { data: connection, isLoading: isLoadingConnection } = useQuery({
@@ -176,7 +194,10 @@ export default function SelectEventsPage() {
   });
 
   // Create a Set for O(1) lookup
-  const linkedEventIdsSet = useMemo(() => new Set(linkedEventIds), [linkedEventIds]);
+  const linkedEventIdsSet = useMemo(
+    () => new Set(linkedEventIds),
+    [linkedEventIds],
+  );
 
   // Fetch calendar events
   const {
@@ -192,9 +213,13 @@ export default function SelectEventsPage() {
 
       try {
         let accessToken = connection.accessToken;
-        
+
         // Check if token needs refresh
-        if (new Date(connection.tokenExpiresAt) <= new Date()) {
+        if (
+          connection.tokenExpiresAt &&
+          connection.refreshToken &&
+          new Date(connection.tokenExpiresAt) <= new Date()
+        ) {
           const newToken = await refreshAccessToken(connection.refreshToken);
           accessToken = newToken.accessToken;
 
@@ -230,7 +255,7 @@ export default function SelectEventsPage() {
 
     events.forEach((event) => {
       const isLinked = linkedEventIdsSet.has(event.id);
-      
+
       if (event.recurringEventId) {
         // This is an instance of a recurring event
         const existing = groups.get(event.recurringEventId);
@@ -256,7 +281,7 @@ export default function SelectEventsPage() {
         // The recurrence rule tells us the schedule
         const existing = groups.get(event.id);
         if (existing) {
-          existing.schedule = parseRecurrenceRule(event.recurrence[0] || "");
+          existing.schedule = parseRecurrenceRule(event.recurrence[0] ?? "");
           existing.instances.unshift(event);
           if (isLinked) {
             existing.hasLinkedAlarms = true;
@@ -267,7 +292,7 @@ export default function SelectEventsPage() {
             recurringEventId: event.id,
             title: event.summary || "Untitled Event",
             instances: [event],
-            schedule: parseRecurrenceRule(event.recurrence[0] || ""),
+            schedule: parseRecurrenceRule(event.recurrence[0] ?? ""),
             location: event.location,
             hasLinkedAlarms: isLinked,
             linkedCount: isLinked ? 1 : 0,
@@ -282,14 +307,16 @@ export default function SelectEventsPage() {
     // Sort instances by date within each group
     groups.forEach((group) => {
       group.instances.sort((a, b) => {
-        const dateA = new Date(a.start.dateTime || a.start.date || "");
-        const dateB = new Date(b.start.dateTime || b.start.date || "");
+        const dateA = new Date(a.start.dateTime ?? a.start.date ?? "");
+        const dateB = new Date(b.start.dateTime ?? b.start.date ?? "");
         return dateA.getTime() - dateB.getTime();
       });
     });
 
     return {
-      recurringGroups: Array.from(groups.values()).filter((g) => g.instances.length > 1),
+      recurringGroups: Array.from(groups.values()).filter(
+        (g) => g.instances.length > 1,
+      ),
       oneTimeEvents: oneTime,
     };
   }, [events, linkedEventIdsSet]);
@@ -337,37 +364,40 @@ export default function SelectEventsPage() {
     });
   };
 
-  const toggleEvent = useCallback((event: GoogleCalendarEvent, index?: number) => {
-    const wasSelected = selectedEvents.has(event.id);
-    
-    setSelectedEvents((prev) => {
-      const newMap = new Map(prev);
-      if (newMap.has(event.id)) {
-        newMap.delete(event.id);
-      } else {
-        newMap.set(event.id, { ...event, alarmMinutesBefore: 15 });
-      }
-      return newMap;
-    });
-    
-    // If we're selecting (not deselecting), scroll to show the reminder options
-    if (!wasSelected && index !== undefined && flatListRef.current) {
-      // Small delay to allow the state to update and the card to expand
-      setTimeout(() => {
-        flatListRef.current?.scrollToIndex({
-          index,
-          animated: true,
-          viewOffset: 50, // Offset from top to ensure reminder options are visible
-        });
-      }, 100);
-    }
-  }, [selectedEvents]);
+  const toggleEvent = useCallback(
+    (event: GoogleCalendarEvent, index?: number) => {
+      const wasSelected = selectedEvents.has(event.id);
 
-  const toggleAllInGroup = (group: RecurringEventGroup, minutes: number = 15) => {
+      setSelectedEvents((prev) => {
+        const newMap = new Map(prev);
+        if (newMap.has(event.id)) {
+          newMap.delete(event.id);
+        } else {
+          newMap.set(event.id, { ...event, alarmMinutesBefore: 15 });
+        }
+        return newMap;
+      });
+
+      // If we're selecting (not deselecting), scroll to show the reminder options
+      if (!wasSelected && index !== undefined && flatListRef.current) {
+        // Small delay to allow the state to update and the card to expand
+        setTimeout(() => {
+          flatListRef.current?.scrollToIndex({
+            index,
+            animated: true,
+            viewOffset: 50, // Offset from top to ensure reminder options are visible
+          });
+        }, 100);
+      }
+    },
+    [selectedEvents],
+  );
+
+  const toggleAllInGroup = (group: RecurringEventGroup, minutes = 15) => {
     setSelectedEvents((prev) => {
       const newMap = new Map(prev);
       const allSelected = group.instances.every((e) => newMap.has(e.id));
-      
+
       if (allSelected) {
         // Deselect all
         group.instances.forEach((e) => newMap.delete(e.id));
@@ -381,12 +411,18 @@ export default function SelectEventsPage() {
     });
   };
 
-  const updateGroupAlarmTime = (group: RecurringEventGroup, minutes: number) => {
+  const updateGroupAlarmTime = (
+    group: RecurringEventGroup,
+    minutes: number,
+  ) => {
     setSelectedEvents((prev) => {
       const newMap = new Map(prev);
       group.instances.forEach((e) => {
         if (newMap.has(e.id)) {
-          newMap.set(e.id, { ...newMap.get(e.id)!, alarmMinutesBefore: minutes });
+          newMap.set(e.id, {
+            ...newMap.get(e.id)!,
+            alarmMinutesBefore: minutes,
+          });
         }
       });
       return newMap;
@@ -394,15 +430,21 @@ export default function SelectEventsPage() {
   };
 
   const getGroupSelectionState = (group: RecurringEventGroup) => {
-    const selectedCount = group.instances.filter((e) => selectedEvents.has(e.id)).length;
+    const selectedCount = group.instances.filter((e) =>
+      selectedEvents.has(e.id),
+    ).length;
     if (selectedCount === 0) return "none";
     if (selectedCount === group.instances.length) return "all";
     return "partial";
   };
 
   const getGroupAlarmTime = (group: RecurringEventGroup) => {
-    const selectedInstance = group.instances.find((e) => selectedEvents.has(e.id));
-    return selectedInstance ? selectedEvents.get(selectedInstance.id)!.alarmMinutesBefore : 15;
+    const selectedInstance = group.instances.find((e) =>
+      selectedEvents.has(e.id),
+    );
+    return selectedInstance
+      ? selectedEvents.get(selectedInstance.id)!.alarmMinutesBefore
+      : 15;
   };
 
   const updateAlarmTime = (eventId: string, minutes: number) => {
@@ -427,12 +469,15 @@ export default function SelectEventsPage() {
     try {
       const eventsArray = Array.from(selectedEvents.values()).map((event) => ({
         eventId: event.id,
-        eventSummary: event.summary || "Untitled Event",
-        eventStartTime: new Date(event.start.dateTime || event.start.date || ""),
-        eventEndTime: event.end.dateTime || event.end.date
-          ? new Date(event.end.dateTime || event.end.date || "")
-          : undefined,
-        eventLocation: event.location,
+        eventSummary: event.summary ?? "Untitled Event",
+        eventStartTime: new Date(
+          event.start.dateTime ?? event.start.date ?? "",
+        ),
+        eventEndTime:
+          (event.end.dateTime ?? event.end.date)
+            ? new Date(event.end.dateTime ?? event.end.date ?? "")
+            : undefined,
+        eventLocation: event.location ?? undefined,
         alarmMinutesBefore: event.alarmMinutesBefore,
       }));
 
@@ -443,13 +488,20 @@ export default function SelectEventsPage() {
       });
 
       // Invalidate queries so the UI updates
-      await queryClient.invalidateQueries({ queryKey: ["linkedEventIds", connectionId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["linkedEventIds", connectionId],
+      });
       await queryClient.invalidateQueries({ queryKey: ["device", "getById"] });
 
       Alert.alert(
         "Alarms Created",
         `Successfully created ${result.created} alarm${result.created !== 1 ? "s" : ""} from your calendar events. They will sync to your device automatically when connected.`,
-        [{ text: "Done", onPress: () => router.replace(`/devices/${deviceId}`) }],
+        [
+          {
+            text: "Done",
+            onPress: () => router.replace(`/devices/${deviceId}`),
+          },
+        ],
       );
     } catch (error) {
       const errorMessage =
@@ -461,7 +513,7 @@ export default function SelectEventsPage() {
   };
 
   const formatEventDate = (event: GoogleCalendarEvent) => {
-    const start = event.start.dateTime || event.start.date;
+    const start = event.start.dateTime ?? event.start.date;
     if (!start) return "";
 
     const date = new Date(start);
@@ -496,7 +548,13 @@ export default function SelectEventsPage() {
     });
   };
 
-  const renderEvent = ({ item, index }: { item: GoogleCalendarEvent; index?: number }) => {
+  const renderEvent = ({
+    item,
+    index,
+  }: {
+    item: GoogleCalendarEvent;
+    index?: number;
+  }) => {
     const isSelected = selectedEvents.has(item.id);
     const selectedEvent = selectedEvents.get(item.id);
     const isLinked = linkedEventIdsSet.has(item.id);
@@ -508,9 +566,9 @@ export default function SelectEventsPage() {
           {
             marginBottom: spacing[3],
             borderWidth: 2,
-            borderColor: isSelected 
-              ? colors.primary[500] 
-              : isLinked 
+            borderColor: isSelected
+              ? colors.primary[500]
+              : isLinked
                 ? colors.success[300]
                 : "transparent",
           },
@@ -539,12 +597,18 @@ export default function SelectEventsPage() {
                 color={colors.text.inverse}
                 style={{ marginRight: 2 }}
               />
-              <Text style={{ fontSize: 10, color: colors.text.inverse, fontWeight: "600" }}>
+              <Text
+                style={{
+                  fontSize: 10,
+                  color: colors.text.inverse,
+                  fontWeight: "600",
+                }}
+              >
                 Alarm Set
               </Text>
             </View>
           )}
-          
+
           {/* Checkbox */}
           <View
             style={{
@@ -561,7 +625,11 @@ export default function SelectEventsPage() {
             }}
           >
             {isSelected && (
-              <Ionicons name="checkmark" size={14} color={colors.text.inverse} />
+              <Ionicons
+                name="checkmark"
+                size={14}
+                color={colors.text.inverse}
+              />
             )}
           </View>
 
@@ -589,7 +657,9 @@ export default function SelectEventsPage() {
                   color={colors.text.secondary}
                   style={{ marginRight: 4 }}
                 />
-                <Text style={[typography.caption, { color: colors.text.secondary }]}>
+                <Text
+                  style={[typography.caption, { color: colors.text.secondary }]}
+                >
                   {formatEventDate(item)}
                 </Text>
               </View>
@@ -601,7 +671,9 @@ export default function SelectEventsPage() {
                   color={colors.text.secondary}
                   style={{ marginRight: 4 }}
                 />
-                <Text style={[typography.caption, { color: colors.text.secondary }]}>
+                <Text
+                  style={[typography.caption, { color: colors.text.secondary }]}
+                >
                   {formatEventTime(item)}
                 </Text>
               </View>
@@ -652,7 +724,8 @@ export default function SelectEventsPage() {
             </Text>
             <View style={{ flexDirection: "row", gap: spacing[2] }}>
               {REMINDER_OPTIONS.map((option) => {
-                const isActive = selectedEvent.alarmMinutesBefore === option.value;
+                const isActive =
+                  selectedEvent.alarmMinutesBefore === option.value;
                 return (
                   <Pressable
                     key={option.value}
@@ -694,7 +767,9 @@ export default function SelectEventsPage() {
   const renderRecurringGroup = (group: RecurringEventGroup) => {
     const selectionState = getGroupSelectionState(group);
     const isExpanded = expandedGroups.has(group.recurringEventId);
-    const selectedCount = group.instances.filter((e) => selectedEvents.has(e.id)).length;
+    const selectedCount = group.instances.filter((e) =>
+      selectedEvents.has(e.id),
+    ).length;
     const currentAlarmTime = getGroupAlarmTime(group);
 
     return (
@@ -705,11 +780,12 @@ export default function SelectEventsPage() {
             cards.base,
             {
               borderWidth: 2,
-              borderColor: selectionState !== "none" 
-                ? colors.primary[500] 
-                : group.hasLinkedAlarms 
-                  ? colors.success[300]
-                  : "transparent",
+              borderColor:
+                selectionState !== "none"
+                  ? colors.primary[500]
+                  : group.hasLinkedAlarms
+                    ? colors.success[300]
+                    : "transparent",
               marginBottom: isExpanded ? spacing[2] : 0,
             },
           ]}
@@ -736,12 +812,18 @@ export default function SelectEventsPage() {
                 color={colors.text.inverse}
                 style={{ marginRight: 2 }}
               />
-              <Text style={{ fontSize: 10, color: colors.text.inverse, fontWeight: "600" }}>
+              <Text
+                style={{
+                  fontSize: 10,
+                  color: colors.text.inverse,
+                  fontWeight: "600",
+                }}
+              >
                 {group.linkedCount} Alarm{group.linkedCount !== 1 ? "s" : ""}
               </Text>
             </View>
           )}
-          
+
           <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
             {/* Checkbox with partial state */}
             <View
@@ -750,12 +832,16 @@ export default function SelectEventsPage() {
                 height: 24,
                 borderRadius: 12,
                 borderWidth: 2,
-                borderColor: selectionState !== "none" ? colors.primary[500] : colors.gray[300],
-                backgroundColor: selectionState === "all" 
-                  ? colors.primary[500] 
-                  : selectionState === "partial"
-                    ? colors.primary[100]
-                    : "transparent",
+                borderColor:
+                  selectionState !== "none"
+                    ? colors.primary[500]
+                    : colors.gray[300],
+                backgroundColor:
+                  selectionState === "all"
+                    ? colors.primary[500]
+                    : selectionState === "partial"
+                      ? colors.primary[100]
+                      : "transparent",
                 alignItems: "center",
                 justifyContent: "center",
                 marginRight: spacing[3],
@@ -763,7 +849,11 @@ export default function SelectEventsPage() {
               }}
             >
               {selectionState === "all" && (
-                <Ionicons name="checkmark" size={14} color={colors.text.inverse} />
+                <Ionicons
+                  name="checkmark"
+                  size={14}
+                  color={colors.text.inverse}
+                />
               )}
               {selectionState === "partial" && (
                 <View
@@ -779,7 +869,13 @@ export default function SelectEventsPage() {
 
             {/* Event Details */}
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: spacing[1] }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginBottom: spacing[1],
+                }}
+              >
                 <Ionicons
                   name="repeat"
                   size={16}
@@ -808,19 +904,41 @@ export default function SelectEventsPage() {
                     borderRadius: 4,
                   }}
                 >
-                  <Text style={[typography.caption, { color: colors.primary[700], fontWeight: "600" }]}>
+                  <Text
+                    style={[
+                      typography.caption,
+                      { color: colors.primary[700], fontWeight: "600" },
+                    ]}
+                  >
                     {group.schedule || "Recurring"}
                   </Text>
                 </View>
-                <Text style={[typography.caption, { color: colors.text.secondary }]}>
+                <Text
+                  style={[typography.caption, { color: colors.text.secondary }]}
+                >
                   {group.instances.length} instances in next 30 days
                 </Text>
               </View>
 
               {/* First occurrence */}
-              <View style={{ flexDirection: "row", alignItems: "center", marginTop: spacing[1] }}>
-                <Text style={[typography.caption, { color: colors.text.secondary }]}>
-                  Next: {formatEventDate(group.instances[0]!)} at {formatEventTime(group.instances[0]!)}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginTop: spacing[1],
+                }}
+              >
+                <Text
+                  style={[typography.caption, { color: colors.text.secondary }]}
+                >
+                  Next:{" "}
+                  {group.instances[0]
+                    ? formatEventDate(group.instances[0])
+                    : "Unknown"}{" "}
+                  at{" "}
+                  {group.instances[0]
+                    ? formatEventTime(group.instances[0])
+                    : "Unknown"}
                 </Text>
               </View>
 
@@ -839,7 +957,10 @@ export default function SelectEventsPage() {
                     style={{ marginRight: 4 }}
                   />
                   <Text
-                    style={[typography.caption, { color: colors.text.secondary }]}
+                    style={[
+                      typography.caption,
+                      { color: colors.text.secondary },
+                    ]}
                     numberOfLines={1}
                   >
                     {group.location}
@@ -877,14 +998,22 @@ export default function SelectEventsPage() {
                 borderTopColor: colors.gray[100],
               }}
             >
-              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: spacing[2] }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginBottom: spacing[2],
+                }}
+              >
                 <Ionicons
                   name="checkmark-circle"
                   size={16}
                   color={colors.primary[500]}
                   style={{ marginRight: spacing[2] }}
                 />
-                <Text style={[typography.caption, { color: colors.primary[700] }]}>
+                <Text
+                  style={[typography.caption, { color: colors.primary[700] }]}
+                >
                   {selectedCount} of {group.instances.length} selected
                 </Text>
               </View>
@@ -955,7 +1084,9 @@ export default function SelectEventsPage() {
                     alignItems: "center",
                     paddingVertical: spacing[2],
                     paddingHorizontal: spacing[3],
-                    backgroundColor: isSelected ? colors.primary[50] : colors.gray[50],
+                    backgroundColor: isSelected
+                      ? colors.primary[50]
+                      : colors.gray[50],
                     borderRadius: 8,
                     marginBottom: spacing[2],
                   }}
@@ -967,22 +1098,42 @@ export default function SelectEventsPage() {
                       height: 20,
                       borderRadius: 10,
                       borderWidth: 2,
-                      borderColor: isSelected ? colors.primary[500] : colors.gray[300],
-                      backgroundColor: isSelected ? colors.primary[500] : "transparent",
+                      borderColor: isSelected
+                        ? colors.primary[500]
+                        : colors.gray[300],
+                      backgroundColor: isSelected
+                        ? colors.primary[500]
+                        : "transparent",
                       alignItems: "center",
                       justifyContent: "center",
                       marginRight: spacing[3],
                     }}
                   >
                     {isSelected && (
-                      <Ionicons name="checkmark" size={12} color={colors.text.inverse} />
+                      <Ionicons
+                        name="checkmark"
+                        size={12}
+                        color={colors.text.inverse}
+                      />
                     )}
                   </View>
-                  <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: spacing[2] }}>
+                  <View
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: spacing[2],
+                    }}
+                  >
                     <Text style={[typography.body, { fontWeight: "500" }]}>
                       {formatEventDate(instance)}
                     </Text>
-                    <Text style={[typography.caption, { color: colors.text.secondary }]}>
+                    <Text
+                      style={[
+                        typography.caption,
+                        { color: colors.text.secondary },
+                      ]}
+                    >
                       {formatEventTime(instance)}
                     </Text>
                   </View>
@@ -1112,9 +1263,15 @@ export default function SelectEventsPage() {
         ref={flatListRef}
         data={[
           // Recurring groups as a special "section header" type
-          ...filteredRecurringGroups.map((g) => ({ type: "recurring" as const, data: g })),
+          ...filteredRecurringGroups.map((g) => ({
+            type: "recurring" as const,
+            data: g,
+          })),
           // One-time events
-          ...filteredOneTimeEvents.map((e) => ({ type: "event" as const, data: e })),
+          ...filteredOneTimeEvents.map((e) => ({
+            type: "event" as const,
+            data: e,
+          })),
         ]}
         renderItem={({ item, index }) => {
           if (item.type === "recurring") {
@@ -1122,9 +1279,9 @@ export default function SelectEventsPage() {
           }
           return renderEvent({ item: item.data as GoogleCalendarEvent, index });
         }}
-        keyExtractor={(item) => 
-          item.type === "recurring" 
-            ? `recurring-${(item.data as RecurringEventGroup).recurringEventId}` 
+        keyExtractor={(item) =>
+          item.type === "recurring"
+            ? `recurring-${(item.data as RecurringEventGroup).recurringEventId}`
             : (item.data as GoogleCalendarEvent).id
         }
         onScrollToIndexFailed={(info) => {
@@ -1147,7 +1304,8 @@ export default function SelectEventsPage() {
           (events && events.length > 0) || recurringGroups.length > 0 ? (
             <View style={{ marginBottom: spacing[4] }}>
               <Text style={[typography.body, { color: colors.text.secondary }]}>
-                Select events to create reminders. Recurring events can be selected all at once.
+                Select events to create reminders. Recurring events can be
+                selected all at once.
               </Text>
 
               {/* Search Input */}
@@ -1216,12 +1374,15 @@ export default function SelectEventsPage() {
                     color={colors.primary[500]}
                     style={{ marginRight: spacing[2] }}
                   />
-                  <Text style={[typography.caption, { color: colors.text.secondary }]}>
-                    {searchQuery.trim() ? (
-                      `${filteredRecurringGroups.length}/${recurringGroups.length} recurring • ${filteredOneTimeEvents.length}/${oneTimeEvents.length} one-time`
-                    ) : (
-                      `${recurringGroups.length} recurring event${recurringGroups.length !== 1 ? "s" : ""} • ${oneTimeEvents.length} one-time event${oneTimeEvents.length !== 1 ? "s" : ""}`
-                    )}
+                  <Text
+                    style={[
+                      typography.caption,
+                      { color: colors.text.secondary },
+                    ]}
+                  >
+                    {searchQuery.trim()
+                      ? `${filteredRecurringGroups.length}/${recurringGroups.length} recurring • ${filteredOneTimeEvents.length}/${oneTimeEvents.length} one-time`
+                      : `${recurringGroups.length} recurring event${recurringGroups.length !== 1 ? "s" : ""} • ${oneTimeEvents.length} one-time event${oneTimeEvents.length !== 1 ? "s" : ""}`}
                   </Text>
                 </View>
               )}
@@ -1242,8 +1403,11 @@ export default function SelectEventsPage() {
                     color={colors.primary[500]}
                     style={{ marginRight: spacing[2] }}
                   />
-                  <Text style={[typography.body, { color: colors.primary[700] }]}>
-                    {selectedEvents.size} event{selectedEvents.size !== 1 ? "s" : ""} selected
+                  <Text
+                    style={[typography.body, { color: colors.primary[700] }]}
+                  >
+                    {selectedEvents.size} event
+                    {selectedEvents.size !== 1 ? "s" : ""} selected
                   </Text>
                 </View>
               )}
@@ -1334,7 +1498,8 @@ export default function SelectEventsPage() {
                   style={{ marginRight: spacing[2] }}
                 />
                 <Text style={buttonText.primary}>
-                  Create {selectedEvents.size} Reminder{selectedEvents.size !== 1 ? "s" : ""}
+                  Create {selectedEvents.size} Reminder
+                  {selectedEvents.size !== 1 ? "s" : ""}
                 </Text>
               </>
             )}

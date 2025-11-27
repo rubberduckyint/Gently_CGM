@@ -1,18 +1,18 @@
 /**
  * Enter DFU Mode Command
  * Reboots the bracelet into Device Firmware Update (DFU) mode
- * 
+ *
  * The bracelet will:
  * 1. Reboot into DFU mode
  * 2. Re-initialize Bluetooth with GATT DFU SMP Service
  * 3. Advertise as "Gently-DFU"
  * 4. Wait 1 minute for connection, then reboot to normal mode if no connection
- * 
+ *
  * Use Nordic's "Device Manager" app to transfer firmware in DFU mode.
  */
 
-import type { BLECommandRequest } from "../types";
-import { CommandCode } from "../types";
+import type { BLECommandRequest } from "~/services/ble/types";
+import { CommandCode } from "~/services/ble/types";
 
 export function createEnterDfuModeRequest(): BLECommandRequest {
   return {

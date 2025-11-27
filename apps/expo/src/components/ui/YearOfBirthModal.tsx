@@ -5,7 +5,7 @@
  * Shows before the help/onboarding modal.
  */
 
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,

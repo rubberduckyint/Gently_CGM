@@ -8,7 +8,7 @@ import type {
   BleManagerDidUpdateValueForCharacteristicEvent,
   Peripheral,
 } from "react-native-ble-manager";
-import React, {
+import {
   createContext,
   useCallback,
   useContext,
@@ -27,37 +27,37 @@ import * as SecureStore from "expo-secure-store";
 import type {
   BLECommandRequest,
   BLECommandResponse,
-} from "../services/ble/types";
+} from "~/services/ble/types";
 import {
   createAcknowledgeEventRequest,
   parseAcknowledgeEventResponse,
-} from "../services/ble/commands/acknowledgeEvent";
-import { createGetDeviceInfoRequest } from "../services/ble/commands/getDeviceInfo";
-import { createGetDeviceStatusRequest } from "../services/ble/commands/getDeviceStatus";
+} from "~/services/ble/commands/acknowledgeEvent";
+import { createGetDeviceInfoRequest } from "~/services/ble/commands/getDeviceInfo";
 import {
   createGetUptimeRequest,
   parseGetUptimeResponse,
-} from "../services/ble/commands/getUptime";
-import { createSetTimeRequest } from "../services/ble/commands/setTime";
-import { disconnectFromBLEDevice } from "../services/ble/connection";
+} from "~/services/ble/commands/getUptime";
+import { createSetTimeRequest } from "~/services/ble/commands/setTime";
+import { disconnectFromBLEDevice } from "~/services/ble/connection";
 import {
   extractAndDecryptAdvertisementData,
   generateDynamicKey,
   TEAEncryption,
-} from "../services/ble/encryption";
+} from "~/services/ble/encryption";
 import {
   sendCommand,
   sendMultiPacketCommand,
   startNotifications,
-} from "../services/ble/manager";
+} from "~/services/ble/manager";
 import {
   parseActiveEventNotification,
   parseBatteryStatusNotification,
   parseNotification,
   parseTimeNotification,
-} from "../services/ble/notifications";
-import { FACTORY_BRACELET_KEY, ResponseStatus } from "../services/ble/types";
-import { requestBluetoothPermissions } from "../services/ble/utils";
+} from "~/services/ble/notifications";
+import { FACTORY_BRACELET_KEY, ResponseStatus } from "~/services/ble/types";
+import { requestBluetoothPermissions } from "~/services/ble/utils";
+import { NotificationService } from "~/services/notifications";
 
 export type BLEConnectionState =
   | "disconnected"
@@ -348,11 +348,11 @@ export function BLEProvider({ children }: BLEProviderProps) {
               console.log(
                 `🚨 [BLE Context] ALARM TRIGGERED: Event #${eventNotification.eventIndex} is now vibrating!`,
               );
-              
+
               // Try to get alarm title from device data
               // The deviceIndex corresponds to eventIndex
               let alarmTitle: string | undefined;
-              if (connectedDeviceRef.current?.deviceId) {
+              if (connectedDeviceRef.current?.id) {
                 try {
                   // We'll store the device data in the context to access alarm titles
                   // For now, use a generic title
@@ -361,7 +361,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
                   console.warn("Could not fetch alarm title:", error);
                 }
               }
-              
+
               // Set active alarm to show notification modal
               setActiveAlarm({
                 eventIndex: eventNotification.eventIndex,
@@ -370,6 +370,25 @@ export function BLEProvider({ children }: BLEProviderProps) {
                 timestamp: new Date(),
                 alarmTitle,
               });
+
+              // Send push notification when alarm triggers
+              try {
+                const deviceName =
+                  connectedDeviceRef.current?.name ?? "Gently Device";
+                NotificationService.showAlarmNotification(
+                  alarmTitle ?? `Alarm #${eventNotification.eventIndex + 1}`,
+                  deviceName,
+                  eventNotification.eventIndex,
+                );
+                console.log(
+                  "📱 [BLE Context] Push notification sent for alarm trigger",
+                );
+              } catch (notifError) {
+                console.warn(
+                  "⚠️ [BLE Context] Failed to send push notification:",
+                  notifError,
+                );
+              }
             } else if (eventNotification.eventState === 0) {
               // Clear active alarm when event turns off
               console.log(
@@ -764,9 +783,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
           // Wait a moment for disconnections to complete
           await new Promise((resolve) => setTimeout(resolve, 500));
-          console.log(
-            `✅ [BLE Context] All previous connections disconnected`,
-          );
+          console.log(`✅ [BLE Context] All previous connections disconnected`);
         } else {
           console.log(`ℹ️ [BLE Context] No existing connections found`);
         }
@@ -988,9 +1005,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
           // Wait a moment for disconnections to complete
           await new Promise((resolve) => setTimeout(resolve, 500));
-          console.log(
-            `✅ [BLE Context] All previous connections disconnected`,
-          );
+          console.log(`✅ [BLE Context] All previous connections disconnected`);
         } else {
           console.log(`ℹ️ [BLE Context] No existing connections found`);
         }

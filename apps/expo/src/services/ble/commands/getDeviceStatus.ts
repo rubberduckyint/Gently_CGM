@@ -3,8 +3,8 @@
  * Gets battery status, active events, and error information
  */
 
-import type { BLECommandRequest } from "../types";
-import { CommandCode } from "../types";
+import type { BLECommandRequest } from "~/services/ble/types";
+import { CommandCode } from "~/services/ble/types";
 
 export interface DeviceStatusResponse {
   batteryVoltage: number; // in mV

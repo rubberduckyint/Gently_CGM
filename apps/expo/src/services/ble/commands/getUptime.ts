@@ -3,8 +3,8 @@
  * Gets the device uptime in milliseconds since last boot/reset
  */
 
-import type { BLECommandRequest } from "../types";
-import { CommandCode } from "../types";
+import type { BLECommandRequest } from "~/services/ble/types";
+import { CommandCode } from "~/services/ble/types";
 
 export interface UptimeResponse {
   uptime: number; // milliseconds since boot

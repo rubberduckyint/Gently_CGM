@@ -166,6 +166,7 @@ const alarmFormSchema = z
     endsAfter: z.number().min(1, "Must be at least 1").optional(),
     severityLevel: z.enum(["INFORMATIONAL", "WARNING", "CRITICAL"]),
     ledPattern: z.enum([
+      "OFF",
       "SOLID",
       "BLINK_SLOW",
       "BLINK_FAST",

@@ -4,8 +4,8 @@
  * Based on BLE Protocol Rev 0.6
  */
 
-import type { BLECommandRequest } from "../types";
-import { CommandCode, ResponseStatus } from "../types";
+import type { BLECommandRequest } from "~/services/ble/types";
+import { CommandCode, ResponseStatus } from "~/services/ble/types";
 
 export interface TriggerLedPatternParams {
   ledColor: number; // 0=OFF, 1=Blue, 2=Green, 3=Cyan, 4=Red, 5=Yellow, 6=Magenta, 7=White

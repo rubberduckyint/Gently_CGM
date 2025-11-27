@@ -138,6 +138,14 @@ export const FACTORY_BRACELET_KEY = "43EA5F35659859874A6F184742C32B2B";
 // API Version
 export const API_VERSION = 0x01;
 
+// Vibration patterns for preview
+export enum VibrationPattern {
+  QUICK = 0,
+  HEARTBEAT = 1,
+  RAPID = 2,
+  SYMPHONY = 3,
+}
+
 // Command codes
 export enum CommandCode {
   GET_UPTIME = 0x01,
@@ -159,6 +167,10 @@ export enum CommandCode {
   ENTER_DFU_MODE = 0x11,
   REBOOT_BRACELET = 0x12,
   SET_DYNAMIC_KEY = 0x13,
+  // Trigger pattern commands
+  TRIGGER_LED_PATTERN = 0x14,
+  TRIGGER_VIBRATION_PATTERN = 0x15,
+  TRIGGER_AUDIO_PATTERN = 0x16,
   // Notifications
   BATTERY_STATUS_NOTIFY = 0x80,
   ACTIVE_EVENT_NOTIFY = 0x81,

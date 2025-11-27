@@ -4,14 +4,19 @@
  * Matches the design and behavior of the AdvancedSection in alarm forms
  */
 
-import React from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { buttons, buttonText, colors, spacing, typography } from "~/styles";
 
 interface AlarmPreferencesSectionProps {
-  ledPattern: "OFF" | "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE";
+  ledPattern:
+    | "OFF"
+    | "SOLID"
+    | "BLINK_SLOW"
+    | "BLINK_FAST"
+    | "PULSE"
+    | "STROBE";
   setLedPattern: (
     value: "OFF" | "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE",
   ) => void;

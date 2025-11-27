@@ -5,7 +5,7 @@
  * Used by both add and edit alarm forms.
  */
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Modal,
   Platform,
@@ -18,7 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Slider from "@react-native-community/slider";
 
-import type { AlarmFormData } from "./BasicInfoSection";
+import type { AlarmFormData } from "~/types";
 import { cards, colors, spacing, typography } from "~/styles";
 
 interface ScheduleSectionProps {
@@ -86,7 +86,12 @@ export function ScheduleSection({
 
   return (
     <>
-      <View style={[cards.base, { marginBottom: spacing[4], opacity: disabled ? 0.6 : 1 }]}>
+      <View
+        style={[
+          cards.base,
+          { marginBottom: spacing[4], opacity: disabled ? 0.6 : 1 },
+        ]}
+      >
         <View
           style={{
             flexDirection: "row",
@@ -137,13 +142,16 @@ export function ScheduleSection({
             },
           ]}
         >
-          {disabled 
+          {disabled
             ? "This alarm's schedule is synced with your calendar and cannot be edited."
             : "Set when your alarm should trigger and how often it should repeat."}
         </Text>
 
         {/* Start Date & Time - on the same line */}
-        <View style={{ marginBottom: spacing[4] }} pointerEvents={disabled ? "none" : "auto"}>
+        <View
+          style={{ marginBottom: spacing[4] }}
+          pointerEvents={disabled ? "none" : "auto"}
+        >
           <Text style={[typography.label, { marginBottom: spacing[2] }]}>
             Start Date & Time {!disabled && "*"}
           </Text>
@@ -154,7 +162,9 @@ export function ScheduleSection({
                 flex: 1,
                 borderWidth: 1,
                 borderColor: colors.border.medium,
-                backgroundColor: disabled ? colors.gray[100] : colors.background.secondary,
+                backgroundColor: disabled
+                  ? colors.gray[100]
+                  : colors.background.secondary,
                 paddingHorizontal: spacing[3],
                 paddingVertical: spacing[3],
                 borderRadius: 8,
@@ -164,7 +174,14 @@ export function ScheduleSection({
               disabled={disabled}
             >
               <Text
-                style={[typography.bodySmall, { color: disabled ? colors.text.secondary : colors.text.primary }]}
+                style={[
+                  typography.bodySmall,
+                  {
+                    color: disabled
+                      ? colors.text.secondary
+                      : colors.text.primary,
+                  },
+                ]}
               >
                 {formatDate(formData.startDate)}
               </Text>
@@ -176,7 +193,9 @@ export function ScheduleSection({
                 flex: 1,
                 borderWidth: 1,
                 borderColor: colors.border.medium,
-                backgroundColor: disabled ? colors.gray[100] : colors.background.secondary,
+                backgroundColor: disabled
+                  ? colors.gray[100]
+                  : colors.background.secondary,
                 paddingHorizontal: spacing[3],
                 paddingVertical: spacing[3],
                 borderRadius: 8,
@@ -186,7 +205,14 @@ export function ScheduleSection({
               disabled={disabled}
             >
               <Text
-                style={[typography.bodySmall, { color: disabled ? colors.text.secondary : colors.text.primary }]}
+                style={[
+                  typography.bodySmall,
+                  {
+                    color: disabled
+                      ? colors.text.secondary
+                      : colors.text.primary,
+                  },
+                ]}
               >
                 {formatTime(formData.startDate)}
               </Text>
@@ -485,12 +511,18 @@ export function ScheduleSection({
                   }}
                 >
                   <Text
-                    style={[typography.caption, { color: colors.text.tertiary }]}
+                    style={[
+                      typography.caption,
+                      { color: colors.text.tertiary },
+                    ]}
                   >
                     1
                   </Text>
                   <Text
-                    style={[typography.caption, { color: colors.text.tertiary }]}
+                    style={[
+                      typography.caption,
+                      { color: colors.text.tertiary },
+                    ]}
                   >
                     60
                   </Text>

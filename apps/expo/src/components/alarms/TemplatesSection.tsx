@@ -4,11 +4,10 @@
  * Quick templates for common alarm patterns to help users get started quickly.
  */
 
-import React from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import type { AlarmFormData } from "./BasicInfoSection";
+import type { AlarmFormData } from "~/types";
 import { buttons, cards, colors, spacing, typography } from "~/styles";
 
 interface Template {
@@ -264,7 +263,10 @@ export function TemplatesSection({ onSelectTemplate }: TemplatesSectionProps) {
                   ...template.data,
                   startDate: date,
                 });
-              } else if (template.id === "stretch-reminder" || template.id === "hourly") {
+              } else if (
+                template.id === "stretch-reminder" ||
+                template.id === "hourly"
+              ) {
                 // For minute/hour-based templates, set startDate to now
                 const now = new Date();
                 onSelectTemplate({

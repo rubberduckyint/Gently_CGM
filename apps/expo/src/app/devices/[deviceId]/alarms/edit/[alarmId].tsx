@@ -4,8 +4,15 @@
  * Simplified page for editing an existing alarm using the unified AlarmForm component.
  */
 
-import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, Switch, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  Switch,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -142,7 +149,13 @@ export default function EditAlarmPage() {
     cronExpression: string;
     isActive?: boolean;
     severityLevel: "CRITICAL" | "WARNING" | "INFORMATIONAL";
-    ledPattern: "OFF" | "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE";
+    ledPattern:
+      | "OFF"
+      | "SOLID"
+      | "BLINK_SLOW"
+      | "BLINK_FAST"
+      | "PULSE"
+      | "STROBE";
     ledColor:
       | "RED"
       | "GREEN"
@@ -157,6 +170,8 @@ export default function EditAlarmPage() {
     snoozeTimeout: number;
     retriggerDelay: number;
     retriggerTimeout: number;
+    pushNotification?: boolean;
+    emailNotification?: boolean;
   }): AlarmFormData => {
     let startDate: Date;
     try {
@@ -210,6 +225,8 @@ export default function EditAlarmPage() {
       snoozeTimeout: alarm.snoozeTimeout,
       retriggerDelay: alarm.retriggerDelay,
       retriggerTimeout: alarm.retriggerTimeout,
+      pushNotification: alarm.pushNotification ?? true,
+      emailNotification: alarm.emailNotification ?? false,
     };
   };
 
@@ -262,6 +279,8 @@ export default function EditAlarmPage() {
         snoozeTimeout: data.snoozeTimeout,
         retriggerDelay: data.retriggerDelay,
         retriggerTimeout: data.retriggerTimeout,
+        pushNotification: data.pushNotification,
+        emailNotification: data.emailNotification,
       });
 
       return result;
@@ -486,9 +505,14 @@ export default function EditAlarmPage() {
   }
 
   // Check if this alarm is synced with a calendar and get the account info
-  const calendarEventAlarm = (alarm as { calendarEventAlarm?: { calendarConnection?: { accountEmail?: string } } }).calendarEventAlarm;
+  const calendarEventAlarm = (
+    alarm as {
+      calendarEventAlarm?: { calendarConnection?: { accountEmail?: string } };
+    }
+  ).calendarEventAlarm;
   const isCalendarSynced = !!calendarEventAlarm;
-  const calendarAccountEmail = calendarEventAlarm?.calendarConnection?.accountEmail;
+  const calendarAccountEmail =
+    calendarEventAlarm?.calendarConnection?.accountEmail;
 
   return (
     <SafeAreaView style={containers.safeArea}>
@@ -542,7 +566,11 @@ export default function EditAlarmPage() {
               marginRight: -spacing[2],
             })}
           >
-            <Ionicons name="trash-outline" size={24} color={colors.error[500]} />
+            <Ionicons
+              name="trash-outline"
+              size={24}
+              color={colors.error[500]}
+            />
           </Pressable>
         </View>
 
@@ -566,7 +594,9 @@ export default function EditAlarmPage() {
             >
               {formData.isActive ? "Alarm Enabled" : "Alarm Disabled"}
             </Text>
-            <Text style={[typography.caption, { color: colors.text.secondary }]}>
+            <Text
+              style={[typography.caption, { color: colors.text.secondary }]}
+            >
               {formData.isActive
                 ? "This alarm is active and will trigger"
                 : "This alarm is paused and won't trigger"}
@@ -575,7 +605,9 @@ export default function EditAlarmPage() {
           <Switch
             value={formData.isActive ?? true}
             onValueChange={(value) => {
-              setFormData((prev) => ({ ...prev, isActive: value }));
+              setFormData((prev) =>
+                prev ? { ...prev, isActive: value } : null,
+              );
             }}
             trackColor={{
               false: colors.gray[300],
@@ -625,7 +657,11 @@ export default function EditAlarmPage() {
                     marginRight: spacing[3],
                   }}
                 >
-                  <Ionicons name="calendar" size={20} color={colors.primary[600]} />
+                  <Ionicons
+                    name="calendar"
+                    size={20}
+                    color={colors.primary[600]}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text
@@ -642,8 +678,8 @@ export default function EditAlarmPage() {
                       { color: colors.primary[600], lineHeight: 16 },
                     ]}
                   >
-                    {calendarAccountEmail 
-                      ? `Synced from ${calendarAccountEmail}. ` 
+                    {calendarAccountEmail
+                      ? `Synced from ${calendarAccountEmail}. `
                       : ""}
                     The schedule is managed by your calendar.
                   </Text>

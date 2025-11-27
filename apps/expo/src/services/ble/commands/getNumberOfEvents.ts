@@ -3,8 +3,8 @@
  * Gets the count of stored events on the device
  */
 
-import type { BLECommandRequest } from "../types";
-import { CommandCode } from "../types";
+import type { BLECommandRequest } from "~/services/ble/types";
+import { CommandCode } from "~/services/ble/types";
 
 export interface EventsCountResponse {
   count: number;

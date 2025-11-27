@@ -5,36 +5,14 @@
  * Used by both add and edit alarm forms.
  */
 
-import React from "react";
 import { Text, TextInput, View } from "react-native";
 
+import type { AlarmFormData } from "~/types";
 import { cards, colors, inputs, spacing, typography } from "~/styles";
+import { textInputA11y } from "~/utils/accessibility";
 
-export interface AlarmFormData {
-  title: string;
-  description: string;
-  startDate: Date;
-  repeat: boolean;
-  repeatType: "minutes" | "hours" | "days" | "weeks";
-  repeatEvery: number;
-  daysOfWeek: string[];
-  ends: "never" | "on" | "after";
-  endsOnDate?: Date;
-  endsAfter?: number;
-  isActive?: boolean; // Optional to support editing existing alarms
-  // BLE Protocol fields (consolidated - these replace legacy color, priority, hapticChoice)
-  severityLevel: "INFORMATIONAL" | "WARNING" | "CRITICAL";
-  ledPattern: "OFF" | "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE";
-  ledColor: "RED" | "GREEN" | "BLUE" | "YELLOW" | "MAGENTA" | "CYAN" | "WHITE";
-  vibrationPattern: "QUICK" | "HEARTBEAT" | "RAPID" | "SYMPHONY"; // 0-3: quick, heartbeat, rapid, symphony
-  vibrationIntensity: "LOW" | "MEDIUM" | "HIGH" | "MAXIMUM";
-  snoozePeriod: number; // minutes
-  snoozeTimeout: number; // minutes
-  retriggerDelay: number; // minutes
-  retriggerTimeout: number; // minutes
-}
-
-// COLOR_OPTIONS removed - LED colors are now handled in AdvancedSection
+// Re-export for backwards compatibility
+export type { AlarmFormData } from "~/types";
 
 interface BasicInfoSectionProps {
   formData: AlarmFormData;
@@ -49,6 +27,11 @@ export function BasicInfoSection({
 }: BasicInfoSectionProps) {
   const isTitleEmpty = formData.title.trim().length === 0;
   const showTitleError = showValidationErrors && isTitleEmpty;
+  const titleA11y = textInputA11y("Alarm name, required", {
+    value: formData.title,
+    placeholder: "e.g., Take Medication",
+  });
+
   return (
     <View style={[cards.base, { marginBottom: spacing[4] }]}>
       {/* Title Input */}
@@ -74,6 +57,7 @@ export function BasicInfoSection({
           onChangeText={(text) => onUpdateFormData({ title: text })}
           placeholder="e.g., Take Medication, Morning Reminder"
           placeholderTextColor={colors.text.secondary}
+          {...titleA11y}
         />
         {showTitleError && (
           <Text
@@ -81,6 +65,7 @@ export function BasicInfoSection({
               typography.caption,
               { color: colors.error[500], marginTop: spacing[1] },
             ]}
+            accessibilityRole="alert"
           >
             Alarm name is required
           </Text>

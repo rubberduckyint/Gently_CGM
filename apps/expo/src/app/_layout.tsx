@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -6,11 +7,32 @@ import "react-native-reanimated";
 
 import { AlarmNotificationModal } from "~/components/AlarmNotificationModal";
 import { BLEProvider } from "~/contexts/BLEContext";
+import { NotificationService } from "~/services/notifications";
 import { queryClient } from "~/utils/api";
 
 // This is the main layout of the app
 // It wraps your pages with the providers they need
 export default function RootLayout() {
+  // Initialize push notifications on app start
+  useEffect(() => {
+    NotificationService.initialize()
+      .then((token) => {
+        if (token) {
+          console.log(
+            "📱 Push notifications initialized with token:",
+            token.substring(0, 30) + "...",
+          );
+        } else {
+          console.log(
+            "⚠️ Push notifications not available (may need physical device)",
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("❌ Failed to initialize push notifications:", error);
+      });
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <BLEProvider>

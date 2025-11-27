@@ -3,8 +3,8 @@
  * Triggers the "Find Me" function on the device (LED, vibration, etc.)
  */
 
-import type { BLECommandRequest } from "../types";
-import { CommandCode } from "../types";
+import type { BLECommandRequest } from "~/services/ble/types";
+import { CommandCode } from "~/services/ble/types";
 
 export const DEFAULT_FIND_ME_PATTERN = 0x02;
 

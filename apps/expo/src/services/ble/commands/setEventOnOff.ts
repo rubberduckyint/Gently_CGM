@@ -3,8 +3,8 @@
  * Sets an existing event to ON or OFF state
  */
 
-import type { BLECommandRequest, EventResponse } from "../types";
-import { CommandCode, ResponseStatus } from "../types";
+import type { BLECommandRequest, EventResponse } from "~/services/ble/types";
+import { CommandCode, ResponseStatus } from "~/services/ble/types";
 
 export function createSetEventOnOffRequest(
   eventIndex: number,

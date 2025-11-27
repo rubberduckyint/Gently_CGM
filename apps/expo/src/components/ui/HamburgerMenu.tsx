@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -9,6 +9,7 @@ interface MenuOption {
   icon: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
   destructive?: boolean;
+  badge?: number;
 }
 
 interface HamburgerMenuProps {
@@ -17,6 +18,9 @@ interface HamburgerMenuProps {
 
 export function HamburgerMenu({ options }: HamburgerMenuProps) {
   const [isMenuVisible, setIsMenuVisible] = useState(false);
+
+  // Calculate if any option has a badge (for the hamburger icon)
+  const totalBadges = options.reduce((sum, opt) => sum + (opt.badge ?? 0), 0);
 
   const handleOptionPress = (option: MenuOption) => {
     setIsMenuVisible(false);
@@ -36,10 +40,38 @@ export function HamburgerMenu({ options }: HamburgerMenuProps) {
           opacity: pressed ? 0.7 : 1,
           padding: spacing[2],
           marginRight: -spacing[2],
+          position: "relative",
         })}
         accessibilityLabel="More options"
       >
         <Ionicons name="menu" size={24} color={colors.text.primary} />
+        {/* Badge indicator on hamburger icon */}
+        {totalBadges > 0 && (
+          <View
+            style={{
+              position: "absolute",
+              top: 4,
+              right: -2,
+              minWidth: 16,
+              height: 16,
+              borderRadius: 8,
+              backgroundColor: colors.error[500],
+              alignItems: "center",
+              justifyContent: "center",
+              paddingHorizontal: 4,
+            }}
+          >
+            <Text
+              style={{
+                color: "#FFFFFF",
+                fontSize: 10,
+                fontWeight: "700",
+              }}
+            >
+              {totalBadges > 9 ? "9+" : totalBadges}
+            </Text>
+          </View>
+        )}
       </Pressable>
 
       <Modal
@@ -88,14 +120,44 @@ export function HamburgerMenu({ options }: HamburgerMenuProps) {
                   borderTopColor: colors.border.light,
                 })}
               >
-                <Ionicons
-                  name={option.icon}
-                  size={20}
-                  color={
-                    option.destructive ? colors.error[500] : colors.text.primary
-                  }
-                  style={{ marginRight: spacing[3] }}
-                />
+                <View style={{ position: "relative", marginRight: spacing[3] }}>
+                  <Ionicons
+                    name={option.icon}
+                    size={20}
+                    color={
+                      option.destructive
+                        ? colors.error[500]
+                        : colors.text.primary
+                    }
+                  />
+                  {/* Badge on individual menu item icon */}
+                  {option.badge && option.badge > 0 && (
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: -4,
+                        right: -6,
+                        minWidth: 14,
+                        height: 14,
+                        borderRadius: 7,
+                        backgroundColor: colors.error[500],
+                        alignItems: "center",
+                        justifyContent: "center",
+                        paddingHorizontal: 2,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#FFFFFF",
+                          fontSize: 9,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {option.badge > 9 ? "9+" : option.badge}
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <Text
                   style={[
                     typography.body,
@@ -103,6 +165,7 @@ export function HamburgerMenu({ options }: HamburgerMenuProps) {
                       color: option.destructive
                         ? colors.error[500]
                         : colors.text.primary,
+                      flex: 1,
                     },
                   ]}
                 >

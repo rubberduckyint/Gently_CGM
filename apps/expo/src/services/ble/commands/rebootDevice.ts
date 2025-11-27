@@ -3,9 +3,9 @@
  * Reboots the bracelet device
  */
 
-import type { BLECommandRequest } from "../types";
-import { sendCommand } from "../manager";
-import { CommandCode, ResponseStatus } from "../types";
+import type { BLECommandRequest } from "~/services/ble/types";
+import { sendCommand } from "~/services/ble/manager";
+import { CommandCode, ResponseStatus } from "~/services/ble/types";
 
 /**
  * Create a reboot device command request

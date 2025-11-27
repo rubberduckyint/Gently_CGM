@@ -3,8 +3,8 @@
  * Removes a single event from the bracelet by its index
  */
 
-import type { BLECommandRequest } from "../types";
-import { API_VERSION, CommandCode } from "../types";
+import type { BLECommandRequest } from "~/services/ble/types";
+import { API_VERSION, CommandCode } from "~/services/ble/types";
 
 /**
  * Create a Remove Event command request.

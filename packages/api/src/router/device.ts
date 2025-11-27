@@ -3,29 +3,62 @@ import { TRPCError } from "@trpc/server";
 import { and, count, eq } from "drizzle-orm";
 import { z } from "zod/v4";
 
-import { Alarm, CalendarEventAlarm, Device } from "@gently/db/schema";
+import { Alarm, Device, DeviceShare } from "@gently/db/schema";
 
 import { protectedProcedure } from "../trpc";
 
 export const deviceRouter = {
-  // Get all devices for current user
+  // Get all devices for current user (owned + shared)
   getAll: protectedProcedure.input(z.object({})).query(async ({ ctx }) => {
-    const devices = await ctx.db
+    // Get owned devices
+    const ownedDevices = await ctx.db
       .select()
       .from(Device)
       .where(eq(Device.userId, ctx.session.user.id));
 
-    // Get alarm counts for each device
-    if (devices.length === 0) {
-      return devices.map((device) => ({
+    // Get shared devices (accepted shares only)
+    const sharedDeviceRecords = await ctx.db.query.DeviceShare.findMany({
+      where: and(
+        eq(DeviceShare.sharedWithUserId, ctx.session.user.id),
+        eq(DeviceShare.status, "ACCEPTED"),
+      ),
+      with: {
+        device: {
+          with: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    // Combine devices with ownership info
+    const allDevices = [
+      ...ownedDevices.map((device) => ({
         ...device,
-        _count: { alarms: 0 },
-      }));
+        isOwned: true as const,
+        isShared: false as const,
+        shareInfo: null,
+      })),
+      ...sharedDeviceRecords.map((share) => ({
+        ...share.device,
+        isOwned: false as const,
+        isShared: true as const,
+        shareInfo: {
+          shareId: share.id,
+          permission: share.permission,
+          ownerName: share.device.user.name,
+          ownerEmail: share.device.user.email,
+        },
+      })),
+    ];
+
+    if (allDevices.length === 0) {
+      return [];
     }
 
-    // Get alarm counts efficiently using subquery approach
+    // Get alarm counts efficiently
     const devicesWithCounts = await Promise.all(
-      devices.map(async (device) => {
+      allDevices.map(async (device) => {
         const alarmCount = await ctx.db
           .select({ count: count() })
           .from(Alarm)
@@ -43,7 +76,7 @@ export const deviceRouter = {
     return devicesWithCounts;
   }),
 
-  // Get device by ID (only if it belongs to the current user)
+  // Get device by ID (owned or shared with user)
   getById: protectedProcedure
     .input(
       z.object({
@@ -51,7 +84,8 @@ export const deviceRouter = {
       }),
     )
     .query(async ({ input, ctx }) => {
-      const device = await ctx.db
+      // First check if user owns the device
+      const ownedDevice = await ctx.db
         .select()
         .from(Device)
         .where(
@@ -59,7 +93,43 @@ export const deviceRouter = {
         )
         .limit(1);
 
-      if (!device.length) {
+      let device: (typeof ownedDevice)[0] | null = ownedDevice[0] ?? null;
+      let shareInfo: {
+        shareId: string;
+        permission: "READ" | "WRITE";
+        ownerName: string;
+        ownerEmail: string;
+      } | null = null;
+
+      // If not owned, check if shared with user
+      if (!device) {
+        const share = await ctx.db.query.DeviceShare.findFirst({
+          where: and(
+            eq(DeviceShare.deviceId, input.id),
+            eq(DeviceShare.sharedWithUserId, ctx.session.user.id),
+            eq(DeviceShare.status, "ACCEPTED"),
+          ),
+          with: {
+            device: {
+              with: {
+                user: true,
+              },
+            },
+          },
+        });
+
+        if (share) {
+          device = share.device;
+          shareInfo = {
+            shareId: share.id,
+            permission: share.permission,
+            ownerName: share.device.user.name,
+            ownerEmail: share.device.user.email,
+          };
+        }
+      }
+
+      if (!device) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Device not found or you don't have permission to access it",
@@ -85,7 +155,10 @@ export const deviceRouter = {
         .where(eq(Alarm.deviceId, input.id));
 
       return {
-        ...device[0],
+        ...device,
+        isOwned: !shareInfo,
+        isShared: !!shareInfo,
+        shareInfo,
         alarms,
         _count: {
           alarms: alarmCount[0]?.count ?? 0,

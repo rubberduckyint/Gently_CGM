@@ -4,7 +4,6 @@
  * Simplified page for creating a new alarm using the unified AlarmForm component.
  */
 
-import React from "react";
 import { ActivityIndicator, Alert, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
@@ -20,7 +19,13 @@ import { mapVibrationPatternToLegacyNumber } from "~/utils/bleAlarmUtils";
 
 const getDefaultFormData = (userPreferences?: {
   defaultSeverityLevel: "CRITICAL" | "WARNING" | "INFORMATIONAL";
-  defaultLedPattern: "OFF" | "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE";
+  defaultLedPattern:
+    | "OFF"
+    | "SOLID"
+    | "BLINK_SLOW"
+    | "BLINK_FAST"
+    | "PULSE"
+    | "STROBE";
   defaultLedColor:
     | "RED"
     | "GREEN"
@@ -35,6 +40,8 @@ const getDefaultFormData = (userPreferences?: {
   defaultSnoozeTimeout: number;
   defaultRetriggerDelay: number;
   defaultRetriggerTimeout: number;
+  defaultPushNotification?: boolean;
+  defaultEmailNotification?: boolean;
 }): AlarmFormData => {
   const now = new Date();
   const defaultStart = new Date(now.getTime() + 300000); // 5 minutes from now
@@ -74,6 +81,9 @@ const getDefaultFormData = (userPreferences?: {
     snoozeTimeout: userPreferences?.defaultSnoozeTimeout ?? 15,
     retriggerDelay: userPreferences?.defaultRetriggerDelay ?? 1,
     retriggerTimeout: userPreferences?.defaultRetriggerTimeout ?? 5,
+    // Notification settings from user preferences
+    pushNotification: userPreferences?.defaultPushNotification ?? true,
+    emailNotification: userPreferences?.defaultEmailNotification ?? false,
   };
 };
 
@@ -156,6 +166,8 @@ export default function AddAlarmPage() {
         snoozeTimeout: data.snoozeTimeout,
         retriggerDelay: data.retriggerDelay,
         retriggerTimeout: data.retriggerTimeout,
+        pushNotification: data.pushNotification,
+        emailNotification: data.emailNotification,
         deviceId,
       });
     },

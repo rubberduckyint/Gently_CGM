@@ -8,8 +8,8 @@ import type {
   BLECommandRequest,
   VibrationIntensity,
   VibrationPattern,
-} from "../types";
-import { CommandCode, ResponseStatus } from "../types";
+} from "~/services/ble/types";
+import { CommandCode, ResponseStatus } from "~/services/ble/types";
 
 export interface TriggerVibrationPatternParams {
   vibrationPattern: VibrationPattern; // 0=Quick, 1=Heartbeat, 2=Rapid, 3=Symphony

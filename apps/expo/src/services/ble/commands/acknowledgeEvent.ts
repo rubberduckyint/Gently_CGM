@@ -3,8 +3,8 @@
  * Acknowledges/stops an active event - equivalent to double-pressing the button
  */
 
-import type { BLECommandRequest, EventResponse } from "../types";
-import { CommandCode, ResponseStatus } from "../types";
+import type { BLECommandRequest, EventResponse } from "~/services/ble/types";
+import { CommandCode, ResponseStatus } from "~/services/ble/types";
 
 /**
  * Create a request to acknowledge/stop an active event
@@ -40,8 +40,8 @@ export function createAcknowledgeEventRequest(
 export function parseAcknowledgeEventResponse(
   response: Uint8Array,
 ): EventResponse {
-  const status = response[0];
-  const eventIndex = response[1];
+  const status = response[0] as ResponseStatus;
+  const eventIndex = response[1] ?? 0;
 
   console.log(
     `🔕 ACKNOWLEDGE_EVENT Response: status=${status === ResponseStatus.OK ? "OK" : "ERROR"}, eventIndex=${eventIndex}`,
@@ -49,6 +49,7 @@ export function parseAcknowledgeEventResponse(
 
   return {
     eventIndex,
-    status: status === ResponseStatus.OK ? ResponseStatus.OK : ResponseStatus.ERROR,
+    status:
+      status === ResponseStatus.OK ? ResponseStatus.OK : ResponseStatus.ERROR,
   };
 }

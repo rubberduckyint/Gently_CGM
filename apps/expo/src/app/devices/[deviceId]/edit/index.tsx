@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -46,7 +46,7 @@ export default function EditDevicePage() {
   }>({});
 
   // Update form values when device data loads
-  React.useEffect(() => {
+  useEffect(() => {
     if (device) {
       setTitle(device.title ?? "");
       setDescription(device.description ?? "");
@@ -110,7 +110,7 @@ export default function EditDevicePage() {
 
     updateMutation.mutate({
       title: title.trim(),
-      description: description.trim() || undefined,
+      description: description.trim() ?? undefined,
     });
   };
 

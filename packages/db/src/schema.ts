@@ -71,6 +71,13 @@ export const UserPreferences = pgTable("UserPreferences", (t) => ({
   defaultRetriggerDelay: t.integer().default(1).notNull(), // minutes
   defaultRetriggerTimeout: t.integer().default(5).notNull(), // minutes
 
+  // Default notification settings
+  defaultPushNotification: t.boolean().default(true).notNull(),
+  defaultEmailNotification: t.boolean().default(false).notNull(),
+
+  // Push notification token for this user
+  pushNotificationToken: t.text(),
+
   createdAt: t.timestamp({ withTimezone: true }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ withTimezone: true, mode: "string" })
@@ -85,19 +92,31 @@ export const CalendarConnection = pgTable("CalendarConnection", (t) => ({
     .text()
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  
+
   provider: t.text().notNull(), // "google"
   accountEmail: t.text().notNull(),
-  
+
   // OAuth tokens
   accessToken: t.text().notNull(),
   refreshToken: t.text(),
   tokenExpiresAt: t.timestamp({ withTimezone: true }),
-  
+
   // Connection metadata
   isActive: t.boolean().default(true).notNull(),
   lastSyncedAt: t.timestamp({ withTimezone: true }),
-  
+
+  // Incremental sync support
+  syncToken: t.text(), // Google Calendar sync token for incremental sync
+  calendarId: t.text().default("primary").notNull(), // Calendar ID being synced
+
+  // Push notification (webhook) support
+  watchChannelId: t.text(), // UUID for Google Calendar push channel
+  watchResourceId: t.text(), // Resource ID from Google for the watch
+  watchExpiration: t.timestamp({ withTimezone: true }), // When the watch expires
+
+  // Sync status - set by webhook when changes occur while app is closed
+  needsSync: t.boolean().default(false).notNull(),
+
   createdAt: t.timestamp({ withTimezone: true }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ withTimezone: true, mode: "string" })
@@ -116,23 +135,23 @@ export const CalendarEventAlarm = pgTable("CalendarEventAlarm", (t) => ({
     .text()
     .notNull()
     .references(() => CalendarConnection.id, { onDelete: "cascade" }),
-  alarmId: t
-    .text()
-    .references(() => Alarm.id, { onDelete: "set null" }),
-  
+  alarmId: t.text().references(() => Alarm.id, { onDelete: "set null" }),
+
   // Calendar event details
   eventId: t.text().notNull(), // Google Calendar event ID
   eventSummary: t.text().notNull(),
   eventStartTime: t.timestamp({ withTimezone: true }).notNull(),
   eventEndTime: t.timestamp({ withTimezone: true }),
   eventLocation: t.text(),
-  
+  eventEtag: t.text(), // ETag for change detection
+  eventStatus: t.text().default("confirmed").notNull(), // "confirmed", "cancelled", "tentative"
+
   // Alarm configuration
   alarmMinutesBefore: t.integer().notNull(),
-  
+
   // Sync tracking
   lastSynced: t.timestamp({ withTimezone: true }),
-  
+
   createdAt: t.timestamp({ withTimezone: true }).defaultNow().notNull(),
   updatedAt: t
     .timestamp({ withTimezone: true, mode: "string" })
@@ -187,11 +206,69 @@ export const Alarm = pgTable("Alarm", (t) => ({
   snoozeTimeout: t.integer().default(15).notNull(), // minutes
   retriggerDelay: t.integer().default(1).notNull(), // minutes
   retriggerTimeout: t.integer().default(5).notNull(), // minutes
+  // Notification settings
+  pushNotification: t.boolean().default(true).notNull(),
+  emailNotification: t.boolean().default(false).notNull(),
   userId: t
     .text()
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   deviceId: t.text().references(() => Device.id, { onDelete: "cascade" }),
+}));
+
+// Device Sharing Enums
+export const deviceSharePermissionEnum = pgEnum("DeviceSharePermission", [
+  "READ", // Can view device and alarms, receive notifications
+  "WRITE", // Can also create/modify alarms
+]);
+
+export const deviceShareStatusEnum = pgEnum("DeviceShareStatus", [
+  "PENDING", // Invitation sent, awaiting response
+  "ACCEPTED", // User accepted the invitation
+  "DECLINED", // User declined the invitation
+  "REVOKED", // Owner revoked access
+]);
+
+// Device Share - grants access to a device for another user
+export const DeviceShare = pgTable("DeviceShare", (t) => ({
+  id: pgCuid2("id").defaultRandom().primaryKey(),
+  deviceId: t
+    .text()
+    .notNull()
+    .references(() => Device.id, { onDelete: "cascade" }),
+
+  // The user who is being granted access (null if they don't have an account yet)
+  sharedWithUserId: t.text().references(() => user.id, { onDelete: "cascade" }),
+
+  // Email of the invited user (used for pending invitations)
+  invitedEmail: t.text().notNull(),
+
+  // Permission level
+  permission: deviceSharePermissionEnum().default("READ").notNull(),
+
+  // Status of the share
+  status: deviceShareStatusEnum().default("PENDING").notNull(),
+
+  // Notification preferences for shared users
+  pushNotification: t.boolean().default(true).notNull(),
+  emailNotification: t.boolean().default(false).notNull(),
+
+  // Who sent the invitation
+  invitedByUserId: t
+    .text()
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+
+  // Invitation tracking
+  invitationToken: t.text(), // Unique token for accepting invitation via link
+  invitationExpiresAt: t.timestamp({ withTimezone: true }), // When the invitation expires
+  acceptedAt: t.timestamp({ withTimezone: true }), // When the user accepted
+
+  createdAt: t.timestamp({ withTimezone: true }).defaultNow().notNull(),
+  updatedAt: t
+    .timestamp({ withTimezone: true, mode: "string" })
+    .$onUpdate(() => sql`NOW()`)
+    .notNull(),
 }));
 
 export const CreateDeviceSchema = createInsertSchema(Device, {
@@ -242,6 +319,26 @@ export type DeviceWithAlarmsCount = Device & {
   };
 };
 
+// Device Share types
+export type DeviceShare = typeof DeviceShare.$inferSelect;
+export type NewDeviceShare = typeof DeviceShare.$inferInsert;
+export type DeviceSharePermission = DeviceShare["permission"];
+export type DeviceShareStatus = DeviceShare["status"];
+
+// Device Share schemas
+export const CreateDeviceShareSchema = z.object({
+  deviceId: z.string(),
+  invitedEmail: z.string().email(),
+  permission: z.enum(["READ", "WRITE"]).default("READ"),
+});
+
+export const UpdateDeviceShareSchema = z.object({
+  id: z.string(),
+  permission: z.enum(["READ", "WRITE"]).optional(),
+  pushNotification: z.boolean().optional(),
+  emailNotification: z.boolean().optional(),
+});
+
 export type Alarm = typeof Alarm.$inferSelect;
 export type NewAlarm = typeof Alarm.$inferInsert;
 
@@ -268,6 +365,8 @@ export const CreateAlarmSchema = createInsertSchema(Alarm, {
   snoozeTimeout: z.number().int().min(1).max(120).optional(),
   retriggerDelay: z.number().int().min(0).max(60).optional(), // 0 = disabled
   retriggerTimeout: z.number().int().min(0).max(120).optional(), // 0 = disabled
+  pushNotification: z.boolean().optional(),
+  emailNotification: z.boolean().optional(),
   deviceId: z.string().optional(),
 }).omit({
   id: true,
@@ -301,6 +400,8 @@ export const CreateUserPreferencesSchema = createInsertSchema(UserPreferences, {
   defaultSnoozeTimeout: z.number().int().min(0).max(255),
   defaultRetriggerDelay: z.number().int().min(0).max(255),
   defaultRetriggerTimeout: z.number().int().min(0).max(255),
+  defaultPushNotification: z.boolean().optional(),
+  defaultEmailNotification: z.boolean().optional(),
 }).omit({
   id: true,
   createdAt: true,
@@ -363,6 +464,10 @@ export const userRelations = relations(user, ({ many, one }) => ({
   }),
   calendarConnections: many(CalendarConnection),
   calendarEventAlarms: many(CalendarEventAlarm),
+  // Device shares - devices shared with this user
+  sharedDevices: many(DeviceShare, { relationName: "sharedWith" }),
+  // Device shares - invitations this user has sent
+  sentInvitations: many(DeviceShare, { relationName: "invitedBy" }),
 }));
 
 export const deviceRelations = relations(Device, ({ one, many }) => ({
@@ -371,9 +476,28 @@ export const deviceRelations = relations(Device, ({ one, many }) => ({
     references: [user.id],
   }),
   alarms: many(Alarm),
+  // Users this device is shared with
+  shares: many(DeviceShare),
 }));
 
-export const alarmRelations = relations(Alarm, ({ one, many }) => ({
+export const deviceShareRelations = relations(DeviceShare, ({ one }) => ({
+  device: one(Device, {
+    fields: [DeviceShare.deviceId],
+    references: [Device.id],
+  }),
+  sharedWithUser: one(user, {
+    fields: [DeviceShare.sharedWithUserId],
+    references: [user.id],
+    relationName: "sharedWith",
+  }),
+  invitedByUser: one(user, {
+    fields: [DeviceShare.invitedByUserId],
+    references: [user.id],
+    relationName: "invitedBy",
+  }),
+}));
+
+export const alarmRelations = relations(Alarm, ({ one }) => ({
   user: one(user, {
     fields: [Alarm.userId],
     references: [user.id],

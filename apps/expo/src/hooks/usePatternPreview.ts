@@ -9,12 +9,7 @@
 
 import { useState } from "react";
 
-import type {
-  LedColor,
-  LedPattern,
-  VibrationIntensity,
-} from "@gently/db/schema";
-
+import type { LedColor, LedPattern, VibrationIntensity } from "~/types";
 import { useBLE } from "~/contexts/BLEContext";
 import {
   createTriggerLedPatternRequest,
@@ -43,6 +38,9 @@ function mapLedPatternToDurations(pattern: LedPattern): {
       return { onDurationMs: 250, offDurationMs: 250, totalDurationSeconds: 1 }; // 250ms on/off, 2 cycles
     case "STROBE":
       return { onDurationMs: 100, offDurationMs: 100, totalDurationSeconds: 1 }; // 100ms on/off, 5 cycles
+    case "OFF":
+    default:
+      return { onDurationMs: 0, offDurationMs: 0, totalDurationSeconds: 0 }; // No LED
   }
 }
 

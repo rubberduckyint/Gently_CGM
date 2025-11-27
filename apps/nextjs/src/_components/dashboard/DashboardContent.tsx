@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 
 import { DevicesCard } from "~/_components/dashboard/DevicesCard";
+import { InvitationsBanner } from "~/_components/dashboard/InvitationsBanner";
 import { Skeleton } from "~/_components/ui/skeleton";
 import { useTRPC } from "~/trpc/react";
 
@@ -68,6 +69,7 @@ export function DashboardContent() {
 
   return (
     <div className="flex flex-col gap-8">
+      <InvitationsBanner />
       <DevicesCard devices={devices ?? []} />
     </div>
   );

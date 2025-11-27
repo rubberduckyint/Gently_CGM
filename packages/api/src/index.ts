@@ -21,4 +21,5 @@ type RouterInputs = inferRouterInputs<AppRouter>;
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 
 export { createTRPCContext, appRouter };
+export { initNotificationRouter } from "./router/notification";
 export type { AppRouter, RouterInputs, RouterOutputs };

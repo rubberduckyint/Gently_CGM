@@ -3,9 +3,9 @@
  * Gets all stored events from the device
  */
 
-import type { BLECommandRequest } from "../types";
-import { sendMultiPacketCommand } from "../manager";
-import { CommandCode } from "../types";
+import type { BLECommandRequest } from "~/services/ble/types";
+import { sendMultiPacketCommand } from "~/services/ble/manager";
+import { CommandCode } from "~/services/ble/types";
 
 export interface Event {
   id: number;

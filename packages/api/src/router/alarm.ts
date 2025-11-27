@@ -10,11 +10,82 @@ import {
   AlarmWhereUniqueSchema,
   CreateAlarmSchema,
   Device,
+  DeviceShare,
   UpdateAlarmSchema,
+  user,
   UserPreferences,
 } from "@gently/db/schema";
 
 import { protectedProcedure } from "../trpc";
+
+// Helper function to check if a user can modify alarms for a device
+// Returns { canEdit: boolean, isOwner: boolean, deviceOwnerId?: string }
+async function checkDeviceEditPermission(
+  db: Parameters<Parameters<typeof protectedProcedure.query>[0]>[0]["ctx"]["db"],
+  deviceId: string,
+  userId: string,
+): Promise<{ canEdit: boolean; isOwner: boolean; deviceOwnerId?: string }> {
+  // Check if user owns the device
+  const device = await db.query.Device.findFirst({
+    where: and(eq(Device.id, deviceId), eq(Device.userId, userId)),
+  });
+
+  if (device) {
+    return { canEdit: true, isOwner: true, deviceOwnerId: userId };
+  }
+
+  // Check if user has WRITE permission via DeviceShare
+  const share = await db.query.DeviceShare.findFirst({
+    where: and(
+      eq(DeviceShare.deviceId, deviceId),
+      eq(DeviceShare.sharedWithUserId, userId),
+      eq(DeviceShare.status, "ACCEPTED"),
+      eq(DeviceShare.permission, "WRITE"),
+    ),
+    with: {
+      device: true,
+    },
+  });
+
+  if (share) {
+    return { canEdit: true, isOwner: false, deviceOwnerId: share.device.userId };
+  }
+
+  return { canEdit: false, isOwner: false };
+}
+
+// Helper function to notify device owner about alarm changes by shared user
+async function notifyDeviceOwnerOfChange(
+  db: Parameters<Parameters<typeof protectedProcedure.query>[0]>[0]["ctx"]["db"],
+  deviceOwnerId: string,
+  sharedUserId: string,
+  deviceId: string,
+  alarmTitle: string,
+  action: "created" | "updated" | "deleted",
+): Promise<void> {
+  try {
+    // Get the shared user's info for the notification
+    const sharedUser = await db.query.user.findFirst({
+      where: eq(user.id, sharedUserId),
+    });
+
+    const device = await db.query.Device.findFirst({
+      where: eq(Device.id, deviceId),
+    });
+
+    const sharedUserName = sharedUser?.name ?? sharedUser?.email ?? "A shared user";
+    const deviceName = device?.title ?? "your device";
+
+    // Log the notification (since push tokens aren't fully implemented yet)
+    console.log(`[NOTIFICATION] Device owner ${deviceOwnerId}: ${sharedUserName} ${action} alarm "${alarmTitle}" on ${deviceName}`);
+
+    // TODO: When push tokens are properly stored, send actual push notification here
+    // TODO: When email preferences are set up for device owners, send email notification here
+  } catch (error) {
+    // Don't fail the alarm operation if notification fails
+    console.error("Failed to notify device owner:", error);
+  }
+}
 
 export const alarmRouter = {
   // Get all alarms for current user
@@ -63,26 +134,31 @@ export const alarmRouter = {
       return alarm;
     }),
 
-  // Create alarm for current user
+  // Create alarm for current user (or shared device with WRITE permission)
   create: protectedProcedure
     .input(CreateAlarmSchema)
     .output(AlarmSelectSchema)
     .mutation(async ({ input, ctx }) => {
-      // If deviceId is provided, verify it belongs to the current user
-      if (input.deviceId) {
-        const device = await ctx.db.query.Device.findFirst({
-          where: and(
-            eq(Device.id, input.deviceId),
-            eq(Device.userId, ctx.session.user.id),
-          ),
-        });
+      let isSharedUserEdit = false;
+      let deviceOwnerId: string | undefined;
 
-        if (!device) {
+      // If deviceId is provided, verify permission
+      if (input.deviceId) {
+        const permission = await checkDeviceEditPermission(
+          ctx.db,
+          input.deviceId,
+          ctx.session.user.id,
+        );
+
+        if (!permission.canEdit) {
           throw new TRPCError({
             code: "NOT_FOUND",
             message: "Device not found or you don't have permission to use it",
           });
         }
+
+        isSharedUserEdit = !permission.isOwner;
+        deviceOwnerId = permission.deviceOwnerId;
       }
 
       // Generate unique 10-character alphanumeric peripheral ID
@@ -125,6 +201,14 @@ export const alarmRouter = {
           input.retriggerDelay ?? userPreferences?.defaultRetriggerDelay,
         retriggerTimeout:
           input.retriggerTimeout ?? userPreferences?.defaultRetriggerTimeout,
+        pushNotification:
+          input.pushNotification ??
+          userPreferences?.defaultPushNotification ??
+          true,
+        emailNotification:
+          input.emailNotification ??
+          userPreferences?.defaultEmailNotification ??
+          false,
       };
 
       const result = await ctx.db.insert(Alarm).values(alarmData).returning();
@@ -135,19 +219,32 @@ export const alarmRouter = {
           message: "Failed to create alarm",
         });
       }
+
+      // Notify device owner if a shared user created the alarm
+      if (isSharedUserEdit && deviceOwnerId && input.deviceId) {
+        await notifyDeviceOwnerOfChange(
+          ctx.db,
+          deviceOwnerId,
+          ctx.session.user.id,
+          input.deviceId,
+          result[0].title,
+          "created",
+        );
+      }
+
       return result[0];
     }),
 
-  // Update alarm (only by owner)
+  // Update alarm (by owner or shared user with WRITE permission)
   update: protectedProcedure
     .input(UpdateAlarmSchema)
     .output(AlarmSelectSchema)
     .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
 
-      // Check if alarm exists and belongs to current user
+      // First, get the alarm to check if it exists
       const existingAlarm = await ctx.db.query.Alarm.findFirst({
-        where: and(eq(Alarm.id, id), eq(Alarm.userId, ctx.session.user.id)),
+        where: eq(Alarm.id, id),
       });
 
       if (!existingAlarm) {
@@ -157,16 +254,46 @@ export const alarmRouter = {
         });
       }
 
-      // If deviceId is being updated, verify the new device belongs to the current user
-      if (data.deviceId) {
-        const device = await ctx.db.query.Device.findFirst({
-          where: and(
-            eq(Device.id, data.deviceId),
-            eq(Device.userId, ctx.session.user.id),
-          ),
-        });
+      // Check if user can edit this alarm (owner or shared user with WRITE permission)
+      let isSharedUserEdit = false;
+      let deviceOwnerId: string | undefined;
 
-        if (!device) {
+      if (existingAlarm.userId === ctx.session.user.id) {
+        // User owns the alarm
+        isSharedUserEdit = false;
+      } else if (existingAlarm.deviceId) {
+        // Check if user has WRITE permission on the device
+        const permission = await checkDeviceEditPermission(
+          ctx.db,
+          existingAlarm.deviceId,
+          ctx.session.user.id,
+        );
+
+        if (!permission.canEdit) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Alarm not found or you don't have permission to edit it",
+          });
+        }
+
+        isSharedUserEdit = !permission.isOwner;
+        deviceOwnerId = permission.deviceOwnerId;
+      } else {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Alarm not found or you don't have permission to edit it",
+        });
+      }
+
+      // If deviceId is being updated, verify permission for the new device
+      if (data.deviceId && data.deviceId !== existingAlarm.deviceId) {
+        const newDevicePermission = await checkDeviceEditPermission(
+          ctx.db,
+          data.deviceId,
+          ctx.session.user.id,
+        );
+
+        if (!newDevicePermission.canEdit) {
           throw new TRPCError({
             code: "NOT_FOUND",
             message: "Device not found or you don't have permission to use it",
@@ -186,20 +313,31 @@ export const alarmRouter = {
         .where(eq(Alarm.id, id))
         .returning();
 
-      return result[0] ?? existingAlarm;
+      const updatedAlarm = result[0] ?? existingAlarm;
+
+      // Notify device owner if a shared user updated the alarm
+      if (isSharedUserEdit && deviceOwnerId && existingAlarm.deviceId) {
+        await notifyDeviceOwnerOfChange(
+          ctx.db,
+          deviceOwnerId,
+          ctx.session.user.id,
+          existingAlarm.deviceId,
+          updatedAlarm.title,
+          "updated",
+        );
+      }
+
+      return updatedAlarm;
     }),
 
-  // Delete alarm (only if it belongs to the current user)
+  // Delete alarm (by owner or shared user with WRITE permission)
   delete: protectedProcedure
     .input(AlarmWhereUniqueSchema)
     .output(z.object({ success: z.boolean() }))
     .mutation(async ({ input, ctx }) => {
-      // First check if the alarm belongs to the current user
+      // First get the alarm to check if it exists
       const existingAlarm = await ctx.db.query.Alarm.findFirst({
-        where: and(
-          eq(Alarm.id, input.id),
-          eq(Alarm.userId, ctx.session.user.id),
-        ),
+        where: eq(Alarm.id, input.id),
       });
 
       if (!existingAlarm) {
@@ -209,7 +347,53 @@ export const alarmRouter = {
         });
       }
 
+      // Check if user can delete this alarm (owner or shared user with WRITE permission)
+      let isSharedUserEdit = false;
+      let deviceOwnerId: string | undefined;
+
+      if (existingAlarm.userId === ctx.session.user.id) {
+        // User owns the alarm
+        isSharedUserEdit = false;
+      } else if (existingAlarm.deviceId) {
+        // Check if user has WRITE permission on the device
+        const permission = await checkDeviceEditPermission(
+          ctx.db,
+          existingAlarm.deviceId,
+          ctx.session.user.id,
+        );
+
+        if (!permission.canEdit) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Alarm not found or you don't have permission to delete it",
+          });
+        }
+
+        isSharedUserEdit = !permission.isOwner;
+        deviceOwnerId = permission.deviceOwnerId;
+      } else {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Alarm not found or you don't have permission to delete it",
+        });
+      }
+
+      const alarmTitle = existingAlarm.title;
+      const alarmDeviceId = existingAlarm.deviceId;
+
       await ctx.db.delete(Alarm).where(eq(Alarm.id, input.id));
+
+      // Notify device owner if a shared user deleted the alarm
+      if (isSharedUserEdit && deviceOwnerId && alarmDeviceId) {
+        await notifyDeviceOwnerOfChange(
+          ctx.db,
+          deviceOwnerId,
+          ctx.session.user.id,
+          alarmDeviceId,
+          alarmTitle,
+          "deleted",
+        );
+      }
 
       return { success: true };
     }),

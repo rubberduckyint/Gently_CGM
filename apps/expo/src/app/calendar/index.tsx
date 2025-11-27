@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
@@ -15,9 +16,16 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Header } from "~/components/ui/Header";
+import { useCalendarSync, useWebhookRenewal } from "~/hooks";
+import {
+  generateChannelId,
+  setupWatchChannel,
+  signInWithGoogle,
+  stopWatchChannel,
+} from "~/services/googleCalendar";
 import {
   buttons,
   buttonText,
@@ -27,7 +35,6 @@ import {
   spacing,
   typography,
 } from "~/styles";
-import { signInWithGoogle } from "~/services/googleCalendar";
 import { trpc } from "~/utils/api";
 
 type CalendarProvider = "google" | "apple";
@@ -63,23 +70,112 @@ export default function CalendarPage() {
   const params = useLocalSearchParams();
   const deviceId = params.deviceId as string;
   const queryClient = useQueryClient();
-  const [isConnecting, setIsConnecting] = useState<CalendarProvider | null>(null);
+  const [isConnecting, setIsConnecting] = useState<CalendarProvider | null>(
+    null,
+  );
 
   // Fetch calendar connections
-  const { data: connections, isLoading } = useQuery({
+  const {
+    data: connections,
+    isLoading,
+    refetch,
+  } = useQuery({
     queryKey: ["calendarConnections"],
     queryFn: () => trpc.calendar.getConnections.query(),
   });
 
+  // Calendar sync hook - handles automatic background sync
+  const { isSyncing, lastSyncAt, lastSyncResult, syncAll } = useCalendarSync({
+    autoSync: true,
+    showAlerts: false,
+    onChangesDetected: (changes: {
+      updated: number;
+      cancelled: number;
+      updatedAlarmIds: string[];
+      cancelledAlarmIds: string[];
+    }) => {
+      // Show a subtle notification when calendar events change
+      if (changes.updated > 0 || changes.cancelled > 0) {
+        const messages = [];
+        if (changes.updated > 0) {
+          messages.push(
+            `${changes.updated} alarm${changes.updated > 1 ? "s" : ""} updated`,
+          );
+        }
+        if (changes.cancelled > 0) {
+          messages.push(
+            `${changes.cancelled} event${changes.cancelled > 1 ? "s" : ""} removed`,
+          );
+        }
+        Alert.alert("Calendar Synced", messages.join(", "));
+      }
+    },
+  });
+
+  // Webhook renewal - keeps push notifications active
+  useWebhookRenewal({ enabled: true });
+
+  // Pull-to-refresh handler
+  const handleRefresh = async () => {
+    await Promise.all([refetch(), syncAll(true)]);
+  };
+
   // Save connection mutation
   const saveConnectionMutation = useMutation({
-    mutationFn: (data: {
+    mutationFn: async (data: {
       provider: "google";
       accountEmail: string;
       accessToken: string;
       refreshToken: string;
       tokenExpiresAt: Date;
-    }) => trpc.calendar.createConnection.mutate(data),
+    }) => {
+      // Create the connection first
+      const connection = await trpc.calendar.createConnection.mutate(data);
+
+      if (!connection) {
+        throw new Error("Failed to create connection");
+      }
+
+      // Try to register for push notifications (webhook)
+      // This is optional - if it fails, we still have polling
+      try {
+        const webhookUrl = `${process.env.EXPO_PUBLIC_BASE_URL}/api/calendar/webhook`;
+
+        // Only register webhook if we have a proper HTTPS URL (not localhost)
+        if (webhookUrl.startsWith("https://")) {
+          const channelId = generateChannelId();
+          const watchInfo = await setupWatchChannel(
+            data.accessToken,
+            "primary",
+            webhookUrl,
+            channelId,
+          );
+
+          // Save watch info to database
+          await trpc.calendar.updateWatchChannel.mutate({
+            connectionId: connection.id,
+            watchChannelId: watchInfo.channelId,
+            watchResourceId: watchInfo.resourceId,
+            watchExpiration: watchInfo.expiration,
+          });
+
+          console.log(
+            "[Calendar] Webhook registered, expires:",
+            watchInfo.expiration,
+          );
+        } else {
+          console.log(
+            "[Calendar] Skipping webhook registration - not using HTTPS",
+          );
+        }
+      } catch (webhookError) {
+        // Webhook registration failed, but connection is still valid
+        // Polling will still work
+        console.warn("[Calendar] Webhook registration failed:", webhookError);
+      }
+
+      return connection;
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["calendarConnections"] });
       setIsConnecting(null);
@@ -92,7 +188,27 @@ export default function CalendarPage() {
 
   // Delete connection mutation
   const deleteConnectionMutation = useMutation({
-    mutationFn: (id: string) => trpc.calendar.deleteConnection.mutate({ id }),
+    mutationFn: async (id: string) => {
+      // Get connection details first to stop the webhook
+      const connection = connections?.find((c) => c.id === id);
+
+      // Try to stop the webhook if it exists
+      if (connection?.watchChannelId && connection?.watchResourceId) {
+        try {
+          await stopWatchChannel(
+            connection.accessToken,
+            connection.watchChannelId,
+            connection.watchResourceId,
+          );
+          console.log("[Calendar] Webhook stopped for connection:", id);
+        } catch (error) {
+          // Ignore errors - webhook might have already expired
+          console.warn("[Calendar] Failed to stop webhook:", error);
+        }
+      }
+
+      return trpc.calendar.deleteConnection.mutate({ id });
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["calendarConnections"] });
     },
@@ -118,13 +234,13 @@ export default function CalendarPage() {
 
       // Check if this email is already connected
       const existingConnection = connections?.find(
-        (c) => c.provider === "google" && c.accountEmail === result.email
+        (c) => c.provider === "google" && c.accountEmail === result.email,
       );
-      
+
       if (existingConnection) {
         Alert.alert(
           "Already Connected",
-          `${result.email} is already connected. Please sign in with a different Google account.`
+          `${result.email} is already connected. Please sign in with a different Google account.`,
         );
         setIsConnecting(null);
         return;
@@ -164,7 +280,9 @@ export default function CalendarPage() {
   };
 
   const handleSelectEvents = (connectionId: string) => {
-    router.push(`/calendar/select-events?connectionId=${connectionId}&deviceId=${deviceId}`);
+    router.push(
+      `/calendar/select-events?connectionId=${connectionId}&deviceId=${deviceId}`,
+    );
   };
 
   const getConnectionsForProvider = (provider: CalendarProvider) => {
@@ -192,7 +310,84 @@ export default function CalendarPage() {
         style={containers.content}
         contentContainerStyle={{ paddingVertical: spacing[4] }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isSyncing}
+            onRefresh={handleRefresh}
+            colors={[colors.primary[500]]}
+            tintColor={colors.primary[500]}
+          />
+        }
       >
+        {/* Sync Status Banner */}
+        {hasConnections && (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingHorizontal: spacing[3],
+              paddingVertical: spacing[2],
+              backgroundColor: colors.gray[50],
+              borderRadius: 8,
+              marginBottom: spacing[4],
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              {isSyncing ? (
+                <>
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primary[500]}
+                    style={{ marginRight: spacing[2] }}
+                  />
+                  <Text
+                    style={[
+                      typography.caption,
+                      { color: colors.text.secondary },
+                    ]}
+                  >
+                    Syncing...
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={16}
+                    color={colors.success[500]}
+                    style={{ marginRight: spacing[2] }}
+                  />
+                  <Text
+                    style={[
+                      typography.caption,
+                      { color: colors.text.secondary },
+                    ]}
+                  >
+                    {lastSyncAt
+                      ? `Last synced ${formatTimeAgo(lastSyncAt)}`
+                      : "Pull to sync"}
+                  </Text>
+                </>
+              )}
+            </View>
+            {lastSyncResult &&
+              (lastSyncResult.updated > 0 || lastSyncResult.cancelled > 0) && (
+                <Text
+                  style={[typography.caption, { color: colors.primary[500] }]}
+                >
+                  {lastSyncResult.updated > 0 &&
+                    `${lastSyncResult.updated} updated`}
+                  {lastSyncResult.updated > 0 &&
+                    lastSyncResult.cancelled > 0 &&
+                    " • "}
+                  {lastSyncResult.cancelled > 0 &&
+                    `${lastSyncResult.cancelled} removed`}
+                </Text>
+              )}
+          </View>
+        )}
+
         {/* Hero Section - shown when no connections */}
         {!hasConnections && (
           <View style={{ alignItems: "center", marginBottom: spacing[6] }}>
@@ -227,7 +422,8 @@ export default function CalendarPage() {
                 },
               ]}
             >
-              Connect your calendar to automatically create reminders for upcoming events.
+              Connect your calendar to automatically create reminders for
+              upcoming events.
             </Text>
           </View>
         )}
@@ -286,7 +482,10 @@ export default function CalendarPage() {
                   <View style={{ flex: 1 }}>
                     <Text style={typography.h6}>{connection.accountEmail}</Text>
                     <Text
-                      style={[typography.caption, { color: colors.text.secondary }]}
+                      style={[
+                        typography.caption,
+                        { color: colors.text.secondary },
+                      ]}
                     >
                       {connection.isActive ? "Active" : "Paused"}
                       {connection.lastSyncedAt &&
@@ -303,7 +502,9 @@ export default function CalendarPage() {
                     hitSlop={8}
                   >
                     <Ionicons
-                      name={connection.isActive ? "pause-circle" : "play-circle"}
+                      name={
+                        connection.isActive ? "pause-circle" : "play-circle"
+                      }
                       size={28}
                       color={
                         connection.isActive
@@ -391,7 +592,7 @@ export default function CalendarPage() {
                 onPress={() => {
                   if (!provider.available) return;
                   if (provider.id === "google") {
-                    handleConnectGoogle();
+                    void handleConnectGoogle();
                   }
                 }}
                 disabled={!provider.available || isCurrentlyConnecting}
@@ -423,15 +624,23 @@ export default function CalendarPage() {
                   <Text style={typography.h6}>{provider.name}</Text>
                   {provider.comingSoon ? (
                     <Text
-                      style={[typography.caption, { color: colors.text.secondary }]}
+                      style={[
+                        typography.caption,
+                        { color: colors.text.secondary },
+                      ]}
                     >
                       Coming soon
                     </Text>
                   ) : existingConnections.length > 0 ? (
                     <Text
-                      style={[typography.caption, { color: colors.text.secondary }]}
+                      style={[
+                        typography.caption,
+                        { color: colors.text.secondary },
+                      ]}
                     >
-                      {existingConnections.length} account{existingConnections.length !== 1 ? "s" : ""} connected • Add another
+                      {existingConnections.length} account
+                      {existingConnections.length !== 1 ? "s" : ""} connected •
+                      Add another
                     </Text>
                   ) : null}
                 </View>

@@ -5,7 +5,7 @@
  * Connects to device by serial number and provides buttons to test various commands.
  */
 
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,

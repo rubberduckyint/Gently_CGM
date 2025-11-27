@@ -5,7 +5,7 @@
  * Shows on first login and accessible from hamburger menus.
  */
 
-import React from "react";
+import { useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -17,7 +17,7 @@ interface HelpModalProps {
 }
 
 export function HelpModal({ visible, onClose }: HelpModalProps) {
-  const [currentStep, setCurrentStep] = React.useState(0);
+  const [currentStep, setCurrentStep] = useState(0);
 
   const steps = [
     {

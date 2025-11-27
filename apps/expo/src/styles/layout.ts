@@ -4,7 +4,7 @@
  * Reusable layout utilities and container styles
  */
 
-import type { ViewStyle } from "react-native";
+import type { TextStyle, ViewStyle } from "react-native";
 
 import { colors } from "./colors";
 import { spacing } from "./spacing";
@@ -163,6 +163,19 @@ export const emptyStates = {
     alignItems: "center",
     paddingHorizontal: spacing[8], // 32px
   } as ViewStyle,
+  iconContainer: {
+    marginBottom: spacing[4],
+  } as ViewStyle,
+  title: {
+    textAlign: "center",
+    marginBottom: spacing[2],
+    color: colors.text.primary,
+  } as TextStyle,
+  description: {
+    textAlign: "center",
+    color: colors.text.secondary,
+    maxWidth: 280,
+  } as TextStyle,
 } as const;
 
 // Error states

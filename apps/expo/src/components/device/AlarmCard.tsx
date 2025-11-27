@@ -1,4 +1,4 @@
-import React from "react";
+import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import Animated, { FadeInDown, FadeOutUp } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
@@ -6,24 +6,34 @@ import cronstrue from "cronstrue";
 
 import type { RouterOutputs } from "~/utils/api";
 import { cards, colors, spacing, typography } from "~/styles";
+import { cardA11y } from "~/utils/accessibility";
 import { calculateNextAlarmOccurrence } from "~/utils/alarmUtils";
 
 type Alarm = NonNullable<RouterOutputs["device"]["getById"]>["alarms"][number];
 
-interface AlarmCardProps {
+export interface AlarmCardProps {
   alarm: Alarm;
   onPress?: () => void;
   isExpired?: boolean; // When true, hide "Next:" info since alarm is expired
 }
 
-export function AlarmCard({ alarm, onPress, isExpired = false }: AlarmCardProps) {
+export function AlarmCard({
+  alarm,
+  onPress,
+  isExpired = false,
+}: AlarmCardProps) {
   // Check if calendarEventAlarm is present and get calendar connection info
-  const calendarEventAlarm = (alarm as { calendarEventAlarm?: { calendarConnection?: { accountEmail?: string } } }).calendarEventAlarm;
+  const calendarEventAlarm = (
+    alarm as {
+      calendarEventAlarm?: { calendarConnection?: { accountEmail?: string } };
+    }
+  ).calendarEventAlarm;
   const isCalendarSynced = !!calendarEventAlarm;
-  const calendarAccountEmail = calendarEventAlarm?.calendarConnection?.accountEmail;
-  
+  const calendarAccountEmail =
+    calendarEventAlarm?.calendarConnection?.accountEmail;
+
   // Safely convert dates, providing defaults for invalid values
-  const safeStartDate = React.useMemo(() => {
+  const safeStartDate = useMemo(() => {
     let date: Date;
     if (alarm.startDate instanceof Date) {
       date = alarm.startDate;
@@ -43,7 +53,7 @@ export function AlarmCard({ alarm, onPress, isExpired = false }: AlarmCardProps)
     return date;
   }, [alarm.startDate]);
 
-  const safeEndDate = React.useMemo(() => {
+  const safeEndDate = useMemo(() => {
     if (!alarm.endDate) return undefined;
 
     let date: Date;
@@ -62,7 +72,7 @@ export function AlarmCard({ alarm, onPress, isExpired = false }: AlarmCardProps)
     return date;
   }, [alarm.endDate]);
 
-  const scheduleInfo = React.useMemo(() => {
+  const scheduleInfo = useMemo(() => {
     return calculateNextAlarmOccurrence({
       isActive: alarm.isActive,
       startDate: safeStartDate,
@@ -171,6 +181,44 @@ export function AlarmCard({ alarm, onPress, isExpired = false }: AlarmCardProps)
 
   const syncConfig = getSyncStatusConfig(alarm.syncStatus);
 
+  // Generate accessibility label for screen readers
+  const accessibilityLabel = useMemo(() => {
+    const parts: string[] = [];
+
+    // Title and status
+    parts.push(alarm.title);
+    parts.push(alarm.isActive ? "Active" : "Disabled");
+
+    // Calendar sync status
+    if (isCalendarSynced) {
+      parts.push("Synced with calendar");
+    }
+
+    // Schedule info
+    if (isExpired) {
+      parts.push("Expired");
+    } else if (scheduleInfo.timeUntilNext) {
+      parts.push(`Next in ${scheduleInfo.timeUntilNext}`);
+    }
+
+    // Sync status
+    parts.push(`Sync status: ${syncConfig.text}`);
+
+    return parts.join(", ");
+  }, [
+    alarm.title,
+    alarm.isActive,
+    isCalendarSynced,
+    isExpired,
+    scheduleInfo.timeUntilNext,
+    syncConfig.text,
+  ]);
+
+  const a11yProps = cardA11y(accessibilityLabel, {
+    hint: "Double tap to view and edit reminder details",
+    isActionable: !!onPress,
+  });
+
   return (
     <Animated.View
       entering={FadeInDown.duration(300).springify()}
@@ -183,6 +231,7 @@ export function AlarmCard({ alarm, onPress, isExpired = false }: AlarmCardProps)
           { marginBottom: spacing[3] },
           pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] },
         ]}
+        {...a11yProps}
       >
         {/* Header Row */}
         <View
@@ -248,8 +297,8 @@ export function AlarmCard({ alarm, onPress, isExpired = false }: AlarmCardProps)
                   }}
                   numberOfLines={1}
                 >
-                  {calendarAccountEmail 
-                    ? calendarAccountEmail.split('@')[0] 
+                  {calendarAccountEmail
+                    ? calendarAccountEmail.split("@")[0]
                     : "Synced"}
                 </Text>
               </View>
@@ -286,7 +335,7 @@ export function AlarmCard({ alarm, onPress, isExpired = false }: AlarmCardProps)
                 date.getDate() === now.getDate() &&
                 date.getMonth() === now.getMonth() &&
                 date.getFullYear() === now.getFullYear();
-              
+
               const tomorrow = new Date(now);
               tomorrow.setDate(tomorrow.getDate() + 1);
               const isTomorrow =
@@ -320,10 +369,14 @@ export function AlarmCard({ alarm, onPress, isExpired = false }: AlarmCardProps)
 
             if (alarm.repeat) {
               try {
-                const cronDescription = cronstrue.toString(alarm.cronExpression);
+                const cronDescription = cronstrue.toString(
+                  alarm.cronExpression,
+                );
                 // Also show the next occurrence date if available
                 if (scheduleInfo.nextOccurrence) {
-                  const nextDateStr = formatDateWithTime(scheduleInfo.nextOccurrence);
+                  const nextDateStr = formatDateWithTime(
+                    scheduleInfo.nextOccurrence,
+                  );
                   return `${cronDescription} • Next: ${nextDateStr}`;
                 }
                 return cronDescription;

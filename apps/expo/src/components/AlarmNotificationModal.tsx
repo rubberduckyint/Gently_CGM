@@ -8,11 +8,12 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   Text,
-  View,
   Vibration,
+  View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -44,19 +45,26 @@ export function AlarmNotificationModal() {
   // Find the alarm that matches the active event index
   // Note: deviceIndex corresponds to eventIndex from BLE notification
   const alarmDetails = allAlarms?.find(
-    (alarm: { deviceIndex?: number | null }) => alarm.deviceIndex === activeAlarm?.eventIndex
-  ) as { 
-    title?: string;
-    calendarEventAlarm?: { 
-      calendarConnection?: { 
-        accountEmail?: string;
-      };
-    };
-  } | undefined;
-  
+    (alarm: { deviceIndex?: number | null }) =>
+      alarm.deviceIndex === activeAlarm?.eventIndex,
+  ) as
+    | {
+        title?: string;
+        calendarEventAlarm?: {
+          calendarConnection?: {
+            accountEmail?: string;
+          };
+        };
+      }
+    | undefined;
+
   // For calendar info, we need to fetch the specific alarm with relations
   const { data: alarmWithCalendar } = useQuery({
-    queryKey: ["alarm", "getById", { id: (alarmDetails as { id?: string })?.id }],
+    queryKey: [
+      "alarm",
+      "getById",
+      { id: (alarmDetails as { id?: string })?.id },
+    ],
     queryFn: async () => {
       const id = (alarmDetails as { id?: string })?.id;
       if (!id) return null;
@@ -66,13 +74,47 @@ export function AlarmNotificationModal() {
     staleTime: 30000,
   });
 
-  const calendarEventAlarm = (alarmWithCalendar as { calendarEventAlarm?: { calendarConnection?: { accountEmail?: string } } })?.calendarEventAlarm;
-  const calendarAccountEmail = calendarEventAlarm?.calendarConnection?.accountEmail;
+  const calendarEventAlarm = (
+    alarmWithCalendar as {
+      calendarEventAlarm?: { calendarConnection?: { accountEmail?: string } };
+    }
+  )?.calendarEventAlarm;
+  const calendarAccountEmail =
+    calendarEventAlarm?.calendarConnection?.accountEmail;
   const isCalendarSynced = !!calendarEventAlarm;
+
+  // Send email notification when alarm triggers (if enabled)
+  useEffect(() => {
+    const sendEmailNotification = async () => {
+      if (activeAlarm?.eventState === 2 && alarmDetails) {
+        const alarmId = (alarmDetails as { id?: string })?.id;
+        if (!alarmId) return;
+
+        try {
+          // Check if this alarm has email notifications enabled and send
+          const result = await trpc.notification.sendAlarmEmail.mutate({
+            alarmId,
+            deviceName: undefined, // Will use the device name from the alarm
+          });
+
+          if (result.success) {
+            console.log("📧 Email notification sent for alarm trigger");
+          } else {
+            console.log("📧 Email notification skipped:", result.message);
+          }
+        } catch (error) {
+          // Don't show error to user - email is a secondary notification
+          console.warn("⚠️ Failed to send email notification:", error);
+        }
+      }
+    };
+
+    sendEmailNotification();
+  }, [activeAlarm?.eventIndex, activeAlarm?.eventState, alarmDetails]);
 
   // Vibrate the phone when alarm modal appears
   useEffect(() => {
-    if (activeAlarm && activeAlarm.eventState === 2) {
+    if (activeAlarm?.eventState === 2) {
       // State 2 = ON & active in vibration
       // Vibrate in a pattern: 500ms on, 250ms off, repeated
       const pattern = [0, 500, 250, 500, 250, 500];
@@ -97,7 +139,9 @@ export function AlarmNotificationModal() {
     setIsAcknowledging(true);
 
     try {
-      console.log(`🔕 Acknowledging alarm at index ${activeAlarm.eventIndex}...`);
+      console.log(
+        `🔕 Acknowledging alarm at index ${activeAlarm.eventIndex}...`,
+      );
 
       // Send acknowledge command (equivalent to double-pressing the button)
       await acknowledgeAlarm(activeAlarm.eventIndex);
@@ -109,7 +153,10 @@ export function AlarmNotificationModal() {
       console.error("❌ Error acknowledging alarm:", error);
       Vibration.cancel();
       // Show error but modal will stay open
-      alert("Failed to stop alarm. Please try again or use the device button.");
+      Alert.alert(
+        "Error",
+        "Failed to stop alarm. Please try again or use the device button.",
+      );
     } finally {
       setIsAcknowledging(false);
     }
@@ -184,11 +231,7 @@ export function AlarmNotificationModal() {
               marginBottom: spacing[6],
             }}
           >
-            <Ionicons
-              name={getStateIcon()}
-              size={56}
-              color={getStateColor()}
-            />
+            <Ionicons name={getStateIcon()} size={56} color={getStateColor()} />
           </View>
 
           {/* Alarm Title */}
@@ -202,7 +245,7 @@ export function AlarmNotificationModal() {
               },
             ]}
           >
-            {alarmDetails?.title || activeAlarm.alarmTitle || "Alarm Active"}
+            {alarmDetails?.title ?? activeAlarm.alarmTitle ?? "Alarm Active"}
           </Text>
 
           {/* Calendar Sync Indicator */}
@@ -231,7 +274,7 @@ export function AlarmNotificationModal() {
                   color: colors.primary[600],
                 }}
               >
-                {calendarAccountEmail || "Google Calendar"}
+                {calendarAccountEmail ?? "Google Calendar"}
               </Text>
             </View>
           )}
@@ -281,54 +324,54 @@ export function AlarmNotificationModal() {
               ]}
               onPress={handleAcknowledge}
               disabled={isAcknowledging}
-          >
-            {isAcknowledging ? (
-              <ActivityIndicator color={colors.text.inverse} />
-            ) : (
-              <>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={24}
-                  color={colors.text.inverse}
-                  style={{ marginRight: spacing[2] }}
-                />
-                <Text style={[buttonText.primary, { fontSize: 18 }]}>
-                  Stop Alarm
-                </Text>
-              </>
-            )}
-          </Pressable>
-
-          {/* Dismiss Button */}
-          <Pressable
-            style={[
-              buttons.base,
-              buttons.large,
-              {
-                backgroundColor: colors.background.secondary,
-                borderWidth: 1,
-                borderColor: colors.border.light,
-                width: "100%",
-                paddingVertical: spacing[5],
-              },
-            ]}
-            onPress={handleDismiss}
-          >
-            <Ionicons
-              name="close-circle-outline"
-              size={24}
-              color={colors.text.secondary}
-              style={{ marginRight: spacing[2] }}
-            />
-            <Text
-              style={[
-                buttonText.secondary,
-                { fontSize: 18, color: colors.text.secondary },
-              ]}
             >
-              Dismiss
-            </Text>
-          </Pressable>
+              {isAcknowledging ? (
+                <ActivityIndicator color={colors.text.inverse} />
+              ) : (
+                <>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={colors.text.inverse}
+                    style={{ marginRight: spacing[2] }}
+                  />
+                  <Text style={[buttonText.primary, { fontSize: 18 }]}>
+                    Stop Alarm
+                  </Text>
+                </>
+              )}
+            </Pressable>
+
+            {/* Dismiss Button */}
+            <Pressable
+              style={[
+                buttons.base,
+                buttons.large,
+                {
+                  backgroundColor: colors.background.secondary,
+                  borderWidth: 1,
+                  borderColor: colors.border.light,
+                  width: "100%",
+                  paddingVertical: spacing[5],
+                },
+              ]}
+              onPress={handleDismiss}
+            >
+              <Ionicons
+                name="close-circle-outline"
+                size={24}
+                color={colors.text.secondary}
+                style={{ marginRight: spacing[2] }}
+              />
+              <Text
+                style={[
+                  buttonText.secondary,
+                  { fontSize: 18, color: colors.text.secondary },
+                ]}
+              >
+                Dismiss
+              </Text>
+            </Pressable>
           </View>
 
           {/* Help Text */}

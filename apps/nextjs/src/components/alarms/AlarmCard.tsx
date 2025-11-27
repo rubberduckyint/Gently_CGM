@@ -34,6 +34,7 @@ interface AlarmCardProps {
     isExpired: boolean;
   };
   showExpiredBadge?: boolean;
+  canEdit?: boolean;
   className?: string;
 }
 
@@ -142,6 +143,7 @@ export function AlarmCard({
   alarm,
   formatCronExpressionWithStartEnd,
   showExpiredBadge = false,
+  canEdit = false,
   className = "",
 }: AlarmCardProps) {
   const scheduleInfo = formatCronExpressionWithStartEnd(alarm);
@@ -279,12 +281,25 @@ export function AlarmCard({
         </div>
       </div>
 
-      {/* Read-only notice */}
-      <div className="pt-2">
-        <p className="text-muted-foreground text-xs italic">
-          Alarms can only be managed from the mobile app
-        </p>
-      </div>
+      {/* Sync status notice for editable alarms */}
+      {canEdit && alarm.syncStatus === "NOT_SYNCED" && (
+        <div className="border-warning/30 bg-warning/10 rounded-md border px-3 py-2">
+          <p className="text-warning-foreground text-xs font-medium">
+            ⏳ Pending sync - Changes will be applied when you open the mobile
+            app
+          </p>
+        </div>
+      )}
+
+      {/* Read-only notice for non-editable alarms */}
+      {!canEdit && (
+        <div className="pt-2">
+          <p className="text-muted-foreground text-xs italic">
+            Alarms can only be managed by the device owner or users with write
+            access
+          </p>
+        </div>
+      )}
     </div>
   );
 }

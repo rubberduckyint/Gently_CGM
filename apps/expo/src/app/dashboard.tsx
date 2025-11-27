@@ -5,12 +5,12 @@
  * with improved consistency and maintainability
  */
 
-import React from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from "react-native";
@@ -65,24 +65,31 @@ function DeviceCard({
   device: DeviceWithAlarmsCount;
   alarms: Alarm[];
 }) {
+  // Check if this is a shared device
+  const isShared = device.isShared;
+  const shareInfo = device.shareInfo;
+  const isReadOnly = shareInfo?.permission === "READ";
+
   // Filter alarms for this device
-  const deviceAlarms = React.useMemo(() => {
+  const deviceAlarms = useMemo(() => {
     return alarms.filter((alarm) => alarm.deviceId === device.id);
   }, [alarms, device.id]);
 
   // Calculate alarm counts (non-expired only)
-  const alarmCounts = React.useMemo(() => {
-    const nonExpiredAlarms = deviceAlarms.filter((alarm): alarm is Alarm & { cronExpression: string } => {
-      if (alarm.cronExpression === null) return false;
-      const scheduleInfo = calculateNextAlarmOccurrence({
-        isActive: true, // Check if it would have next occurrence
-        startDate: alarm.startDate,
-        endDate: alarm.endDate,
-        repeat: alarm.repeat,
-        cronExpression: alarm.cronExpression,
-      });
-      return scheduleInfo.nextOccurrence !== null;
-    });
+  const alarmCounts = useMemo(() => {
+    const nonExpiredAlarms = deviceAlarms.filter(
+      (alarm): alarm is Alarm & { cronExpression: string } => {
+        if (alarm.cronExpression === null) return false;
+        const scheduleInfo = calculateNextAlarmOccurrence({
+          isActive: true, // Check if it would have next occurrence
+          startDate: alarm.startDate,
+          endDate: alarm.endDate,
+          repeat: alarm.repeat,
+          cronExpression: alarm.cronExpression,
+        });
+        return scheduleInfo.nextOccurrence !== null;
+      },
+    );
 
     const enabled = nonExpiredAlarms.filter((a) => a.isActive).length;
     const disabled = nonExpiredAlarms.filter((a) => !a.isActive).length;
@@ -92,7 +99,7 @@ function DeviceCard({
   }, [deviceAlarms]);
 
   // Calculate next alarm
-  const nextAlarm = React.useMemo(() => {
+  const nextAlarm = useMemo(() => {
     if (deviceAlarms.length === 0) return null;
 
     // Filter active alarms and calculate next occurrence for each
@@ -201,48 +208,141 @@ function DeviceCard({
               left: 0,
               right: 0,
               height: 4,
-              backgroundColor: colors.primary[500],
+              backgroundColor: isShared
+                ? colors.secondary[500]
+                : colors.primary[500],
             }}
           />
           {/* Device Header */}
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: spacing[4], marginTop: spacing[2] }}>
-            {/* Device Icon */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: spacing[4],
+              marginTop: spacing[2],
+            }}
+          >
+            {/* Device Icon with shared badge */}
             <View
               style={{
                 width: 56,
                 height: 56,
                 borderRadius: 16,
-                backgroundColor: colors.primary[50],
+                backgroundColor: isShared
+                  ? colors.secondary[50]
+                  : colors.primary[50],
                 alignItems: "center",
                 justifyContent: "center",
                 marginRight: spacing[4],
+                position: "relative",
               }}
             >
               <Ionicons
                 name="watch-outline"
                 size={28}
-                color={colors.primary[600]}
+                color={isShared ? colors.secondary[600] : colors.primary[600]}
               />
+              {/* Shared badge */}
+              {isShared && (
+                <View
+                  style={{
+                    position: "absolute",
+                    bottom: -4,
+                    right: -4,
+                    width: 22,
+                    height: 22,
+                    borderRadius: 11,
+                    backgroundColor: isReadOnly
+                      ? colors.warning[500]
+                      : colors.success[500],
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderWidth: 2,
+                    borderColor: "#FFFFFF",
+                  }}
+                >
+                  <Ionicons
+                    name={isReadOnly ? "eye" : "pencil"}
+                    size={12}
+                    color="#FFFFFF"
+                  />
+                </View>
+              )}
             </View>
 
             {/* Device Info */}
             <View style={{ flex: 1 }}>
-              <Text
-                style={[
-                  typography.h4,
-                  {
-                    color: colors.text.primary,
-                    fontWeight: "700",
-                    marginBottom: spacing[1],
-                  },
-                ]}
-                numberOfLines={1}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: spacing[2],
+                }}
               >
-                {device.title}
-              </Text>
+                <Text
+                  style={[
+                    typography.h4,
+                    {
+                      color: colors.text.primary,
+                      fontWeight: "700",
+                      marginBottom: spacing[1],
+                      flex: 1,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {device.title}
+                </Text>
+                {isShared && (
+                  <View
+                    style={{
+                      backgroundColor: isReadOnly
+                        ? colors.warning[100]
+                        : colors.success[100],
+                      paddingHorizontal: spacing[2],
+                      paddingVertical: spacing[1],
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Text
+                      style={[
+                        typography.caption,
+                        {
+                          color: isReadOnly
+                            ? colors.warning[700]
+                            : colors.success[700],
+                          fontWeight: "600",
+                          fontSize: 10,
+                        },
+                      ]}
+                    >
+                      {isReadOnly ? "VIEW ONLY" : "SHARED"}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Shared owner info */}
+              {isShared && shareInfo && (
+                <Text
+                  style={[
+                    typography.caption,
+                    { color: colors.text.tertiary, marginBottom: spacing[1] },
+                  ]}
+                  numberOfLines={1}
+                >
+                  Shared by {shareInfo.ownerName}
+                </Text>
+              )}
 
               {/* Alarm Count with breakdown */}
-              <View style={{ flexDirection: "row", alignItems: "center", gap: spacing[2] }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: spacing[2],
+                }}
+              >
                 {alarmCounts.total === 0 ? (
                   <Text
                     style={[
@@ -254,7 +354,9 @@ function DeviceCard({
                   </Text>
                 ) : (
                   <>
-                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center" }}
+                    >
                       <View
                         style={{
                           width: 8,
@@ -274,7 +376,9 @@ function DeviceCard({
                       </Text>
                     </View>
                     {alarmCounts.disabled > 0 && (
-                      <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <View
+                        style={{ flexDirection: "row", alignItems: "center" }}
+                      >
                         <View
                           style={{
                             width: 8,
@@ -395,7 +499,6 @@ function DeviceCard({
               </View>
             </View>
           )}
-
         </Pressable>
       </Link>
     </View>
@@ -405,8 +508,8 @@ function DeviceCard({
 export default function DashboardPage() {
   const { data: session } = authClient.useSession();
   const queryClient = useQueryClient();
-  const [showYearOfBirthModal, setShowYearOfBirthModal] = React.useState(false);
-  const [showHelpModal, setShowHelpModal] = React.useState(false);
+  const [showYearOfBirthModal, setShowYearOfBirthModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   // Fetch user profile to check year of birth
   const { data: userProfile } = useQuery({
@@ -416,7 +519,7 @@ export default function DashboardPage() {
   });
 
   // Check if user needs to provide year of birth and/or see onboarding
-  React.useEffect(() => {
+  useEffect(() => {
     const checkUserStatus = async () => {
       // Wait for user profile to load
       if (!userProfile) return;
@@ -461,6 +564,16 @@ export default function DashboardPage() {
     gcTime: 0,
   });
 
+  // Fetch pending invitations count
+  const { data: pendingInvitations } = useQuery({
+    queryKey: ["deviceShare", "getPendingInvitations"],
+    queryFn: () => trpc.deviceShare.getPendingInvitations.query(),
+    enabled: !!session?.user,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 30000, // Consider stale after 30 seconds
+  });
+
   const signOutMutation = useMutation({
     mutationFn: async () => {
       // Reset user preferences on logout
@@ -484,7 +597,7 @@ export default function DashboardPage() {
     onSuccess: async () => {
       // Invalidate user profile to refetch with updated year of birth
       await queryClient.invalidateQueries({ queryKey: ["userProfile"] });
-      
+
       setShowYearOfBirthModal(false);
 
       // Check if user needs to see help modal
@@ -504,7 +617,7 @@ export default function DashboardPage() {
   };
 
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       if (session?.user) {
         // Don't refetch if any device is currently being deleted
         // This prevents the app from reloading during the deletion process
@@ -605,6 +718,15 @@ export default function DashboardPage() {
                 icon: "help-circle",
               },
               {
+                label:
+                  pendingInvitations && pendingInvitations.length > 0
+                    ? `Invitations (${pendingInvitations.length})`
+                    : "Invitations",
+                onPress: () => router.push("/invitations"),
+                icon: "mail",
+                badge: pendingInvitations?.length ?? 0,
+              },
+              {
                 label: "User Settings",
                 onPress: handleUserProfile,
                 icon: "settings",
@@ -649,30 +771,90 @@ export default function DashboardPage() {
             </Pressable>
           </View>
         ) : (
-          /* Device List */
-          <View style={{ paddingVertical: spacing[4] }}>
-            <FlatList
-              data={devices}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <DeviceCard device={item} alarms={allAlarms} />
-              )}
-              showsVerticalScrollIndicator={false}
-              ListFooterComponent={() => (
-                <Pressable
+          /* Device List with sections */
+          <ScrollView
+            style={{ paddingVertical: spacing[4] }}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Owned devices section */}
+            {devices.filter((d) => d.isOwned).length > 0 && (
+              <>
+                {devices.filter((d) => d.isShared).length > 0 && (
+                  <Text
+                    style={[
+                      typography.caption,
+                      {
+                        color: colors.text.tertiary,
+                        fontWeight: "600",
+                        textTransform: "uppercase",
+                        letterSpacing: 1,
+                        marginBottom: spacing[3],
+                        marginLeft: spacing[2],
+                      },
+                    ]}
+                  >
+                    My Devices
+                  </Text>
+                )}
+                {devices
+                  .filter((d) => d.isOwned)
+                  .map((device) => (
+                    <DeviceCard
+                      key={device.id}
+                      device={device}
+                      alarms={allAlarms}
+                    />
+                  ))}
+              </>
+            )}
+
+            {/* Shared devices section */}
+            {devices.filter((d) => d.isShared).length > 0 && (
+              <>
+                <Text
                   style={[
-                    buttons.base,
-                    buttons.large,
-                    buttons.outline,
-                    { marginTop: spacing[4] },
+                    typography.caption,
+                    {
+                      color: colors.text.tertiary,
+                      fontWeight: "600",
+                      textTransform: "uppercase",
+                      letterSpacing: 1,
+                      marginTop:
+                        devices.filter((d) => d.isOwned).length > 0
+                          ? spacing[6]
+                          : 0,
+                      marginBottom: spacing[3],
+                      marginLeft: spacing[2],
+                    },
                   ]}
-                  onPress={handleAddDevice}
                 >
-                  <Text style={buttonText.outline}>+ Add Another Gently</Text>
-                </Pressable>
-              )}
-            />
-          </View>
+                  Shared With Me
+                </Text>
+                {devices
+                  .filter((d) => d.isShared)
+                  .map((device) => (
+                    <DeviceCard
+                      key={device.id}
+                      device={device}
+                      alarms={allAlarms}
+                    />
+                  ))}
+              </>
+            )}
+
+            {/* Add device button */}
+            <Pressable
+              style={[
+                buttons.base,
+                buttons.large,
+                buttons.outline,
+                { marginTop: spacing[4] },
+              ]}
+              onPress={handleAddDevice}
+            >
+              <Text style={buttonText.outline}>+ Add Another Gently</Text>
+            </Pressable>
+          </ScrollView>
         )}
       </View>
 

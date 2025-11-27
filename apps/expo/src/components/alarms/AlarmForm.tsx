@@ -5,14 +5,15 @@
  * Handles all form state and validation internally.
  */
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import type { AlarmFormData } from "./BasicInfoSection";
+import type { AlarmFormData } from "~/types";
 import { buttons, buttonText, colors, spacing } from "~/styles";
 import { AdvancedSection } from "./AdvancedSection";
 import { BasicInfoSection } from "./BasicInfoSection";
+import { NotificationsSection } from "./NotificationsSection";
 import { ScheduleSection } from "./ScheduleSection";
 import { TemplatesSection } from "./TemplatesSection";
 
@@ -118,6 +119,12 @@ export function AlarmForm({
           showEndTimePicker={showEndTimePicker}
           onToggleEndTimePicker={() => setShowEndTimePicker(!showEndTimePicker)}
           disabled={disableScheduleEditing}
+        />
+
+        {/* Notifications Section */}
+        <NotificationsSection
+          formData={formData}
+          onUpdateFormData={updateFormData}
         />
 
         {/* Advanced Settings Section */}

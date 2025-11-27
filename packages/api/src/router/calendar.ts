@@ -4,7 +4,7 @@
  */
 
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, ne, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 
 import {
@@ -15,7 +15,7 @@ import {
   UserPreferences,
 } from "@gently/db/schema";
 
-import { protectedProcedure, createTRPCRouter } from "../trpc";
+import { createTRPCRouter, protectedProcedure } from "../trpc";
 
 export const calendarRouter = createTRPCRouter({
   // Get all calendar connections for the authenticated user
@@ -240,9 +240,9 @@ export const calendarRouter = createTRPCRouter({
 
         // Ensure ledPattern is a valid BLE pattern (not "OFF")
         // If user has "OFF" as default, use "BLINK_SLOW" instead since OFF doesn't make sense for alarms
-        const effectiveLedPattern = 
-          preferences?.defaultLedPattern === "OFF" 
-            ? "BLINK_SLOW" 
+        const effectiveLedPattern =
+          preferences?.defaultLedPattern === "OFF"
+            ? "BLINK_SLOW"
             : (preferences?.defaultLedPattern ?? "BLINK_SLOW");
 
         // Create the alarm
@@ -270,6 +270,8 @@ export const calendarRouter = createTRPCRouter({
             snoozeTimeout: preferences?.defaultSnoozeTimeout ?? 15,
             retriggerDelay: preferences?.defaultRetriggerDelay ?? 1,
             retriggerTimeout: preferences?.defaultRetriggerTimeout ?? 5,
+            pushNotification: preferences?.defaultPushNotification ?? true,
+            emailNotification: preferences?.defaultEmailNotification ?? false,
             syncStatus: "NOT_SYNCED",
           })
           .returning();
@@ -282,7 +284,6 @@ export const calendarRouter = createTRPCRouter({
         }
 
         // Create the event-alarm mapping
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const eventMappingResult = await ctx.db
           .insert(CalendarEventAlarm)
           .values({
@@ -298,7 +299,6 @@ export const calendarRouter = createTRPCRouter({
           })
           .returning();
 
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
         const eventMapping = eventMappingResult[0];
         if (!eventMapping) {
           // Rollback: delete the alarm if mapping creation failed
@@ -309,7 +309,6 @@ export const calendarRouter = createTRPCRouter({
           });
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         createdAlarms.push({ alarm, eventMapping });
       }
 
@@ -344,4 +343,379 @@ export const calendarRouter = createTRPCRouter({
 
       return linkedEvents.map((e) => e.eventId);
     }),
+
+  // Update sync token after incremental sync
+  updateSyncToken: protectedProcedure
+    .input(
+      z.object({
+        connectionId: z.string(),
+        syncToken: z.string(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await ctx.db
+        .update(CalendarConnection)
+        .set({
+          syncToken: input.syncToken,
+          lastSyncedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(CalendarConnection.id, input.connectionId),
+            eq(CalendarConnection.userId, ctx.session.user.id),
+          ),
+        )
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Calendar connection not found",
+        });
+      }
+
+      return updated;
+    }),
+
+  // Clear sync token (forces full resync)
+  clearSyncToken: protectedProcedure
+    .input(z.object({ connectionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await ctx.db
+        .update(CalendarConnection)
+        .set({ syncToken: null })
+        .where(
+          and(
+            eq(CalendarConnection.id, input.connectionId),
+            eq(CalendarConnection.userId, ctx.session.user.id),
+          ),
+        )
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Calendar connection not found",
+        });
+      }
+
+      return updated;
+    }),
+
+  // Clear needsSync flag after sync completes
+  clearNeedsSync: protectedProcedure
+    .input(z.object({ connectionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await ctx.db
+        .update(CalendarConnection)
+        .set({ needsSync: false })
+        .where(
+          and(
+            eq(CalendarConnection.id, input.connectionId),
+            eq(CalendarConnection.userId, ctx.session.user.id),
+          ),
+        )
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Calendar connection not found",
+        });
+      }
+
+      return updated;
+    }),
+
+  // Sync calendar events - handles creates, updates, and cancellations
+  syncEvents: protectedProcedure
+    .input(
+      z.object({
+        connectionId: z.string(),
+        events: z.array(
+          z.object({
+            eventId: z.string(),
+            eventStatus: z.enum(["confirmed", "tentative", "cancelled"]),
+            eventSummary: z.string().optional(),
+            eventStartTime: z.date().optional(),
+            eventEndTime: z.date().optional(),
+            eventLocation: z.string().optional(),
+            eventEtag: z.string().optional(),
+          }),
+        ),
+        syncToken: z.string().optional(), // New sync token to store
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Verify connection exists and belongs to user
+      const connection = await ctx.db.query.CalendarConnection.findFirst({
+        where: and(
+          eq(CalendarConnection.id, input.connectionId),
+          eq(CalendarConnection.userId, ctx.session.user.id),
+        ),
+      });
+
+      if (!connection) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Calendar connection not found",
+        });
+      }
+
+      const changes = {
+        updated: 0,
+        cancelled: 0,
+        unchanged: 0,
+        updatedAlarms: [] as string[],
+        cancelledAlarms: [] as string[],
+      };
+
+      // Get existing event mappings for this connection
+      const existingMappings = await ctx.db
+        .select()
+        .from(CalendarEventAlarm)
+        .where(
+          and(
+            eq(CalendarEventAlarm.calendarConnectionId, input.connectionId),
+            eq(CalendarEventAlarm.userId, ctx.session.user.id),
+            isNotNull(CalendarEventAlarm.alarmId),
+          ),
+        );
+
+      const mappingsByEventId = new Map(
+        existingMappings.map((m) => [m.eventId, m]),
+      );
+
+      for (const event of input.events) {
+        const existingMapping = mappingsByEventId.get(event.eventId);
+
+        if (!existingMapping) {
+          // Event not tracked - skip (user didn't select this event)
+          continue;
+        }
+
+        if (event.eventStatus === "cancelled") {
+          // Event was cancelled - delete the alarm
+          if (existingMapping.alarmId) {
+            await ctx.db
+              .delete(Alarm)
+              .where(eq(Alarm.id, existingMapping.alarmId));
+            changes.cancelledAlarms.push(existingMapping.alarmId);
+          }
+
+          // Update the mapping to reflect cancellation
+          await ctx.db
+            .update(CalendarEventAlarm)
+            .set({
+              eventStatus: "cancelled",
+              alarmId: null, // Clear the alarm reference
+              lastSynced: new Date(),
+            })
+            .where(eq(CalendarEventAlarm.id, existingMapping.id));
+
+          changes.cancelled++;
+        } else if (event.eventStartTime) {
+          // Check if time changed
+          const existingStart = existingMapping.eventStartTime.getTime();
+          const newStart = event.eventStartTime.getTime();
+
+          if (existingStart !== newStart && existingMapping.alarmId) {
+            // Time changed - update the alarm
+            const alarmTime = new Date(event.eventStartTime);
+            alarmTime.setMinutes(
+              alarmTime.getMinutes() - existingMapping.alarmMinutesBefore,
+            );
+
+            // Regenerate cron expression
+            const dayOfWeek = alarmTime.getUTCDay();
+            const cronExpression = `${alarmTime.getUTCMinutes()} ${alarmTime.getUTCHours()} ${alarmTime.getUTCDate()} ${alarmTime.getUTCMonth() + 1} ${dayOfWeek}`;
+
+            await ctx.db
+              .update(Alarm)
+              .set({
+                title: event.eventSummary ?? existingMapping.eventSummary,
+                startDate: alarmTime,
+                endDate: event.eventEndTime ?? existingMapping.eventEndTime,
+                cronExpression,
+                syncStatus: "NOT_SYNCED", // Mark for re-sync to device
+              })
+              .where(eq(Alarm.id, existingMapping.alarmId));
+
+            // Update the mapping
+            await ctx.db
+              .update(CalendarEventAlarm)
+              .set({
+                eventSummary:
+                  event.eventSummary ?? existingMapping.eventSummary,
+                eventStartTime: event.eventStartTime,
+                eventEndTime:
+                  event.eventEndTime ?? existingMapping.eventEndTime,
+                eventLocation:
+                  event.eventLocation ?? existingMapping.eventLocation,
+                eventEtag: event.eventEtag,
+                eventStatus: event.eventStatus,
+                lastSynced: new Date(),
+              })
+              .where(eq(CalendarEventAlarm.id, existingMapping.id));
+
+            changes.updatedAlarms.push(existingMapping.alarmId);
+            changes.updated++;
+          } else {
+            // No time change - just update metadata
+            await ctx.db
+              .update(CalendarEventAlarm)
+              .set({
+                eventSummary:
+                  event.eventSummary ?? existingMapping.eventSummary,
+                eventLocation:
+                  event.eventLocation ?? existingMapping.eventLocation,
+                eventEtag: event.eventEtag,
+                eventStatus: event.eventStatus,
+                lastSynced: new Date(),
+              })
+              .where(eq(CalendarEventAlarm.id, existingMapping.id));
+
+            // Update alarm title if summary changed
+            if (
+              event.eventSummary &&
+              event.eventSummary !== existingMapping.eventSummary &&
+              existingMapping.alarmId
+            ) {
+              await ctx.db
+                .update(Alarm)
+                .set({ title: event.eventSummary })
+                .where(eq(Alarm.id, existingMapping.alarmId));
+            }
+
+            changes.unchanged++;
+          }
+        }
+      }
+
+      // Update sync token if provided
+      if (input.syncToken) {
+        await ctx.db
+          .update(CalendarConnection)
+          .set({
+            syncToken: input.syncToken,
+            lastSyncedAt: new Date(),
+          })
+          .where(eq(CalendarConnection.id, input.connectionId));
+      }
+
+      return {
+        success: true,
+        ...changes,
+      };
+    }),
+
+  // Get all linked events with their current status (for sync checking)
+  getLinkedEvents: protectedProcedure
+    .input(z.object({ connectionId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const events = await ctx.db
+        .select({
+          id: CalendarEventAlarm.id,
+          eventId: CalendarEventAlarm.eventId,
+          eventSummary: CalendarEventAlarm.eventSummary,
+          eventStartTime: CalendarEventAlarm.eventStartTime,
+          eventEndTime: CalendarEventAlarm.eventEndTime,
+          eventStatus: CalendarEventAlarm.eventStatus,
+          eventEtag: CalendarEventAlarm.eventEtag,
+          alarmId: CalendarEventAlarm.alarmId,
+          lastSynced: CalendarEventAlarm.lastSynced,
+        })
+        .from(CalendarEventAlarm)
+        .where(
+          and(
+            eq(CalendarEventAlarm.calendarConnectionId, input.connectionId),
+            eq(CalendarEventAlarm.userId, ctx.session.user.id),
+            // Only include non-cancelled events with alarms
+            isNotNull(CalendarEventAlarm.alarmId),
+            ne(CalendarEventAlarm.eventStatus, "cancelled"),
+          ),
+        );
+
+      return events;
+    }),
+
+  // Store webhook channel info
+  updateWatchChannel: protectedProcedure
+    .input(
+      z.object({
+        connectionId: z.string(),
+        watchChannelId: z.string(),
+        watchResourceId: z.string(),
+        watchExpiration: z.date(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { connectionId, ...updates } = input;
+
+      const [updated] = await ctx.db
+        .update(CalendarConnection)
+        .set(updates)
+        .where(
+          and(
+            eq(CalendarConnection.id, connectionId),
+            eq(CalendarConnection.userId, ctx.session.user.id),
+          ),
+        )
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Calendar connection not found",
+        });
+      }
+
+      return updated;
+    }),
+
+  // Clear webhook channel info
+  clearWatchChannel: protectedProcedure
+    .input(z.object({ connectionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [updated] = await ctx.db
+        .update(CalendarConnection)
+        .set({
+          watchChannelId: null,
+          watchResourceId: null,
+          watchExpiration: null,
+        })
+        .where(
+          and(
+            eq(CalendarConnection.id, input.connectionId),
+            eq(CalendarConnection.userId, ctx.session.user.id),
+          ),
+        )
+        .returning();
+
+      if (!updated) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Calendar connection not found",
+        });
+      }
+
+      return updated;
+    }),
+
+  // Get connections that need webhook renewal (expiring soon)
+  getConnectionsNeedingRenewal: protectedProcedure.query(async ({ ctx }) => {
+    const oneHourFromNow = new Date();
+    oneHourFromNow.setHours(oneHourFromNow.getHours() + 1);
+
+    return await ctx.db
+      .select()
+      .from(CalendarConnection)
+      .where(
+        and(
+          eq(CalendarConnection.userId, ctx.session.user.id),
+          eq(CalendarConnection.isActive, true),
+          sql`${CalendarConnection.watchExpiration} < ${oneHourFromNow}`,
+        ),
+      );
+  }),
 });

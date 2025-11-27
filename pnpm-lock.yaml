@@ -66,6 +66,9 @@ catalogs:
     eslint:
       specifier: ^9.39.1
       version: 9.39.1
+    expo-constants:
+      specifier: canary
+      version: 18.1.0-canary-20251120-e46b3cc
     expo-web-browser:
       specifier: canary
       version: 15.0.10-canary-20251120-e46b3cc
@@ -141,6 +144,12 @@ importers:
       '@expo/vector-icons':
         specifier: ^15.0.3
         version: 15.0.3(expo-font@14.0.10-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc)(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
+      '@gently/api':
+        specifier: workspace:*
+        version: link:../../packages/api
+      '@gently/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@react-native-community/datetimepicker':
         specifier: ^8.4.4
         version: 8.4.4(expo@55.0.0-canary-20251120-e46b3cc)(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
@@ -178,7 +187,7 @@ importers:
         specifier: 7.0.10-canary-20251120-e46b3cc
         version: 7.0.10-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc)(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
       expo-constants:
-        specifier: canary
+        specifier: 'catalog:'
         version: 18.1.0-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc)(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))
       expo-crypto:
         specifier: canary
@@ -186,6 +195,9 @@ importers:
       expo-dev-client:
         specifier: canary
         version: 6.0.19-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc)
+      expo-device:
+        specifier: 8.0.10-canary-20251120-e46b3cc
+        version: 8.0.10-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc)
       expo-linking:
         specifier: canary
         version: 8.0.10-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc)(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
@@ -195,6 +207,9 @@ importers:
       expo-modules-autolinking:
         specifier: ^3.0.22
         version: 3.0.22
+      expo-notifications:
+        specifier: 1.0.0-canary-20251120-e46b3cc
+        version: 1.0.0-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc)(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
       expo-router:
         specifier: canary
         version: 7.0.0-canary-20251120-e46b3cc(fd2ce738a15c66c6072a5fd54da91e41)
@@ -259,6 +274,12 @@ importers:
       '@babel/runtime':
         specifier: ^7.28.4
         version: 7.28.4
+      '@gently/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint
+      '@gently/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
@@ -491,9 +512,15 @@ importers:
       '@gently/db':
         specifier: workspace:*
         version: link:../db
+      '@gently/email':
+        specifier: workspace:*
+        version: link:../email
       '@gently/validators':
         specifier: workspace:*
         version: link:../validators
+      '@react-email/components':
+        specifier: ^0.0.34
+        version: 0.0.34(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@trpc/server':
         specifier: 'catalog:'
         version: 11.7.1(typescript@5.9.3)
@@ -2265,6 +2292,9 @@ packages:
       prettier-plugin-ember-template-tag:
         optional: true
 
+  '@ide/backoff@1.0.0':
+    resolution: {integrity: sha512-F0YfUDjvT+Mtt/R4xdl2X0EYCHMMiJqNLdxHD++jDT5ydEFIyqbCHh51Qx2E211dgZprPKhV7sHmnXKpLuvc5g==}
+
   '@img/colour@1.0.0':
     resolution: {integrity: sha512-A5P/LfWGFSl6nsckYtjw9da+19jB8hkJ6ACTGcDfEJ0aE+l2n2El7dsVM7UVHZQ9s2lmYMWlrS21YLy2IR1LUw==}
     engines: {node: '>=18'}
@@ -3189,13 +3219,30 @@ packages:
   '@radix-ui/rect@1.1.1':
     resolution: {integrity: sha512-HPwpGIzkl28mWyZqG52jiqDJ12waP11Pa1lGoiyUkIEuMLBP0oeK/C89esbXrxsky5we7dfd8U58nm0SgAWpVw==}
 
+  '@react-email/body@0.0.11':
+    resolution: {integrity: sha512-ZSD2SxVSgUjHGrB0Wi+4tu3MEpB4fYSbezsFNEJk2xCWDBkFiOeEsjTmR5dvi+CxTK691hQTQlHv0XWuP7ENTg==}
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
   '@react-email/body@0.2.0':
     resolution: {integrity: sha512-9GCWmVmKUAoRfloboCd+RKm6X17xn7eGL7HnpAZUnjBXBilWCxsKnLMTC/ixSHDKS/A/057M1Tx6ZUXd89sVBw==}
     peerDependencies:
       react: ^18.0 || ^19.0 || ^19.0.0-rc
 
+  '@react-email/button@0.0.19':
+    resolution: {integrity: sha512-HYHrhyVGt7rdM/ls6FuuD6XE7fa7bjZTJqB2byn6/oGsfiEZaogY77OtoLL/mrQHjHjZiJadtAMSik9XLcm7+A==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
   '@react-email/button@0.2.0':
     resolution: {integrity: sha512-8i+v6cMxr2emz4ihCrRiYJPp2/sdYsNNsBzXStlcA+/B9Umpm5Jj3WJKYpgTPM+aeyiqlG/MMI1AucnBm4f1oQ==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/code-block@0.0.11':
+    resolution: {integrity: sha512-4D43p+LIMjDzm66gTDrZch0Flkip5je91mAT7iGs6+SbPyalHgIA+lFQoQwhz/VzHHLxuD0LV6gwmU/WUQ2WEg==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       react: ^18.0 || ^19.0 || ^19.0.0-rc
@@ -3214,6 +3261,12 @@ packages:
 
   '@react-email/column@0.0.13':
     resolution: {integrity: sha512-Lqq17l7ShzJG/d3b1w/+lVO+gp2FM05ZUo/nW0rjxB8xBICXOVv6PqjDnn3FXKssvhO5qAV20lHM6S+spRhEwQ==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/components@0.0.34':
+    resolution: {integrity: sha512-9aUJJ4Yu5Cd5++2GHwdkmOHCghi0vPP/aZwMCGNNTovBTDCI3mc8YIUrDR7JfscrdkPK4s/E9AoD5lX6d/zITA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       react: ^18.0 || ^19.0 || ^19.0.0-rc
@@ -3271,9 +3324,21 @@ packages:
     peerDependencies:
       react: ^18.0 || ^19.0 || ^19.0.0-rc
 
+  '@react-email/markdown@0.0.14':
+    resolution: {integrity: sha512-5IsobCyPkb4XwnQO8uFfGcNOxnsg3311GRXhJ3uKv51P7Jxme4ycC/MITnwIZ10w2zx7HIyTiqVzTj4XbuIHbg==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
   '@react-email/markdown@0.0.17':
     resolution: {integrity: sha512-6op3AfsBC9BJKkhG+eoMFRFWlr0/f3FYbtQrK+VhGzJocEAY0WINIFN+W8xzXr//3IL0K/aKtnH3FtpIuescQQ==}
     engines: {node: '>=22.0.0'}
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/preview@0.0.12':
+    resolution: {integrity: sha512-g/H5fa9PQPDK6WUEG7iTlC19sAktI23qyoiJtMLqQiXFCfWeQMhqjLGKeLSKkfzszqmfJCjZtpSiKtBoOdxp3Q==}
+    engines: {node: '>=18.0.0'}
     peerDependencies:
       react: ^18.0 || ^19.0 || ^19.0.0-rc
 
@@ -3282,6 +3347,13 @@ packages:
     engines: {node: '>=18.0.0'}
     peerDependencies:
       react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/render@1.0.5':
+    resolution: {integrity: sha512-CA69HYXPk21HhtAXATIr+9JJwpDNmAFCvdMUjWmeoD1+KhJ9NAxusMRxKNeibdZdslmq3edaeOKGbdQ9qjK8LQ==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+      react-dom: ^18.0 || ^19.0 || ^19.0.0-rc
 
   '@react-email/render@2.0.0':
     resolution: {integrity: sha512-rdjNj6iVzv8kRKDPFas+47nnoe6B40+nwukuXwY4FCwM7XBg6tmYr+chQryCuavUj2J65MMf6fztk1bxOUiSVA==}
@@ -3298,6 +3370,12 @@ packages:
 
   '@react-email/section@0.0.16':
     resolution: {integrity: sha512-FjqF9xQ8FoeUZYKSdt8sMIKvoT9XF8BrzhT3xiFKdEMwYNbsDflcjfErJe3jb7Wj/es/lKTbV5QR1dnLzGpL3w==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
+
+  '@react-email/tailwind@1.0.4':
+    resolution: {integrity: sha512-tJdcusncdqgvTUYZIuhNC6LYTfL9vNTSQpwWdTCQhQ1lsrNCEE4OKCSdzSV3S9F32pi0i0xQ+YPJHKIzGjdTSA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       react: ^18.0 || ^19.0 || ^19.0.0-rc
@@ -3339,6 +3417,12 @@ packages:
         optional: true
       '@react-email/preview':
         optional: true
+
+  '@react-email/text@0.1.0':
+    resolution: {integrity: sha512-LG+gEuxpoIiOojkv40iktP8UVjkJVZ+ksEEuf7zRvrcwLcVuzYyirlWdkGr4Vu/AhsD4FDRoxDWlWvLTx+WHUg==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      react: ^18.0 || ^19.0 || ^19.0.0-rc
 
   '@react-email/text@0.1.5':
     resolution: {integrity: sha512-o5PNHFSE085VMXayxH+SJ1LSOtGsTv+RpNKnTiJDrJUwoBu77G3PlKOsZZQHCNyD28WsQpl9v2WcJLbQudqwPg==}
@@ -4285,6 +4369,9 @@ packages:
     resolution: {integrity: sha512-UOCGPYbl0tv8+006qks/dTgV9ajs97X2p0FAbyS2iyCRrmLSRolDaHdp+v/CLgnzHc3fVB+CwYiUmei7ndFcgA==}
     engines: {node: '>=12.0.0'}
 
+  assert@2.1.0:
+    resolution: {integrity: sha512-eLHpSK/Y4nhMJ07gDaAzoX/XAKS8PSaojml3M0DM4JpV1LAi5JOJ/p6H/XWrl8L+DzVEvVCW1z3vWAaB9oTsQw==}
+
   ast-types-flow@0.0.8:
     resolution: {integrity: sha512-OH/2E5Fg20h2aPrbe+QL8JZQFko0YZaF+j4mnQ7BGhfavO7OpSLa8a0y9sBwomHdSbkhTS8TQNayBfnW5DwbvQ==}
 
@@ -4377,6 +4464,9 @@ packages:
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
     peerDependencies:
       '@babel/core': ^7.0.0
+
+  badgin@1.2.3:
+    resolution: {integrity: sha512-NQGA7LcfCpSzIbGRbkgjgdWkjy7HI+Th5VLxTJfW5EeaAf3fnS+xWQaQOCYiny+q6QSvxqoSO04vCx+4u++EJw==}
 
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
@@ -5472,6 +5562,11 @@ packages:
     peerDependencies:
       expo: 55.0.0-canary-20251120-e46b3cc
 
+  expo-device@8.0.10-canary-20251120-e46b3cc:
+    resolution: {integrity: sha512-TKCXq7OvUGPNKY+/oSdCAErawND0wxAAvipCP7d76lwiP0mSyzB1wo0m6F4VaZ5LF+JeCcmfZk50SqIeYtecxw==}
+    peerDependencies:
+      expo: 55.0.0-canary-20251120-e46b3cc
+
   expo-file-system@19.1.0-canary-20251120-e46b3cc:
     resolution: {integrity: sha512-TGebc3wVg/2jBYKioFuTsYmybo/kVUuU4ChVpv9yo6RGWHPzj0xyfjPSuQyv6J5WBgBgemtUtDH1kNcSL6WR3w==}
     peerDependencies:
@@ -5521,6 +5616,13 @@ packages:
   expo-modules-core@3.1.0-canary-20251120-e46b3cc:
     resolution: {integrity: sha512-tYVKkfolgLLckGXLWdTaJhBDc3kmoM2YHw7ptaux+XhXoBFrUy+yL3RWdChgUMNvXtWWadDCMneAzwxA/IT04Q==}
     peerDependencies:
+      react: '*'
+      react-native: '*'
+
+  expo-notifications@1.0.0-canary-20251120-e46b3cc:
+    resolution: {integrity: sha512-HjkO85u7KCm8QiJs5iVwWaS2S905X2m6Bj09pSYzv+F69fMgRxgwI8Sxxhczam4qjFoYKXkLYypgvL/nohVLJA==}
+    peerDependencies:
+      expo: 55.0.0-canary-20251120-e46b3cc
       react: '*'
       react-native: '*'
 
@@ -5626,6 +5728,9 @@ packages:
   external-editor@3.1.0:
     resolution: {integrity: sha512-hMQ4CX1p1izmuLYyZqLMO/qGNw10wSv9QDCPfzXfyFrOaCSSoRfqE1Kf1s5an66J5JZC62NewG+mK49jOCtQew==}
     engines: {node: '>=4'}
+
+  fast-deep-equal@2.0.1:
+    resolution: {integrity: sha512-bCK/2Z4zLidyB4ReuIsvALH6w31YfAQDmXMqMx6FyfHqvBxtjC0eRumeSu4Bs3XtXwpyIywtSTrVT99BxY1f9w==}
 
   fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
@@ -6020,6 +6125,10 @@ packages:
     resolution: {integrity: sha512-XXADHxXmvT9+CRxhXg56LJovE+bmWnEWB78LB83VZTprKTmaC5QfruXocxzTZ2Kl0DNwKuBdlIhjL8LeY8Sf8Q==}
     engines: {node: '>= 12'}
 
+  is-arguments@1.2.0:
+    resolution: {integrity: sha512-7bVbi0huj/wrIAOzb8U1aszg9kdi3KN/CyU19CTI7tAoZYEZoL9yCDXpbXN+uPsuWnP02cyug1gleqq+TU+YCA==}
+    engines: {node: '>= 0.4'}
+
   is-array-buffer@3.0.5:
     resolution: {integrity: sha512-DDfANUiiG2wC1qawP66qlTugJeL5HyzMpfr8lLK+jMQirGzNod0B12cFB/9q838Ru27sBwfw78/rdoU7RERz6A==}
     engines: {node: '>= 0.4'}
@@ -6103,6 +6212,10 @@ packages:
 
   is-map@2.0.3:
     resolution: {integrity: sha512-1Qed0/Hr2m+YqxnM09CjA2d/i6YZNfF6R2oRAOj36eUdS6qIV/huPJNSEpKbupewFs+ZsJlxsjjPbc0/afW6Lw==}
+    engines: {node: '>= 0.4'}
+
+  is-nan@1.3.2:
+    resolution: {integrity: sha512-E+zBKpQ2t6MEo1VsonYmluk9NxGrbzpeeLC2xIViuO2EjU2xsXsBPwTr3Ykv9l08UYEVEdWeRZNouaZqF6RN0w==}
     engines: {node: '>= 0.4'}
 
   is-negative-zero@2.0.3:
@@ -6525,12 +6638,22 @@ packages:
     engines: {node: '>= 18'}
     hasBin: true
 
+  marked@7.0.4:
+    resolution: {integrity: sha512-t8eP0dXRJMtMvBojtkcsA7n48BkauktUKzfkPSCq85ZMTJ0v76Rke4DYz01omYpPTUh4p/f7HePgRo3ebG8+QQ==}
+    engines: {node: '>= 16'}
+    hasBin: true
+
   marky@1.3.0:
     resolution: {integrity: sha512-ocnPZQLNpvbedwTy9kNrQEsknEfgvcLMvOtz3sFeWApDq1MXH1TqkCIx58xlpESsfwQOnuBO9beyQuNGzVvuhQ==}
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
+
+  md-to-react-email@5.0.5:
+    resolution: {integrity: sha512-OvAXqwq57uOk+WZqFFNCMZz8yDp8BD3WazW1wAKHUrPbbdr89K9DWS6JXY09vd9xNdPNeurI8DU/X4flcfaD8A==}
+    peerDependencies:
+      react: ^18.0 || ^19.0
 
   memoize-one@5.2.1:
     resolution: {integrity: sha512-zYiwtZUcYyXKo/np96AGZAckk+FWWsUdJ3cHGGmld7+AhvcWmQyGCYUh1hc4Q/pkOhb65dQR/pqCyK0cOaHz4Q==}
@@ -6908,6 +7031,10 @@ packages:
     resolution: {integrity: sha512-W67iLl4J2EXEGTbfeHCffrjDfitvLANg0UlX3wFUUSTx92KXRFegMHUVgSqE+wvhAbi4WqjGg9czysTV2Epbew==}
     engines: {node: '>= 0.4'}
 
+  object-is@1.1.6:
+    resolution: {integrity: sha512-F8cZ+KfGlSGi09lJT7/Nd6KJZ9ygtvYC0/UYYLI9nmQKLMnydpB9yvbv9K1uSkEu7FU9vYPmVwLg328tX+ot3Q==}
+    engines: {node: '>= 0.4'}
+
   object-keys@1.1.1:
     resolution: {integrity: sha512-NuAESUOUMrlIXOfHKzD6bpPu3tYt3xvjNdRIQ+FeT0lNb4K8WR70CaDxhuNguS2XG+GjkyMwOzsN5ZktImfhLA==}
     engines: {node: '>= 0.4'}
@@ -7276,6 +7403,11 @@ packages:
       prettier-plugin-svelte:
         optional: true
 
+  prettier@3.4.2:
+    resolution: {integrity: sha512-e9MewbtFo+Fevyuxn/4rrcDAaq0IYxPGLvObpQjiZBMAzB9IGmzlnG9RZy3FFas+eBMu2vA0CszMeduow5dIuQ==}
+    engines: {node: '>=14'}
+    hasBin: true
+
   prettier@3.6.2:
     resolution: {integrity: sha512-I7AIg5boAr5R0FFtJ6rCfD+LFsWHp81dolrFD8S79U9tb8Az2nGrJncnMSnys+bpQJfRUzqs9hnA81OAA3hCuQ==}
     engines: {node: '>=14'}
@@ -7293,6 +7425,10 @@ packages:
     resolution: {integrity: sha512-vtpjW3XuYCSnMsNVBjLMNkTj6OZbudcPPTPYHqX0CJfpcdWciI1dM8uHETwmDxxiqEwCIE6WvXucWUetJgfu/A==}
     engines: {node: '>=16.13'}
     hasBin: true
+
+  prismjs@1.29.0:
+    resolution: {integrity: sha512-Kx/1w86q/epKcmte75LNrEoT+lX8pBpavuAbvJWRXar7Hz8jrtF+e3vY751p0R8H9HdArwaCTNDDzHg/ScJK1Q==}
+    engines: {node: '>=6'}
 
   prismjs@1.30.0:
     resolution: {integrity: sha512-DEvV2ZF2r2/63V+tK8hQvrR2ZGn10srHbXviTlcv7Kpzw8jWiNTqbVgjO3IY8RxrrOUF8VPMQQFysYYYv0YZxw==}
@@ -7474,6 +7610,9 @@ packages:
     peerDependenciesMeta:
       '@types/react':
         optional: true
+
+  react-promise-suspense@0.3.4:
+    resolution: {integrity: sha512-I42jl7L3Ze6kZaq+7zXWSunBa3b1on5yfvUW6Eo/3fFOj6dZ5Bqmcd264nJbTK/gn1HjjILAjSwnZbV4RpSaNQ==}
 
   react-refresh@0.14.2:
     resolution: {integrity: sha512-jCvmsr+1IUSMUyzOkRcvnVbX3ZYC6g9TDrDbFuFmRDq7PD4yaGbLKNQL6k2jnArV8hjYxh7hVhAZB6s9HDGpZA==}
@@ -8254,6 +8393,10 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  ua-parser-js@0.7.41:
+    resolution: {integrity: sha512-O3oYyCMPYgNNHuO7Jjk3uacJWZF8loBgwrfd/5LE/HyZ3lUIOdniQ7DNXJcIgZbwioZxk0fLfI4EVnetdiX5jg==}
+    hasBin: true
+
   ua-parser-js@1.0.41:
     resolution: {integrity: sha512-LbBDqdIC5s8iROCUjMbW1f5dJQTEFB1+KO9ogbvlb3nm9n4YHa5p4KTvFPWvh2Hs8gZMBuiB1/8+pdfe/tDPug==}
     hasBin: true
@@ -8364,6 +8507,9 @@ packages:
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
+
+  util@0.12.5:
+    resolution: {integrity: sha512-kZf/K6hEIrWHI6XqOFUiiMa+79wE/D8Q+NCNAWclkyg3b4d2k7s0QGepNjiABc+aR3N1PAyHL7p6UcLY6LmrnA==}
 
   utils-merge@1.0.1:
     resolution: {integrity: sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA==}
@@ -10555,7 +10701,7 @@ snapshots:
       postcss: 8.4.49
       resolve-from: 5.0.0
     optionalDependencies:
-      expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.1.1(react@19.1.1))(react-native-web@0.21.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
+      expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.2.0(react@19.2.0))(react-native-web@0.21.2(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.2.0))(react@19.2.0)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -10641,7 +10787,7 @@ snapshots:
       '@expo/json-file': 10.0.8-canary-20251120-e46b3cc
       '@react-native/normalize-colors': 0.83.0-nightly-20251104-502efe1cc
       debug: 4.4.3
-      expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.1.1(react@19.1.1))(react-native-web@0.21.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
+      expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.2.0(react@19.2.0))(react-native-web@0.21.2(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.2.0))(react@19.2.0)
       resolve-from: 5.0.0
       semver: 7.7.3
       xml2js: 0.6.0
@@ -10788,6 +10934,8 @@ snapshots:
       semver: 7.7.3
     transitivePeerDependencies:
       - supports-color
+
+  '@ide/backoff@1.0.0': {}
 
   '@img/colour@1.0.0':
     optional: true
@@ -11950,12 +12098,25 @@ snapshots:
 
   '@radix-ui/rect@1.1.1': {}
 
+  '@react-email/body@0.0.11(react@19.2.0)':
+    dependencies:
+      react: 19.2.0
+
   '@react-email/body@0.2.0(react@19.2.0)':
+    dependencies:
+      react: 19.2.0
+
+  '@react-email/button@0.0.19(react@19.2.0)':
     dependencies:
       react: 19.2.0
 
   '@react-email/button@0.2.0(react@19.2.0)':
     dependencies:
+      react: 19.2.0
+
+  '@react-email/code-block@0.0.11(react@19.2.0)':
+    dependencies:
+      prismjs: 1.29.0
       react: 19.2.0
 
   '@react-email/code-block@0.2.0(react@19.2.0)':
@@ -11970,6 +12131,32 @@ snapshots:
   '@react-email/column@0.0.13(react@19.2.0)':
     dependencies:
       react: 19.2.0
+
+  '@react-email/components@0.0.34(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+    dependencies:
+      '@react-email/body': 0.0.11(react@19.2.0)
+      '@react-email/button': 0.0.19(react@19.2.0)
+      '@react-email/code-block': 0.0.11(react@19.2.0)
+      '@react-email/code-inline': 0.0.5(react@19.2.0)
+      '@react-email/column': 0.0.13(react@19.2.0)
+      '@react-email/container': 0.0.15(react@19.2.0)
+      '@react-email/font': 0.0.9(react@19.2.0)
+      '@react-email/head': 0.0.12(react@19.2.0)
+      '@react-email/heading': 0.0.15(react@19.2.0)
+      '@react-email/hr': 0.0.11(react@19.2.0)
+      '@react-email/html': 0.0.11(react@19.2.0)
+      '@react-email/img': 0.0.11(react@19.2.0)
+      '@react-email/link': 0.0.12(react@19.2.0)
+      '@react-email/markdown': 0.0.14(react@19.2.0)
+      '@react-email/preview': 0.0.12(react@19.2.0)
+      '@react-email/render': 1.0.5(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      '@react-email/row': 0.0.12(react@19.2.0)
+      '@react-email/section': 0.0.16(react@19.2.0)
+      '@react-email/tailwind': 1.0.4(react@19.2.0)
+      '@react-email/text': 0.1.0(react@19.2.0)
+      react: 19.2.0
+    transitivePeerDependencies:
+      - react-dom
 
   '@react-email/components@1.0.1(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
     dependencies:
@@ -12029,14 +12216,31 @@ snapshots:
     dependencies:
       react: 19.2.0
 
+  '@react-email/markdown@0.0.14(react@19.2.0)':
+    dependencies:
+      md-to-react-email: 5.0.5(react@19.2.0)
+      react: 19.2.0
+
   '@react-email/markdown@0.0.17(react@19.2.0)':
     dependencies:
       marked: 15.0.12
       react: 19.2.0
 
+  '@react-email/preview@0.0.12(react@19.2.0)':
+    dependencies:
+      react: 19.2.0
+
   '@react-email/preview@0.0.13(react@19.2.0)':
     dependencies:
       react: 19.2.0
+
+  '@react-email/render@1.0.5(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+    dependencies:
+      html-to-text: 9.0.5
+      prettier: 3.4.2
+      react: 19.2.0
+      react-dom: 19.2.0(react@19.2.0)
+      react-promise-suspense: 0.3.4
 
   '@react-email/render@2.0.0(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
     dependencies:
@@ -12050,6 +12254,10 @@ snapshots:
       react: 19.2.0
 
   '@react-email/section@0.0.16(react@19.2.0)':
+    dependencies:
+      react: 19.2.0
+
+  '@react-email/tailwind@1.0.4(react@19.2.0)':
     dependencies:
       react: 19.2.0
 
@@ -12069,6 +12277,10 @@ snapshots:
       '@react-email/img': 0.0.11(react@19.2.0)
       '@react-email/link': 0.0.12(react@19.2.0)
       '@react-email/preview': 0.0.13(react@19.2.0)
+
+  '@react-email/text@0.1.0(react@19.2.0)':
+    dependencies:
+      react: 19.2.0
 
   '@react-email/text@0.1.5(react@19.2.0)':
     dependencies:
@@ -13330,6 +13542,14 @@ snapshots:
       pvutils: 1.1.5
       tslib: 2.8.1
 
+  assert@2.1.0:
+    dependencies:
+      call-bind: 1.0.8
+      is-nan: 1.3.2
+      object-is: 1.1.6
+      object.assign: 4.1.7
+      util: 0.12.5
+
   ast-types-flow@0.0.8: {}
 
   ast-types@0.13.4:
@@ -13471,7 +13691,7 @@ snapshots:
       resolve-from: 5.0.0
     optionalDependencies:
       '@babel/runtime': 7.28.4
-      expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.1.1(react@19.1.1))(react-native-web@0.21.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
+      expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.2.0(react@19.2.0))(react-native-web@0.21.2(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.2.0))(react@19.2.0)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -13481,6 +13701,8 @@ snapshots:
       '@babel/core': 7.28.5
       babel-plugin-jest-hoist: 29.6.3
       babel-preset-current-node-syntax: 1.2.0(@babel/core@7.28.5)
+
+  badgin@1.2.3: {}
 
   balanced-match@1.0.2: {}
 
@@ -14638,7 +14860,7 @@ snapshots:
   expo-crypto@15.0.8-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc):
     dependencies:
       base64-js: 1.5.1
-      expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.1.1(react@19.1.1))(react-native-web@0.21.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
+      expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.2.0(react@19.2.0))(react-native-web@0.21.2(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.2.0))(react@19.2.0)
 
   expo-dev-client@6.0.19-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc):
     dependencies:
@@ -14667,6 +14889,11 @@ snapshots:
     dependencies:
       expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.1.1(react@19.1.1))(react-native-web@0.21.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
       expo-dev-menu-interface: 2.0.1-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc)
+
+  expo-device@8.0.10-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc):
+    dependencies:
+      expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.1.1(react@19.1.1))(react-native-web@0.21.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
+      ua-parser-js: 0.7.41
 
   expo-file-system@19.1.0-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc)(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1)):
     dependencies:
@@ -14764,6 +14991,21 @@ snapshots:
       react: 19.2.0
       react-native: 0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.2.0)
 
+  expo-notifications@1.0.0-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc)(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1):
+    dependencies:
+      '@expo/image-utils': 0.8.8-canary-20251120-e46b3cc
+      '@ide/backoff': 1.0.0
+      abort-controller: 3.0.0
+      assert: 2.1.0
+      badgin: 1.2.3
+      expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.1.1(react@19.1.1))(react-native-web@0.21.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
+      expo-application: 7.0.8-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc)
+      expo-constants: 18.1.0-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc)(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))
+      react: 19.1.1
+      react-native: 0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1)
+    transitivePeerDependencies:
+      - supports-color
+
   expo-router@7.0.0-canary-20251120-e46b3cc(6535f5b222b2a091da341d0e1675a2ba):
     dependencies:
       '@expo/log-box': 0.0.13-canary-20251120-e46b3cc(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(expo@55.0.0-canary-20251120-e46b3cc)(react-dom@19.2.0(react@19.2.0))(react-native-web@0.21.2(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.2.0))(react@19.2.0)
@@ -14854,7 +15096,7 @@ snapshots:
 
   expo-secure-store@15.0.8-canary-20251120-e46b3cc(expo@55.0.0-canary-20251120-e46b3cc):
     dependencies:
-      expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.1.1(react@19.1.1))(react-native-web@0.21.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.1.1))(react@19.1.1)
+      expo: 55.0.0-canary-20251120-e46b3cc(@babel/core@7.28.5)(@expo/dom-webview@0.2.8-canary-20251118-8f7ee64)(@expo/metro-runtime@6.2.0-canary-20251120-e46b3cc)(bufferutil@4.0.9)(expo-router@7.0.0-canary-20251120-e46b3cc)(react-dom@19.2.0(react@19.2.0))(react-native-web@0.21.2(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-native@0.83.0-rc.2(@babel/core@7.28.5)(@types/react@19.2.6)(bufferutil@4.0.9)(react@19.2.0))(react@19.2.0)
 
   expo-server@1.0.5-canary-20251120-e46b3cc: {}
 
@@ -14987,6 +15229,8 @@ snapshots:
       chardet: 0.7.0
       iconv-lite: 0.4.24
       tmp: 0.0.33
+
+  fast-deep-equal@2.0.1: {}
 
   fast-deep-equal@3.1.3: {}
 
@@ -15455,6 +15699,11 @@ snapshots:
 
   ip-address@10.1.0: {}
 
+  is-arguments@1.2.0:
+    dependencies:
+      call-bound: 1.0.4
+      has-tostringtag: 1.0.2
+
   is-array-buffer@3.0.5:
     dependencies:
       call-bind: 1.0.8
@@ -15534,6 +15783,11 @@ snapshots:
       lower-case: 1.1.4
 
   is-map@2.0.3: {}
+
+  is-nan@1.3.2:
+    dependencies:
+      call-bind: 1.0.8
+      define-properties: 1.2.1
 
   is-negative-zero@2.0.3: {}
 
@@ -15934,9 +16188,16 @@ snapshots:
 
   marked@15.0.12: {}
 
+  marked@7.0.4: {}
+
   marky@1.3.0: {}
 
   math-intrinsics@1.1.0: {}
+
+  md-to-react-email@5.0.5(react@19.2.0):
+    dependencies:
+      marked: 7.0.4
+      react: 19.2.0
 
   memoize-one@5.2.1: {}
 
@@ -16508,6 +16769,11 @@ snapshots:
 
   object-inspect@1.13.4: {}
 
+  object-is@1.1.6:
+    dependencies:
+      call-bind: 1.0.8
+      define-properties: 1.2.1
+
   object-keys@1.1.1: {}
 
   object.assign@4.1.7:
@@ -16868,6 +17134,8 @@ snapshots:
     optionalDependencies:
       '@ianvs/prettier-plugin-sort-imports': 4.7.0(prettier@3.6.2)
 
+  prettier@3.4.2: {}
+
   prettier@3.6.2: {}
 
   pretty-bytes@5.6.0: {}
@@ -16883,6 +17151,8 @@ snapshots:
       '@prisma/engines': 5.22.0
     optionalDependencies:
       fsevents: 2.3.3
+
+  prismjs@1.29.0: {}
 
   prismjs@1.30.0: {}
 
@@ -17274,6 +17544,10 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+
+  react-promise-suspense@0.3.4:
+    dependencies:
+      fast-deep-equal: 2.0.1
 
   react-refresh@0.14.2: {}
 
@@ -18184,6 +18458,8 @@ snapshots:
 
   typescript@5.9.3: {}
 
+  ua-parser-js@0.7.41: {}
+
   ua-parser-js@1.0.41: {}
 
   uglify-js@3.19.3:
@@ -18298,6 +18574,14 @@ snapshots:
       react: 19.2.0
 
   util-deprecate@1.0.2: {}
+
+  util@0.12.5:
+    dependencies:
+      inherits: 2.0.4
+      is-arguments: 1.2.0
+      is-generator-function: 1.1.2
+      is-typed-array: 1.1.15
+      which-typed-array: 1.1.19
 
   utils-merge@1.0.1: {}
 

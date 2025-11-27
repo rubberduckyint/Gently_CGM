@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -506,7 +506,9 @@ export default function LoginPage() {
 
               {/* Loading Indicator */}
               {otpLoading && (
-                <View style={{ marginTop: spacing[4], marginBottom: spacing[4] }}>
+                <View
+                  style={{ marginTop: spacing[4], marginBottom: spacing[4] }}
+                >
                   <ActivityIndicator size="large" color={colors.primary[500]} />
                   <Text
                     style={[

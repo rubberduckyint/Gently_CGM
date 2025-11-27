@@ -4,8 +4,8 @@
  * Based on BLE Protocol Rev 0.6
  */
 
-import type { BLECommandRequest } from "../types";
-import { CommandCode, ResponseStatus } from "../types";
+import type { BLECommandRequest } from "~/services/ble/types";
+import { CommandCode, ResponseStatus } from "~/services/ble/types";
 
 export interface TriggerAudioPatternParams {
   onDurationMs: number; // ON duration in milliseconds (UInt16)
