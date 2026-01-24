@@ -1,4 +1,4 @@
-import type { BetterAuthOptions } from "better-auth";
+import type { BetterAuthOptions, BetterAuthPlugin } from "better-auth";
 import { expo } from "@better-auth/expo";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -118,7 +118,7 @@ export function initAuth(options: {
         allowedAttempts: 3, // Max 3 attempts per OTP
         otpLength: 6, // 6-digit OTP
       }),
-      expo(),
+      expo() as unknown as BetterAuthPlugin,
     ],
     socialProviders: {
       google: {
@@ -140,7 +140,7 @@ export function initAuth(options: {
         }),
     },
     trustedOrigins: ["gently://", "gently://*", "https://appleid.apple.com"],
-  } satisfies BetterAuthOptions;
+  } as BetterAuthOptions;
 
   return betterAuth(config);
 }

@@ -764,9 +764,15 @@ export default function DashboardPage() {
               Add your first Gently to start managing alarms and notifications.
             </Text>
             <Pressable
-              style={[buttons.base, buttons.large, buttons.success]}
+              style={[
+                buttons.base,
+                buttons.large,
+                buttons.success,
+                { flexDirection: "row", gap: spacing[2], alignItems: "center" },
+              ]}
               onPress={handleAddDevice}
             >
+              <Ionicons name="add-circle" size={20} color="white" />
               <Text style={buttonText.success}>Add Your First Gently</Text>
             </Pressable>
           </View>

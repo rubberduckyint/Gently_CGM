@@ -25,8 +25,9 @@ function Separator({
   );
 }
 
-interface SeparatorWithLabelProps
-  extends React.ComponentProps<typeof Separator> {
+interface SeparatorWithLabelProps extends React.ComponentProps<
+  typeof Separator
+> {
   label?: string;
 }
 

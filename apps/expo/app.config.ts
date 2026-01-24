@@ -83,6 +83,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-web-browser",
     "expo-location",
     "expo-apple-authentication",
+    "@react-native-community/datetimepicker",
     [
       "@react-native-google-signin/google-signin",
       {

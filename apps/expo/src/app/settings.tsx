@@ -17,7 +17,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -242,15 +241,7 @@ export default function SettingsPage() {
   if (isLoadingPreferences || isLoadingProfile) {
     return (
       <SafeAreaView style={containers.safeArea}>
-        <Header
-          title="Settings"
-          showBackButton={true}
-          rightButton={{
-            icon: "home",
-            onPress: () => router.push("/dashboard"),
-            accessibilityLabel: "Go to dashboard",
-          }}
-        />
+        <Header title="Settings" showBackButton={true} />
         <View style={containers.contentCentered}>
           <ActivityIndicator size="large" color={colors.primary[500]} />
           <Text
@@ -604,15 +595,7 @@ export default function SettingsPage() {
 
   return (
     <SafeAreaView style={containers.safeArea}>
-      <Header
-        title="Settings"
-        showBackButton={true}
-        rightButton={{
-          icon: "home",
-          onPress: () => router.push("/dashboard"),
-          accessibilityLabel: "Go to dashboard",
-        }}
-      />
+      <Header title="Settings" showBackButton={true} />
 
       {/* Tab Bar */}
       <View

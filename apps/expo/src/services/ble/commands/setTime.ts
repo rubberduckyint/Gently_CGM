@@ -18,7 +18,7 @@ export function createSetTimeRequest(
   const seconds = date.getSeconds();
 
   const decimalToBcd = (value: number): number => {
-    return (Math.floor(value / 10) << 4) | value % 10;
+    return (Math.floor(value / 10) << 4) | (value % 10);
   };
 
   const payload = new Uint8Array([

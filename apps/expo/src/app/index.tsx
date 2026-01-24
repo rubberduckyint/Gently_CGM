@@ -11,8 +11,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { AntDesign, FontAwesome } from "@expo/vector-icons";
+import { FontAwesome } from "@expo/vector-icons";
 
+import { GoogleIcon } from "~/components/GoogleIcon";
 import {
   buttons,
   buttonText,
@@ -377,11 +378,7 @@ export default function LoginPage() {
                   onPress={handleGoogleAuth}
                   disabled={isLoading}
                 >
-                  <AntDesign
-                    name="google"
-                    size={20}
-                    color={colors.text.primary}
-                  />
+                  <GoogleIcon size={20} />
                   <Text style={buttonText.secondary}>Google</Text>
                 </Pressable>
 
