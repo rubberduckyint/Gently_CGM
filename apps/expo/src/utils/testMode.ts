@@ -6,6 +6,13 @@
  * simulate device pairing without a physical Gently device.
  *
  * Test user email: extraspecialtestuser@gentlyus.com
+ *
+ * ## Features for Test Users:
+ * - Bypass OTP verification with fixed code "123456"
+ * - Bypass Bluetooth pairing - automatically connect to simulated device
+ * - All Bluetooth operations use mock BLE service instead of real hardware
+ * - Simulated device appears as "Test Gently Device" (GENTLY-TEST-001)
+ * - All alarm/event operations work in-memory without physical device
  */
 
 // Test user configuration

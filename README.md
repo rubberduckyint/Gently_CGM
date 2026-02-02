@@ -405,10 +405,18 @@ The app includes a special test mode designed for Apple App Store review. This a
    - The simulated device appears with realistic dummy data (85% battery, firmware 1.0.0)
    - Name the device and it's added to the account
 
-3. **Full Functionality**:
+3. **Bluetooth Bypass** (NEW):
+   - All Bluetooth operations are automatically simulated for the test user
+   - No need to pair with a physical device - scanning and connection work automatically
+   - All BLE commands (add alarm, sync time, get battery, etc.) return mock responses
+   - Alarms and events are stored in-memory and work as if on a real device
+   - Mock device: "Test Gently Device" (Serial: GENTLY-TEST-001)
+
+4. **Full Functionality**:
    - Create, edit, and delete alarms on the simulated device
    - All app features work normally with the test device
    - No physical Gently bracelet or BLE connection required
+   - Test user can use the regular "Scan for Devices" flow which will find the simulated device
 
 ### Technical Implementation
 
@@ -418,6 +426,14 @@ The test mode is implemented across several files:
 - **`packages/auth/src/index.ts`** - Server-side OTP generation for test user
 - **`apps/expo/src/app/index.tsx`** - Client-side login handling
 - **`apps/expo/src/app/add-device/index.tsx`** - Simulated device pairing UI
+- **`apps/expo/src/services/ble/mockBLEService.ts`** - Mock Bluetooth service for test users (NEW)
+- **`apps/expo/src/contexts/BLEContext.tsx`** - Automatic routing to mock BLE for test users (NEW)
+
+The BLE bypass works by:
+1. Detecting when the logged-in user is the test user (`extraspecialtestuser@gentlyus.com`)
+2. Routing all Bluetooth operations to the mock service instead of real BLE hardware
+3. Simulating device discovery, connection, commands, and notifications
+4. Maintaining in-memory state for alarms and device settings
 
 ### Security Notes
 

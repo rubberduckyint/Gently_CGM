@@ -64,6 +64,9 @@ import {
 import { FACTORY_BRACELET_KEY, ResponseStatus } from "~/services/ble/types";
 import { requestBluetoothPermissions } from "~/services/ble/utils";
 import { NotificationService } from "~/services/notifications";
+import * as mockBLE from "~/services/ble/mockBLEService";
+import { isTestUserSession } from "~/utils/testMode";
+import { authClient } from "~/utils/auth";
 
 export type BLEConnectionState =
   | "disconnected"
@@ -207,6 +210,10 @@ function getCommandName(command: number): string {
 }
 
 export function BLEProvider({ children }: BLEProviderProps) {
+  // Check if current user is test user for mock BLE
+  const { data: session } = authClient.useSession();
+  const isTestUser = isTestUserSession(session?.user?.email);
+
   const [connectionState, setConnectionState] =
     useState<BLEConnectionState>("disconnected");
   const [connectedDevice, setConnectedDevice] = useState<BLEDeviceInfo | null>(
@@ -526,6 +533,12 @@ export function BLEProvider({ children }: BLEProviderProps) {
         throw new Error(`Invalid connection state: ${connectionState}`);
       }
 
+      // Use mock BLE for test users
+      if (isTestUser) {
+        console.log(`🧪 [BLE Context] Using mock BLE service for test user`);
+        return mockBLE.mockSendCommand(command, timeoutMs);
+      }
+
       const maxRetries = 3;
       let lastError: Error = new Error("No attempts made");
 
@@ -587,6 +600,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
             connectionState,
             timeoutMs,
             hasPacketHandler: !!packetHandler,
+            isTestUser,
           },
           null,
           2,
@@ -605,6 +619,18 @@ export function BLEProvider({ children }: BLEProviderProps) {
           `❌ [BLE Context] sendMultiPacketBLECommand failed - invalid connection state: ${connectionState}`,
         );
         throw new Error(`Invalid connection state: ${connectionState}`);
+      }
+
+      // Use mock BLE for test users
+      if (isTestUser) {
+        console.log(
+          `🧪 [BLE Context] Using mock BLE multi-packet service for test user`,
+        );
+        return mockBLE.mockSendMultiPacketCommand(
+          command,
+          packetHandler,
+          timeoutMs,
+        );
       }
 
       const maxRetries = 3;
@@ -726,6 +752,60 @@ export function BLEProvider({ children }: BLEProviderProps) {
         progress: 0,
         message: "🔍 Starting connection process...",
       });
+
+      // Use mock BLE for test users
+      if (isTestUser) {
+        console.log(
+          `🧪 [BLE Context] Using mock BLE connection for test user`,
+        );
+
+        try {
+          onProgress?.({
+            step: "connecting",
+            progress: 40,
+            message: "🔗 Connecting to simulated device...",
+          });
+
+          await mockBLE.mockConnectToDevice(
+            `mock-${serialNumber}`,
+            serialNumber,
+          );
+
+          onProgress?.({
+            step: "connected",
+            progress: 70,
+            message: "✅ Connected to simulated device!",
+          });
+
+          // Set up mock device info
+          const mockDeviceInfo = mockBLE.getMockDeviceInfo();
+          setConnectedDevice({
+            id: `mock-${serialNumber}`,
+            name: "Test Gently Device",
+            serialNumber: mockDeviceInfo.serialNumber,
+            rssi: -45,
+          });
+
+          // Use a fixed encryption key for test mode
+          setEncryptionKey("MOCK_TEST_KEY_1234567890ABCDEF");
+          setConnectionState("connected");
+
+          onProgress?.({
+            step: "complete",
+            progress: 100,
+            message: "🎉 Connection complete!",
+          });
+
+          trackBleConnectionSuccess(serialNumber);
+          return;
+        } catch (error) {
+          console.error(`🧪 [Mock BLE] Connection failed:`, error);
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+          trackBleConnectionError(`mock-${serialNumber}`, errorMessage);
+          throw error;
+        }
+      }
 
       try {
         // Ensure any ongoing scan is stopped before starting
@@ -954,6 +1034,58 @@ export function BLEProvider({ children }: BLEProviderProps) {
         message: "🔍 Starting connection process...",
       });
 
+      // Use mock BLE for test users
+      if (isTestUser) {
+        console.log(
+          `🧪 [BLE Context] Using mock BLE connectToPeripheral for test user`,
+        );
+
+        try {
+          onProgress?.({
+            step: "connecting",
+            progress: 40,
+            message: "🔗 Connecting to simulated device...",
+          });
+
+          await mockBLE.mockConnectToDevice(peripheral.id, serialNumber);
+
+          onProgress?.({
+            step: "connected",
+            progress: 70,
+            message: "✅ Connected to simulated device!",
+          });
+
+          // Set up mock device info
+          const mockDeviceInfo = mockBLE.getMockDeviceInfo();
+          setConnectedDevice({
+            id: peripheral.id,
+            name: peripheral.name ?? "Test Gently Device",
+            serialNumber: mockDeviceInfo.serialNumber,
+            rssi: peripheral.rssi,
+            peripheral,
+          });
+
+          // Use a fixed encryption key for test mode
+          setEncryptionKey("MOCK_TEST_KEY_1234567890ABCDEF");
+          setConnectionState("connected");
+
+          onProgress?.({
+            step: "complete",
+            progress: 100,
+            message: "🎉 Connection complete!",
+          });
+
+          trackBleConnectionSuccess(serialNumber);
+          return;
+        } catch (error) {
+          console.error(`🧪 [Mock BLE] Connection failed:`, error);
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+          trackBleConnectionError(peripheral.id, errorMessage);
+          throw error;
+        }
+      }
+
       try {
         // Ensure any ongoing scan is stopped before connecting
         console.log(
@@ -1070,28 +1202,40 @@ export function BLEProvider({ children }: BLEProviderProps) {
           console.log(
             `🔌 [BLE Context] Disconnecting from device: ${connectedDevice.id} (${connectedDevice.name})`,
           );
-          await disconnectFromBLEDevice(connectedDevice.id);
+
+          // Use mock BLE for test users
+          if (isTestUser) {
+            console.log(
+              `🧪 [BLE Context] Using mock BLE disconnect for test user`,
+            );
+            await mockBLE.mockDisconnectDevice();
+          } else {
+            await disconnectFromBLEDevice(connectedDevice.id);
+          }
+
           console.log(
             `✅ [BLE Context] Successfully disconnected from device: ${connectedDevice.id}`,
           );
 
-          // Remove the stored encryption key
-          const sanitizedDeviceId = connectedDevice.id.replace(
-            /[^a-zA-Z0-9._-]/g,
-            "_",
-          );
-          try {
-            await SecureStore.deleteItemAsync(
-              `ble_device_${sanitizedDeviceId}`,
+          // Remove the stored encryption key (skip for test users)
+          if (!isTestUser) {
+            const sanitizedDeviceId = connectedDevice.id.replace(
+              /[^a-zA-Z0-9._-]/g,
+              "_",
             );
-            console.log(
-              `🗑️ [BLE Context] Removed stored encryption key for ${connectedDevice.id}`,
-            );
-          } catch (keyError) {
-            console.warn(
-              `⚠️ [BLE Context] Failed to remove encryption key for ${connectedDevice.id}:`,
-              keyError,
-            );
+            try {
+              await SecureStore.deleteItemAsync(
+                `ble_device_${sanitizedDeviceId}`,
+              );
+              console.log(
+                `🗑️ [BLE Context] Removed stored encryption key for ${connectedDevice.id}`,
+              );
+            } catch (keyError) {
+              console.warn(
+                `⚠️ [BLE Context] Failed to remove encryption key for ${connectedDevice.id}:`,
+                keyError,
+              );
+            }
           }
         } catch (error) {
           console.warn("❌ [BLE Context] Disconnect error:", error);
@@ -1311,6 +1455,12 @@ export function BLEProvider({ children }: BLEProviderProps) {
       console.log(
         `🔍 [BLE Context] Starting scanForDevices with timeout: ${timeoutSeconds}s`,
       );
+
+      // Use mock BLE for test users
+      if (isTestUser) {
+        console.log(`🧪 [BLE Context] Using mock BLE scanning for test user`);
+        return mockBLE.mockScanForDevices(onDeviceFound, timeoutSeconds);
+      }
 
       return new Promise((resolve, reject) => {
         let gentlyDevicesFound = 0;
