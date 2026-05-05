@@ -4,13 +4,7 @@ import { count, desc, eq, like, or } from "drizzle-orm";
 import { z } from "zod/v4";
 
 import { db } from "@gently/db/client";
-import {
-  Alarm,
-  AlarmSelectSchema,
-  Device,
-  DeviceSelectSchema,
-  user,
-} from "@gently/db/schema";
+import { Device, DeviceSelectSchema, user } from "@gently/db/schema";
 
 import { adminProcedure } from "../trpc";
 
@@ -44,7 +38,6 @@ const AdminUserListSchema = z.object({
       updatedAt: z.date(),
       _count: z.object({
         devices: z.number(),
-        alarms: z.number(),
       }),
     }),
   ),
@@ -64,33 +57,6 @@ const AdminDeviceListSchema = z.object({
         name: z.string(),
         email: z.string(),
       }),
-      _count: z.object({
-        alarms: z.number(),
-      }),
-    }),
-  ),
-  pagination: z.object({
-    total: z.number(),
-    pages: z.number(),
-    currentPage: z.number(),
-    limit: z.number(),
-  }),
-});
-
-const AdminAlarmListSchema = z.object({
-  alarms: z.array(
-    AlarmSelectSchema.extend({
-      user: z.object({
-        id: z.string(),
-        name: z.string(),
-        email: z.string(),
-      }),
-      device: z
-        .object({
-          id: z.string(),
-          title: z.string(),
-        })
-        .nullable(),
     }),
   ),
   pagination: z.object({
@@ -121,7 +87,7 @@ export const adminRouter = {
         ? or(like(user.name, `%${search}%`), like(user.email, `%${search}%`))
         : undefined;
 
-      // Get users with device and alarm counts
+      // Get users with device counts
       const users = await ctx.db.query.user.findMany({
         where: whereCondition,
         limit,
@@ -129,9 +95,6 @@ export const adminRouter = {
         orderBy: desc(user.createdAt),
         with: {
           devices: {
-            columns: { id: true },
-          },
-          alarms: {
             columns: { id: true },
           },
         },
@@ -142,7 +105,6 @@ export const adminRouter = {
         ...u,
         _count: {
           devices: u.devices.length,
-          alarms: u.alarms.length,
         },
       }));
 
@@ -190,62 +152,10 @@ export const adminRouter = {
               lastSync: z.date().nullable(),
               createdAt: z.date(),
               updatedAt: z.date(),
-              _count: z.object({
-                alarms: z.number(),
-              }),
-            }),
-          ),
-          alarms: z.array(
-            z.object({
-              id: z.string(),
-              title: z.string(),
-              description: z.string().nullable(),
-              isActive: z.boolean(),
-              startDate: z.date(),
-              endDate: z.date().nullable(),
-              repeat: z.boolean(),
-              cronExpression: z.string(),
-              syncStatus: z.enum(["NOT_SYNCED", "SYNCING", "SYNCED", "ERROR"]),
-              // BLE Protocol fields (consolidated - replaced legacy color, priority, hapticChoice)
-              severityLevel: z.enum(["INFORMATIONAL", "WARNING", "CRITICAL"]),
-              ledPattern: z.enum([
-                "OFF",
-                "SOLID",
-                "BLINK_SLOW",
-                "BLINK_FAST",
-                "PULSE",
-                "STROBE",
-              ]),
-              ledColor: z.enum([
-                "RED",
-                "GREEN",
-                "BLUE",
-                "YELLOW",
-                "MAGENTA",
-                "CYAN",
-                "WHITE",
-              ]),
-              vibrationPattern: z.number(),
-              vibrationIntensity: z.enum(["LOW", "MEDIUM", "HIGH", "MAXIMUM"]),
-              snoozePeriod: z.number(),
-              snoozeTimeout: z.number(),
-              retriggerDelay: z.number(),
-              retriggerTimeout: z.number(),
-              lastSync: z.date().nullable(),
-              userId: z.string(),
-              deviceId: z.string().nullable(),
-              createdAt: z.date(),
-              updatedAt: z.date(),
-              device: z
-                .object({
-                  title: z.string(),
-                })
-                .nullable(),
             }),
           ),
           _count: z.object({
             devices: z.number(),
-            alarms: z.number(),
           }),
         })
         .nullable(),
@@ -255,22 +165,7 @@ export const adminRouter = {
       const userData = await db.query.user.findFirst({
         where: eq(user.id, input.id),
         with: {
-          devices: {
-            with: {
-              alarms: {
-                columns: { id: true },
-              },
-            },
-          },
-          alarms: {
-            with: {
-              device: {
-                columns: {
-                  title: true,
-                },
-              },
-            },
-          },
+          devices: true,
         },
       });
 
@@ -286,18 +181,9 @@ export const adminRouter = {
         devices: userData.devices.map((device) => ({
           ...device,
           updatedAt: new Date(device.updatedAt), // Convert string to Date
-          _count: {
-            alarms: device.alarms.length,
-          },
-        })),
-        alarms: userData.alarms.map((alarm) => ({
-          ...alarm,
-          updatedAt: new Date(alarm.updatedAt), // Convert string to Date
-          device: alarm.device,
         })),
         _count: {
           devices: userData.devices.length,
-          alarms: userData.alarms.length,
         },
       };
 
@@ -430,9 +316,6 @@ export const adminRouter = {
                 email: true,
               },
             },
-            alarms: {
-              columns: { id: true },
-            },
           },
         }),
         db.select({ count: count() }).from(Device).where(whereCondition),
@@ -441,12 +324,7 @@ export const adminRouter = {
       const total = totalResult[0]?.count ?? 0;
 
       return {
-        devices: devices.map((device) => ({
-          ...device,
-          _count: {
-            alarms: device.alarms.length,
-          },
-        })),
+        devices,
         pagination: {
           total,
           pages: Math.ceil(total / limit),
@@ -456,67 +334,4 @@ export const adminRouter = {
       };
     }),
 
-  // Get all alarms (admin only)
-  getAllAlarms: adminProcedure
-    .input(
-      z.object({
-        page: z.number().min(1).optional(),
-        limit: z.number().min(1).max(100).optional(),
-        search: z.string().optional(),
-      }),
-    )
-    .output(AdminAlarmListSchema)
-    .query(async ({ input }) => {
-      const { page = 1, limit = 10, search } = input;
-      const offset = (page - 1) * limit;
-
-      // Build where condition for search
-      const whereCondition = search
-        ? or(
-            like(Alarm.title, `%${search}%`),
-            like(Alarm.description, `%${search}%`),
-          )
-        : undefined;
-
-      // Get alarms with user and device information
-      const alarms = await db.query.Alarm.findMany({
-        where: whereCondition,
-        limit,
-        offset,
-        orderBy: desc(Alarm.createdAt),
-        with: {
-          user: {
-            columns: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          device: {
-            columns: {
-              id: true,
-              title: true,
-            },
-          },
-        },
-      });
-
-      // Get total count for pagination
-      const totalResult = await db
-        .select({ count: count() })
-        .from(Alarm)
-        .where(whereCondition);
-
-      const total = totalResult[0]?.count ?? 0;
-
-      return {
-        alarms,
-        pagination: {
-          total,
-          pages: Math.ceil(total / limit),
-          currentPage: page,
-          limit,
-        },
-      };
-    }),
 } satisfies TRPCRouterRecord;

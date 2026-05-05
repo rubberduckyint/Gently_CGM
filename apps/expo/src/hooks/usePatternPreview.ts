@@ -9,7 +9,10 @@
 
 import { useState } from "react";
 
-import type { LedColor, LedPattern, VibrationIntensity } from "~/types";
+// BLE protocol types for device pattern control
+type LedColor = "RED" | "GREEN" | "BLUE" | "YELLOW" | "MAGENTA" | "CYAN" | "WHITE";
+type LedPattern = "OFF" | "SOLID" | "BLINK_SLOW" | "BLINK_FAST" | "PULSE" | "STROBE";
+type VibrationIntensity = "LOW" | "MEDIUM" | "HIGH" | "MAXIMUM";
 import { useBLE } from "~/contexts/BLEContext";
 import {
   createTriggerLedPatternRequest,

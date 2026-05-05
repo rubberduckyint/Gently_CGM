@@ -34,10 +34,6 @@ import {
   trackBleConnectionSuccess,
   trackBleDisconnection,
 } from "~/services/analytics";
-import {
-  createAcknowledgeEventRequest,
-  parseAcknowledgeEventResponse,
-} from "~/services/ble/commands/acknowledgeEvent";
 import { createGetDeviceInfoRequest } from "~/services/ble/commands/getDeviceInfo";
 import {
   createGetUptimeRequest,
@@ -64,7 +60,6 @@ import {
 } from "~/services/ble/notifications";
 import { FACTORY_BRACELET_KEY, ResponseStatus } from "~/services/ble/types";
 import { requestBluetoothPermissions } from "~/services/ble/utils";
-import { NotificationService } from "~/services/notifications";
 import { authClient } from "~/utils/auth";
 import { isTestUserSession } from "~/utils/testMode";
 
@@ -107,20 +102,11 @@ export interface BLEConnectionProgress {
 
 export type BLEConnectionCallback = (progress: BLEConnectionProgress) => void;
 
-export interface ActiveAlarmNotification {
-  eventIndex: number;
-  eventState: number;
-  eventStateText: string;
-  timestamp: Date;
-  alarmTitle?: string; // Optional alarm title from device
-}
-
 export interface BLEContextValue {
   connectionState: BLEConnectionState;
   connectedDevice: BLEDeviceInfo | null;
   encryptionKey: string | null;
   notifications: BLENotification[];
-  activeAlarm: ActiveAlarmNotification | null;
   setConnectedDevice: (device: BLEDeviceInfo | null) => void;
   setEncryptionKey: (key: string | null) => void;
   setConnectionState: (state: BLEConnectionState) => void;
@@ -137,7 +123,6 @@ export interface BLEContextValue {
   addNotification: (notification: BLENotification) => void;
   getConnectionStatus: () => BLEConnectionState;
   isDeviceConnected: () => boolean;
-  acknowledgeAlarm: (eventIndex: number) => Promise<void>;
   // Connection methods
   connectToDevice: (
     serialNumber: string,
@@ -185,23 +170,15 @@ function getCommandName(command: number): string {
   const commandNames: Record<number, string> = {
     0x01: "GET_UPTIME",
     0x02: "GET_DEVICE_INFO",
-    0x03: "GET_EVENT",
-    0x04: "ADD_EVENT",
-    0x05: "SET_EVENT_ON_OFF",
-    0x06: "GET_ALL_EVENTS",
-    0x07: "REMOVE_EVENT",
-    0x08: "REMOVE_ALL_EVENTS",
-    0x09: "GET_NUMBER_OF_EVENTS",
     0x0a: "GET_TIME",
     0x0b: "SET_TIME",
     0x0c: "GET_DEVICE_STATUS",
-    0x0d: "ACKNOWLEDGE_EVENT",
-    0x0e: "SET_BRACELET_KEY",
-    0x0f: "GET_BRACELET_KEY",
     0x10: "FIND_ME",
     0x11: "ENTER_DFU_MODE",
     0x12: "REBOOT_BRACELET",
-    0x13: "SET_DYNAMIC_KEY",
+    0x14: "TRIGGER_LED_PATTERN",
+    0x15: "TRIGGER_VIBRATION_PATTERN",
+    0x16: "TRIGGER_AUDIO_PATTERN",
   };
   return (
     commandNames[command] ??
@@ -221,8 +198,6 @@ export function BLEProvider({ children }: BLEProviderProps) {
   );
   const [encryptionKey, setEncryptionKey] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<BLENotification[]>([]);
-  const [activeAlarm, setActiveAlarm] =
-    useState<ActiveAlarmNotification | null>(null);
 
   // Use refs to maintain stable references for event handlers
   const bleInitialized = useRef(false);
@@ -248,13 +223,13 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
   // Create stable event handlers using refs
   const stableHandleStopScan = useCallback(() => {
-    console.log("🛑 [BLE Context] Scan stopped event received");
+    console.log("[BLE Context] Scan stopped event received");
     console.log(
-      `📊 [BLE Context] Current connection state: ${connectionStateRef.current}`,
+      `[BLE Context] Current connection state: ${connectionStateRef.current}`,
     );
     if (connectionStateRef.current === "scanning") {
       console.log(
-        "🔄 [BLE Context] Changing connection state from scanning to disconnected",
+        "[BLE Context] Changing connection state from scanning to disconnected",
       );
       setConnectionState("disconnected");
     }
@@ -292,7 +267,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
         // Convert received data to Uint8Array
         const encryptedData = new Uint8Array(data.value);
 
-        // Decrypt notifications (simplified version for context)
+        // Decrypt notifications
         const tea = new TEAEncryption(encryptionKeyRef.current);
         const decryptedData = new Uint8Array(encryptedData.length);
 
@@ -311,7 +286,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
           // This is a command response, not a notification - should be handled by command responses
           const commandName = getCommandName(command);
           console.log(
-            `📨 [BLE Context] Received ${commandName} response (command 0x${command.toString(16).padStart(2, "0")})`,
+            `[BLE Context] Received ${commandName} response (command 0x${command.toString(16).padStart(2, "0")})`,
           );
           console.log(`   └─ Length: ${decryptedData.length} bytes`);
           return;
@@ -333,7 +308,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
             detailedDescription = `Battery: ${batteryNotification.batteryLevelText} (${batteryNotification.batteryVoltage}mV)${batteryNotification.isCharging ? " - Charging" : ""}`;
 
             console.log(
-              `🔋 [BLE Context] Battery Status: ${batteryNotification.batteryLevelText} at ${batteryNotification.batteryVoltage}mV${batteryNotification.isCharging ? " (Charging)" : " (Not Charging)"}`,
+              `[BLE Context] Battery Status: ${batteryNotification.batteryLevelText} at ${batteryNotification.batteryVoltage}mV${batteryNotification.isCharging ? " (Charging)" : " (Not Charging)"}`,
             );
             console.log(
               `   └─ Battery Level: ${batteryNotification.batteryLevel}/4 (${batteryNotification.batteryLevelText})`,
@@ -346,69 +321,11 @@ export function BLEProvider({ children }: BLEProviderProps) {
             detailedDescription = `Event ${eventNotification.eventIndex}: ${eventNotification.eventStateText}`;
 
             console.log(
-              `⚡ [BLE Context] Event Status: Event #${eventNotification.eventIndex} is ${eventNotification.eventStateText}`,
+              `[BLE Context] Event Status: Event #${eventNotification.eventIndex} is ${eventNotification.eventStateText}`,
             );
             console.log(
               `   └─ State Code: ${eventNotification.eventState} (${eventNotification.eventStateText})`,
             );
-
-            console.log(`   └─ Raw Data:`, Array.from(decryptedData));
-            console.log(`   └─ Decrypted Data:`, Array.from(decryptedData));
-            console.log(`   └─ Event Notification:`, eventNotification);
-
-            // Log when an alarm/event starts (state 2 = "ON (vibrating)")
-            if (eventNotification.eventState === 2) {
-              console.log(
-                `🚨 [BLE Context] ALARM TRIGGERED: Event #${eventNotification.eventIndex} is now vibrating!`,
-              );
-
-              // Try to get alarm title from device data
-              // The deviceIndex corresponds to eventIndex
-              let alarmTitle: string | undefined;
-              if (connectedDeviceRef.current?.id) {
-                try {
-                  // We'll store the device data in the context to access alarm titles
-                  // For now, use a generic title
-                  alarmTitle = undefined;
-                } catch (error) {
-                  console.warn("Could not fetch alarm title:", error);
-                }
-              }
-
-              // Set active alarm to show notification modal
-              setActiveAlarm({
-                eventIndex: eventNotification.eventIndex,
-                eventState: eventNotification.eventState,
-                eventStateText: eventNotification.eventStateText,
-                timestamp: new Date(),
-                alarmTitle,
-              });
-
-              // Send push notification when alarm triggers
-              try {
-                const deviceName =
-                  connectedDeviceRef.current?.name ?? "Gently Device";
-                void NotificationService.showAlarmNotification(
-                  alarmTitle ?? `Alarm #${eventNotification.eventIndex + 1}`,
-                  deviceName,
-                  eventNotification.eventIndex,
-                );
-                console.log(
-                  "📱 [BLE Context] Push notification sent for alarm trigger",
-                );
-              } catch (notifError) {
-                console.warn(
-                  "⚠️ [BLE Context] Failed to send push notification:",
-                  notifError,
-                );
-              }
-            } else if (eventNotification.eventState === 0) {
-              // Clear active alarm when event turns off
-              console.log(
-                `🔕 [BLE Context] ALARM STOPPED: Event #${eventNotification.eventIndex} turned off`,
-              );
-              setActiveAlarm(null);
-            }
           } else {
             // Time Notification (command === 0x82)
             const timeNotification = parseTimeNotification(decryptedData);
@@ -421,7 +338,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
               timeNotification.dateTime.toLocaleTimeString();
 
             console.log(
-              `⏰ [BLE Context] Time Update: ${formattedDate} at ${formattedTime}`,
+              `[BLE Context] Time Update: ${formattedDate} at ${formattedTime}`,
             );
             console.log(`   └─ Day: ${timeNotification.weekDayText}`);
             console.log(
@@ -438,11 +355,11 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
           setNotifications((prev) => [...prev, contextNotification]);
           console.log(
-            `📲 [BLE Context] Notification Summary: ${detailedDescription}`,
+            `[BLE Context] Notification Summary: ${detailedDescription}`,
           );
         } else {
           console.warn(
-            "⚠️ [BLE Context] Could not parse notification - unknown format:",
+            "[BLE Context] Could not parse notification - unknown format:",
             {
               encryptedLength: encryptedData.length,
               decryptedLength: decryptedData.length,
@@ -464,7 +381,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
     }
 
     console.log(
-      "🚀 [BLE Context] Initializing BLE manager and global listeners...",
+      "[BLE Context] Initializing BLE manager and global listeners...",
     );
 
     bleInitialized.current = true;
@@ -473,21 +390,21 @@ export function BLEProvider({ children }: BLEProviderProps) {
     void requestBluetoothPermissions().then((granted) => {
       if (!granted) {
         console.warn(
-          "⚠️ [BLE Context] Bluetooth permissions not granted, BLE functionality may be limited",
+          "[BLE Context] Bluetooth permissions not granted, BLE functionality may be limited",
         );
       }
 
       BleManager.start({ showAlert: false })
         .then(() => {
-          console.log("✅ [BLE Context] BLE Manager started successfully");
+          console.log("[BLE Context] BLE Manager started successfully");
         })
         .catch((error) => {
-          console.error("❌ [BLE Context] BLE Manager failed to start:", error);
+          console.error("[BLE Context] BLE Manager failed to start:", error);
           bleInitialized.current = false; // Reset on error
         });
     });
 
-    console.log("👂 [BLE Context] Setting up global BLE event listeners...");
+    console.log("[BLE Context] Setting up global BLE event listeners...");
     const listeners = [
       BleManager.onStopScan(stableHandleStopScan),
       BleManager.onDisconnectPeripheral(stableHandleDisconnectedDevice),
@@ -497,7 +414,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
     ];
     listenersRef.current = listeners;
     console.log(
-      `✅ [BLE Context] ${listeners.length} global listeners registered`,
+      `[BLE Context] ${listeners.length} global listeners registered`,
     );
 
     return () => {
@@ -520,7 +437,6 @@ export function BLEProvider({ children }: BLEProviderProps) {
     connectedDevice,
     encryptionKey,
     notifications,
-    activeAlarm,
     setConnectedDevice,
     setEncryptionKey,
     setConnectionState,
@@ -535,7 +451,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
       // Use mock BLE for test users
       if (isTestUser) {
-        console.log(`🧪 [BLE Context] Using mock BLE service for test user`);
+        console.log(`[BLE Context] Using mock BLE service for test user`);
         return mockBLE.mockSendCommand(command, timeoutMs);
       }
 
@@ -545,7 +461,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           console.log(
-            `🔄 [BLE Context] Sending command 0x${command.command.toString(16)} (attempt ${attempt}/${maxRetries})`,
+            `[BLE Context] Sending command 0x${command.command.toString(16)} (attempt ${attempt}/${maxRetries})`,
           );
 
           const response = await sendCommand({
@@ -557,7 +473,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
           if (attempt > 1) {
             console.log(
-              `✅ [BLE Context] Command succeeded on attempt ${attempt}`,
+              `[BLE Context] Command succeeded on attempt ${attempt}`,
             );
           }
 
@@ -565,19 +481,19 @@ export function BLEProvider({ children }: BLEProviderProps) {
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
           console.warn(
-            `⚠️ [BLE Context] Command attempt ${attempt}/${maxRetries} failed:`,
+            `[BLE Context] Command attempt ${attempt}/${maxRetries} failed:`,
             lastError.message,
           );
 
           if (attempt === maxRetries) {
             console.error(
-              `❌ [BLE Context] Command failed after ${maxRetries} attempts`,
+              `[BLE Context] Command failed after ${maxRetries} attempts`,
             );
             throw lastError;
           }
 
           const delayMs = attempt * 1000;
-          console.log(`⏳ [BLE Context] Waiting ${delayMs}ms before retry...`);
+          console.log(`[BLE Context] Waiting ${delayMs}ms before retry...`);
           await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
       }
@@ -590,7 +506,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
       timeoutMs = 30000,
     ) => {
       console.log(
-        `📤 [BLE Context] sendMultiPacketBLECommand called:`,
+        `[BLE Context] sendMultiPacketBLECommand called:`,
         JSON.stringify(
           {
             command: `0x${command.command.toString(16)}`,
@@ -609,14 +525,14 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
       if (!connectedDevice || !encryptionKey) {
         console.error(
-          "❌ [BLE Context] sendMultiPacketBLECommand failed - device not connected or encryption key missing",
+          "[BLE Context] sendMultiPacketBLECommand failed - device not connected or encryption key missing",
         );
         throw new Error("Device not connected or encryption key missing");
       }
 
       if (connectionState !== "connected") {
         console.error(
-          `❌ [BLE Context] sendMultiPacketBLECommand failed - invalid connection state: ${connectionState}`,
+          `[BLE Context] sendMultiPacketBLECommand failed - invalid connection state: ${connectionState}`,
         );
         throw new Error(`Invalid connection state: ${connectionState}`);
       }
@@ -624,7 +540,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
       // Use mock BLE for test users
       if (isTestUser) {
         console.log(
-          `🧪 [BLE Context] Using mock BLE multi-packet service for test user`,
+          `[BLE Context] Using mock BLE multi-packet service for test user`,
         );
         return mockBLE.mockSendMultiPacketCommand(
           command,
@@ -639,7 +555,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           console.log(
-            `🔄 [BLE Context] Sending multi-packet command 0x${command.command.toString(16)} (attempt ${attempt}/${maxRetries})`,
+            `[BLE Context] Sending multi-packet command 0x${command.command.toString(16)} (attempt ${attempt}/${maxRetries})`,
           );
 
           const response = await sendMultiPacketCommand(
@@ -652,11 +568,11 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
           if (attempt > 1) {
             console.log(
-              `✅ [BLE Context] Multi-packet command succeeded on attempt ${attempt}`,
+              `[BLE Context] Multi-packet command succeeded on attempt ${attempt}`,
             );
           } else {
             console.log(
-              `✅ [BLE Context] Multi-packet command 0x${command.command.toString(16)} succeeded on first attempt`,
+              `[BLE Context] Multi-packet command 0x${command.command.toString(16)} succeeded on first attempt`,
             );
           }
 
@@ -664,20 +580,20 @@ export function BLEProvider({ children }: BLEProviderProps) {
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error));
           console.warn(
-            `⚠️ [BLE Context] Multi-packet command attempt ${attempt}/${maxRetries} failed:`,
+            `[BLE Context] Multi-packet command attempt ${attempt}/${maxRetries} failed:`,
             lastError.message,
           );
 
           if (attempt === maxRetries) {
             console.error(
-              `❌ [BLE Context] Multi-packet command 0x${command.command.toString(16)} failed after ${maxRetries} attempts. Final error:`,
+              `[BLE Context] Multi-packet command 0x${command.command.toString(16)} failed after ${maxRetries} attempts. Final error:`,
               lastError,
             );
             throw lastError;
           }
 
           const delayMs = attempt * 1000;
-          console.log(`⏳ [BLE Context] Waiting ${delayMs}ms before retry...`);
+          console.log(`[BLE Context] Waiting ${delayMs}ms before retry...`);
           await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
       }
@@ -689,42 +605,6 @@ export function BLEProvider({ children }: BLEProviderProps) {
       setNotifications((prev) => [...prev, notification]),
     getConnectionStatus: () => connectionState,
     isDeviceConnected: () => connectionState === "connected",
-    acknowledgeAlarm: async (eventIndex: number) => {
-      console.log(`🔕 [BLE Context] Acknowledging alarm ${eventIndex}...`);
-
-      if (!connectedDevice || !encryptionKey) {
-        throw new Error(
-          "Device not connected - cannot acknowledge alarm offline",
-        );
-      }
-
-      try {
-        const command = createAcknowledgeEventRequest(eventIndex);
-        const response = await sendCommand({
-          peripheralId: connectedDevice.id,
-          command,
-          encryptionKey,
-          timeoutMs: 10000,
-        });
-
-        const result = parseAcknowledgeEventResponse(response.payload);
-
-        if (result.status === ResponseStatus.OK) {
-          console.log(
-            `✅ [BLE Context] Alarm ${eventIndex} acknowledged successfully`,
-          );
-          // Clear the active alarm from state
-          setActiveAlarm(null);
-        } else {
-          throw new Error(
-            `Failed to acknowledge alarm: Status=${result.status}`,
-          );
-        }
-      } catch (error) {
-        console.error(`❌ [BLE Context] Failed to acknowledge alarm:`, error);
-        throw error;
-      }
-    },
 
     // Connection methods
     connectToDevice: async (
@@ -733,7 +613,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
       config?: BLEConnectionConfig,
     ) => {
       console.log(
-        `🔗 [BLE Context] Starting connectToDevice for serial: ${serialNumber}`,
+        `[BLE Context] Starting connectToDevice for serial: ${serialNumber}`,
       );
 
       const defaultConfig: Required<BLEConnectionConfig> = {
@@ -745,23 +625,23 @@ export function BLEProvider({ children }: BLEProviderProps) {
         ...config,
       };
 
-      console.log(`⚙️ [BLE Context] Using connection config:`, defaultConfig);
+      console.log(`[BLE Context] Using connection config:`, defaultConfig);
 
       onProgress?.({
         step: "starting",
         progress: 0,
-        message: "🔍 Starting connection process...",
+        message: "Starting connection process...",
       });
 
       // Use mock BLE for test users
       if (isTestUser) {
-        console.log(`🧪 [BLE Context] Using mock BLE connection for test user`);
+        console.log(`[BLE Context] Using mock BLE connection for test user`);
 
         try {
           onProgress?.({
             step: "connecting",
             progress: 40,
-            message: "🔗 Connecting to simulated device...",
+            message: "Connecting to simulated device...",
           });
 
           await mockBLE.mockConnectToDevice(
@@ -772,7 +652,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
           onProgress?.({
             step: "connected",
             progress: 70,
-            message: "✅ Connected to simulated device!",
+            message: "Connected to simulated device!",
           });
 
           // Set up mock device info
@@ -791,13 +671,13 @@ export function BLEProvider({ children }: BLEProviderProps) {
           onProgress?.({
             step: "complete",
             progress: 100,
-            message: "🎉 Connection complete!",
+            message: "Connection complete!",
           });
 
           trackBleConnectionSuccess(serialNumber);
           return;
         } catch (error) {
-          console.error(`🧪 [Mock BLE] Connection failed:`, error);
+          console.error(`[Mock BLE] Connection failed:`, error);
           const errorMessage =
             error instanceof Error ? error.message : "Unknown error";
           trackBleConnectionError(`mock-${serialNumber}`, errorMessage);
@@ -808,22 +688,22 @@ export function BLEProvider({ children }: BLEProviderProps) {
       try {
         // Ensure any ongoing scan is stopped before starting
         console.log(
-          `🛑 [BLE Context] Stopping any ongoing scan before connection...`,
+          `[BLE Context] Stopping any ongoing scan before connection...`,
         );
         try {
           await BleManager.stopScan();
-          console.log(`✅ [BLE Context] Scan stopped successfully`);
+          console.log(`[BLE Context] Scan stopped successfully`);
         } catch (stopError) {
           console.log(
-            `ℹ️ [BLE Context] No scan to stop or already stopped:`,
+            `[BLE Context] No scan to stop or already stopped:`,
             stopError,
           );
         }
 
         // Wait 900ms to ensure scan is fully stopped
-        console.log(`⏱️ [BLE Context] Waiting 900ms for scan to fully stop...`);
+        console.log(`[BLE Context] Waiting 900ms for scan to fully stop...`);
         await new Promise((resolve) => setTimeout(resolve, 900));
-        console.log(`✅ [BLE Context] Wait complete, ready to proceed`);
+        console.log(`[BLE Context] Wait complete, ready to proceed`);
 
         setConnectionState("scanning");
 
@@ -831,7 +711,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
         onProgress?.({
           step: "checking_existing",
           progress: 10,
-          message: "📱 Checking for existing connections...",
+          message: "Checking for existing connections...",
         });
 
         const connectedDevices = await BleManager.getConnectedPeripherals([]);
@@ -839,50 +719,48 @@ export function BLEProvider({ children }: BLEProviderProps) {
         // Disconnect from ALL existing connections to ensure clean state
         if (connectedDevices.length > 0) {
           console.log(
-            `🔌 [BLE Context] Found ${connectedDevices.length} existing connection(s), disconnecting all...`,
+            `[BLE Context] Found ${connectedDevices.length} existing connection(s), disconnecting all...`,
           );
           onProgress?.({
             step: "disconnecting_previous",
             progress: 15,
-            message: `🔌 Disconnecting ${connectedDevices.length} previous device(s)...`,
+            message: `Disconnecting ${connectedDevices.length} previous device(s)...`,
           });
 
           for (const peripheral of connectedDevices) {
             try {
               console.log(
-                `🔌 [BLE Context] Disconnecting from ${peripheral.id} (${peripheral.name ?? "unknown"})`,
+                `[BLE Context] Disconnecting from ${peripheral.id} (${peripheral.name ?? "unknown"})`,
               );
               await disconnectFromBLEDevice(peripheral.id);
               console.log(
-                `✅ [BLE Context] Disconnected from ${peripheral.id}`,
+                `[BLE Context] Disconnected from ${peripheral.id}`,
               );
             } catch (disconnectError) {
               console.warn(
-                `⚠️ [BLE Context] Failed to disconnect from ${peripheral.id}:`,
+                `[BLE Context] Failed to disconnect from ${peripheral.id}:`,
                 disconnectError,
               );
-              // Continue with other disconnections even if one fails
             }
           }
 
           // Wait a moment for disconnections to complete
           await new Promise((resolve) => setTimeout(resolve, 500));
-          console.log(`✅ [BLE Context] All previous connections disconnected`);
+          console.log(`[BLE Context] All previous connections disconnected`);
         } else {
-          console.log(`ℹ️ [BLE Context] No existing connections found`);
+          console.log(`[BLE Context] No existing connections found`);
         }
 
         // No valid existing connection, start scanning
         onProgress?.({
           step: "scanning",
           progress: 30,
-          message: "🔍 Scanning for device...",
+          message: "Scanning for device...",
         });
 
         // Scan for device
         let foundPeripheral: Peripheral | null = null;
 
-        // Create a temporary scanForDevice implementation for this context
         foundPeripheral = await new Promise((resolve, reject) => {
           const defaultScanConfig: Required<BLEConnectionConfig> = {
             maxRetries: 3,
@@ -894,10 +772,10 @@ export function BLEProvider({ children }: BLEProviderProps) {
           };
 
           let foundDevice: Peripheral | null = null;
-          let isResolved = false; // Flag to prevent double resolution
+          let isResolved = false;
 
           const scanTimeout = setTimeout(() => {
-            if (isResolved) return; // Already found and resolved
+            if (isResolved) return;
 
             BleManager.stopScan()
               .then(() => {
@@ -906,7 +784,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
                   onProgress?.({
                     step: "scan_timeout",
                     progress: 0,
-                    message: "❌ Device not found within timeout",
+                    message: "Device not found within timeout",
                     isError: true,
                   });
                   resolve(null);
@@ -916,7 +794,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
           }, defaultScanConfig.scanTimeoutSeconds * 1000);
 
           const handleDiscoverPeripheral = (peripheral: Peripheral) => {
-            if (isResolved) return; // Already found and resolved
+            if (isResolved) return;
             if (peripheral.name !== "Gently") return;
 
             if (peripheral.advertising.manufacturerRawData) {
@@ -931,7 +809,6 @@ export function BLEProvider({ children }: BLEProviderProps) {
                     adData.serialNumber.toUpperCase() ===
                       serialNumber.toUpperCase())
                 ) {
-                  // Mark as found immediately to prevent timeout race condition
                   foundDevice = peripheral;
                   isResolved = true;
                   clearTimeout(scanTimeout);
@@ -939,13 +816,11 @@ export function BLEProvider({ children }: BLEProviderProps) {
                   onProgress?.({
                     step: "device_found",
                     progress: 50,
-                    message: `✅ Target device found: ${serialNumber}`,
+                    message: `Target device found: ${serialNumber}`,
                   });
 
-                  // Resolve immediately, don't wait for stopScan
                   resolve(peripheral);
 
-                  // Stop scan in background
                   BleManager.stopScan().catch((error) => {
                     console.warn(
                       "Error stopping scan after device found:",
@@ -994,7 +869,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
         onProgress?.({
           step: "error",
           progress: 0,
-          message: `❌ Connection failed: ${errorMessage}`,
+          message: `Connection failed: ${errorMessage}`,
           isError: true,
         });
         setConnectionState("error");
@@ -1009,7 +884,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
       config?: BLEConnectionConfig,
     ) => {
       console.log(
-        `🔗 [BLE Context] Starting connectToPeripheral for serial: ${serialNumber}, peripheral: ${peripheral.id}`,
+        `[BLE Context] Starting connectToPeripheral for serial: ${serialNumber}, peripheral: ${peripheral.id}`,
       );
 
       // Track connection attempt
@@ -1024,25 +899,25 @@ export function BLEProvider({ children }: BLEProviderProps) {
         ...config,
       };
 
-      console.log(`⚙️ [BLE Context] Using connection config:`, defaultConfig);
+      console.log(`[BLE Context] Using connection config:`, defaultConfig);
 
       onProgress?.({
         step: "starting",
         progress: 0,
-        message: "🔍 Starting connection process...",
+        message: "Starting connection process...",
       });
 
       // Use mock BLE for test users
       if (isTestUser) {
         console.log(
-          `🧪 [BLE Context] Using mock BLE connectToPeripheral for test user`,
+          `[BLE Context] Using mock BLE connectToPeripheral for test user`,
         );
 
         try {
           onProgress?.({
             step: "connecting",
             progress: 40,
-            message: "🔗 Connecting to simulated device...",
+            message: "Connecting to simulated device...",
           });
 
           await mockBLE.mockConnectToDevice(peripheral.id, serialNumber);
@@ -1050,7 +925,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
           onProgress?.({
             step: "connected",
             progress: 70,
-            message: "✅ Connected to simulated device!",
+            message: "Connected to simulated device!",
           });
 
           // Set up mock device info
@@ -1070,13 +945,13 @@ export function BLEProvider({ children }: BLEProviderProps) {
           onProgress?.({
             step: "complete",
             progress: 100,
-            message: "🎉 Connection complete!",
+            message: "Connection complete!",
           });
 
           trackBleConnectionSuccess(serialNumber);
           return;
         } catch (error) {
-          console.error(`🧪 [Mock BLE] Connection failed:`, error);
+          console.error(`[Mock BLE] Connection failed:`, error);
           const errorMessage =
             error instanceof Error ? error.message : "Unknown error";
           trackBleConnectionError(peripheral.id, errorMessage);
@@ -1087,28 +962,28 @@ export function BLEProvider({ children }: BLEProviderProps) {
       try {
         // Ensure any ongoing scan is stopped before connecting
         console.log(
-          `🛑 [BLE Context] Stopping any ongoing scan before connection...`,
+          `[BLE Context] Stopping any ongoing scan before connection...`,
         );
         try {
           await BleManager.stopScan();
-          console.log(`✅ [BLE Context] Scan stopped successfully`);
+          console.log(`[BLE Context] Scan stopped successfully`);
         } catch (stopError) {
           console.log(
-            `ℹ️ [BLE Context] No scan to stop or already stopped:`,
+            `[BLE Context] No scan to stop or already stopped:`,
             stopError,
           );
         }
 
         // Wait 900ms to ensure scan is fully stopped
-        console.log(`⏱️ [BLE Context] Waiting 900ms for scan to fully stop...`);
+        console.log(`[BLE Context] Waiting 900ms for scan to fully stop...`);
         await new Promise((resolve) => setTimeout(resolve, 900));
-        console.log(`✅ [BLE Context] Wait complete, ready to connect`);
+        console.log(`[BLE Context] Wait complete, ready to connect`);
 
         // Check for existing connections and disconnect from ALL devices
         onProgress?.({
           step: "checking_existing",
           progress: 10,
-          message: "📱 Checking for existing connections...",
+          message: "Checking for existing connections...",
         });
 
         const connectedDevices = await BleManager.getConnectedPeripherals([]);
@@ -1116,44 +991,43 @@ export function BLEProvider({ children }: BLEProviderProps) {
         // Disconnect from ALL existing connections to ensure clean state
         if (connectedDevices.length > 0) {
           console.log(
-            `🔌 [BLE Context] Found ${connectedDevices.length} existing connection(s), disconnecting all...`,
+            `[BLE Context] Found ${connectedDevices.length} existing connection(s), disconnecting all...`,
           );
           onProgress?.({
             step: "disconnecting_previous",
             progress: 15,
-            message: `🔌 Disconnecting ${connectedDevices.length} previous device(s)...`,
+            message: `Disconnecting ${connectedDevices.length} previous device(s)...`,
           });
 
           for (const existingPeripheral of connectedDevices) {
             try {
               console.log(
-                `🔌 [BLE Context] Disconnecting from ${existingPeripheral.id} (${existingPeripheral.name ?? "unknown"})`,
+                `[BLE Context] Disconnecting from ${existingPeripheral.id} (${existingPeripheral.name ?? "unknown"})`,
               );
               await disconnectFromBLEDevice(existingPeripheral.id);
               console.log(
-                `✅ [BLE Context] Disconnected from ${existingPeripheral.id}`,
+                `[BLE Context] Disconnected from ${existingPeripheral.id}`,
               );
             } catch (disconnectError) {
               console.warn(
-                `⚠️ [BLE Context] Failed to disconnect from ${existingPeripheral.id}:`,
+                `[BLE Context] Failed to disconnect from ${existingPeripheral.id}:`,
                 disconnectError,
               );
-              // Continue with other disconnections even if one fails
             }
           }
 
           // Wait a moment for disconnections to complete
           await new Promise((resolve) => setTimeout(resolve, 500));
-          console.log(`✅ [BLE Context] All previous connections disconnected`);
+          console.log(`[BLE Context] All previous connections disconnected`);
         } else {
-          console.log(`ℹ️ [BLE Context] No existing connections found`);
+          console.log(`[BLE Context] No existing connections found`);
         }
 
         // No valid existing connection, connect to the provided peripheral
         onProgress?.({
           step: "connecting",
           progress: 30,
-          message: "🔗 Connecting to discovered device...",
+          message: "Connecting to discovered device...",
         });
 
         // Connect to the found device
@@ -1169,7 +1043,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
         onProgress?.({
           step: "error",
           progress: 0,
-          message: `❌ Connection failed: ${errorMessage}`,
+          message: `Connection failed: ${errorMessage}`,
           isError: true,
         });
         setConnectionState("error");
@@ -1181,7 +1055,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
     disconnectDevice: async () => {
       console.log(
-        `🔌 [BLE Context] disconnectDevice called:`,
+        `[BLE Context] disconnectDevice called:`,
         JSON.stringify(
           {
             hasConnectedDevice: !!connectedDevice,
@@ -1198,13 +1072,13 @@ export function BLEProvider({ children }: BLEProviderProps) {
       if (connectedDevice) {
         try {
           console.log(
-            `🔌 [BLE Context] Disconnecting from device: ${connectedDevice.id} (${connectedDevice.name})`,
+            `[BLE Context] Disconnecting from device: ${connectedDevice.id} (${connectedDevice.name})`,
           );
 
           // Use mock BLE for test users
           if (isTestUser) {
             console.log(
-              `🧪 [BLE Context] Using mock BLE disconnect for test user`,
+              `[BLE Context] Using mock BLE disconnect for test user`,
             );
             await mockBLE.mockDisconnectDevice();
           } else {
@@ -1212,7 +1086,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
           }
 
           console.log(
-            `✅ [BLE Context] Successfully disconnected from device: ${connectedDevice.id}`,
+            `[BLE Context] Successfully disconnected from device: ${connectedDevice.id}`,
           );
 
           // Remove the stored encryption key (skip for test users)
@@ -1226,26 +1100,26 @@ export function BLEProvider({ children }: BLEProviderProps) {
                 `ble_device_${sanitizedDeviceId}`,
               );
               console.log(
-                `🗑️ [BLE Context] Removed stored encryption key for ${connectedDevice.id}`,
+                `[BLE Context] Removed stored encryption key for ${connectedDevice.id}`,
               );
             } catch (keyError) {
               console.warn(
-                `⚠️ [BLE Context] Failed to remove encryption key for ${connectedDevice.id}:`,
+                `[BLE Context] Failed to remove encryption key for ${connectedDevice.id}:`,
                 keyError,
               );
             }
           }
         } catch (error) {
-          console.warn("❌ [BLE Context] Disconnect error:", error);
+          console.warn("[BLE Context] Disconnect error:", error);
         }
       } else {
         console.log(
-          "ℹ️ [BLE Context] No device connected, clearing state only",
+          "[BLE Context] No device connected, clearing state only",
         );
       }
 
       console.log(
-        "🧹 [BLE Context] Clearing connection state and encryption key",
+        "[BLE Context] Clearing connection state and encryption key",
       );
       // Track disconnection
       if (connectedDevice?.id) {
@@ -1254,7 +1128,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
       setConnectedDevice(null);
       setEncryptionKey(null);
       setConnectionState("disconnected");
-      console.log("✅ [BLE Context] Device disconnection complete");
+      console.log("[BLE Context] Device disconnection complete");
     },
 
     scanForDevice: async (
@@ -1263,7 +1137,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
       config?: BLEConnectionConfig,
     ): Promise<Peripheral | null> => {
       console.log(
-        `🔍 [BLE Context] scanForDevice called:`,
+        `[BLE Context] scanForDevice called:`,
         JSON.stringify(
           {
             serialNumber,
@@ -1286,29 +1160,29 @@ export function BLEProvider({ children }: BLEProviderProps) {
       };
 
       console.log(
-        `⚙️ [BLE Context] scanForDevice config:`,
+        `[BLE Context] scanForDevice config:`,
         JSON.stringify(defaultConfig, null, 2),
       );
 
       return new Promise((resolve, reject) => {
         console.log(
-          `⏱️ [BLE Context] Setting scan timeout for ${defaultConfig.scanTimeoutSeconds} seconds`,
+          `[BLE Context] Setting scan timeout for ${defaultConfig.scanTimeoutSeconds} seconds`,
         );
         const scanTimeout = setTimeout(() => {
           console.log(
-            `⏰ [BLE Context] Scan timeout reached (${defaultConfig.scanTimeoutSeconds}s), stopping scan`,
+            `[BLE Context] Scan timeout reached (${defaultConfig.scanTimeoutSeconds}s), stopping scan`,
           );
           BleManager.stopScan()
             .then(() => {
-              console.log(`🛑 [BLE Context] Scan stopped due to timeout`);
+              console.log(`[BLE Context] Scan stopped due to timeout`);
               if (!foundDevice) {
                 console.log(
-                  `❌ [BLE Context] No target device found within timeout period`,
+                  `[BLE Context] No target device found within timeout period`,
                 );
                 onProgress?.({
                   step: "scan_timeout",
                   progress: 0,
-                  message: "❌ Device not found within timeout",
+                  message: "Device not found within timeout",
                   isError: true,
                 });
                 resolve(null);
@@ -1325,20 +1199,20 @@ export function BLEProvider({ children }: BLEProviderProps) {
           }
 
           console.log(
-            `🎯 [BLE Context] Found Gently device, checking serial number...`,
+            `[BLE Context] Found Gently device, checking serial number...`,
           );
 
           if (peripheral.advertising.manufacturerRawData) {
             try {
               console.log(
-                `🔍 [BLE Context] Processing advertisement data for device: ${peripheral.id}`,
+                `[BLE Context] Processing advertisement data for device: ${peripheral.id}`,
               );
               const adData = extractAndDecryptAdvertisementData(
                 peripheral.advertising.manufacturerRawData,
               );
 
               console.log(
-                `📊 [BLE Context] Advertisement data:`,
+                `[BLE Context] Advertisement data:`,
                 JSON.stringify(
                   {
                     deviceId: peripheral.id,
@@ -1363,53 +1237,53 @@ export function BLEProvider({ children }: BLEProviderProps) {
                     serialNumber.toUpperCase())
               ) {
                 console.log(
-                  `🎉 [BLE Context] Target device found! Serial: ${adData.serialNumber}, Device: ${peripheral.id}`,
+                  `[BLE Context] Target device found! Serial: ${adData.serialNumber}, Device: ${peripheral.id}`,
                 );
 
                 onProgress?.({
                   step: "device_found",
                   progress: 50,
-                  message: `✅ Target device found: ${serialNumber}`,
+                  message: `Target device found: ${serialNumber}`,
                 });
 
                 foundDevice = peripheral;
                 clearTimeout(scanTimeout);
 
                 console.log(
-                  `🛑 [BLE Context] Stopping scan after finding target device`,
+                  `[BLE Context] Stopping scan after finding target device`,
                 );
                 BleManager.stopScan()
                   .then(() => {
                     console.log(
-                      `✅ [BLE Context] Scan stopped successfully, resolving with device`,
+                      `[BLE Context] Scan stopped successfully, resolving with device`,
                     );
                     resolve(peripheral);
                   })
                   .catch(reject);
               } else {
                 console.log(
-                  `❌ [BLE Context] Serial number mismatch - looking for: ${serialNumber}, found: ${adData?.serialNumber ?? "none"}`,
+                  `[BLE Context] Serial number mismatch - looking for: ${serialNumber}, found: ${adData?.serialNumber ?? "none"}`,
                 );
               }
             } catch (error) {
               console.warn(
-                "❌ [BLE Context] Error processing advertisement data:",
+                "[BLE Context] Error processing advertisement data:",
                 error,
               );
             }
           } else {
             console.log(
-              `⚠️ [BLE Context] No manufacturer data found for device: ${peripheral.id}`,
+              `[BLE Context] No manufacturer data found for device: ${peripheral.id}`,
             );
           }
         };
 
         // Start scanning
-        console.log(`📡 [BLE Context] Setting up peripheral discovery handler`);
+        console.log(`[BLE Context] Setting up peripheral discovery handler`);
         BleManager.onDiscoverPeripheral(handleDiscoverPeripheral);
 
         console.log(
-          `🚀 [BLE Context] Starting BLE scan with parameters:`,
+          `[BLE Context] Starting BLE scan with parameters:`,
           JSON.stringify(
             {
               serviceUUIDs: [],
@@ -1427,6 +1301,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
           ),
         );
 
+        console.log(`[BLE Context] Initiating BLE scan...`);
         BleManager.scan({
           serviceUUIDs: [],
           seconds: defaultConfig.scanTimeoutSeconds,
@@ -1451,12 +1326,12 @@ export function BLEProvider({ children }: BLEProviderProps) {
       timeoutSeconds = 30,
     ): Promise<void> => {
       console.log(
-        `🔍 [BLE Context] Starting scanForDevices with timeout: ${timeoutSeconds}s`,
+        `[BLE Context] Starting scanForDevices with timeout: ${timeoutSeconds}s`,
       );
 
       // Use mock BLE for test users
       if (isTestUser) {
-        console.log(`🧪 [BLE Context] Using mock BLE scanning for test user`);
+        console.log(`[BLE Context] Using mock BLE scanning for test user`);
         return mockBLE.mockScanForDevices(onDeviceFound, timeoutSeconds);
       }
 
@@ -1465,17 +1340,17 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
         const scanTimeout = setTimeout(() => {
           console.log(
-            `⏰ [BLE Context] Scan timeout reached after ${timeoutSeconds}s`,
+            `[BLE Context] Scan timeout reached after ${timeoutSeconds}s`,
           );
           BleManager.stopScan()
             .then(() => {
               console.log(
-                `✅ [BLE Context] Device scan completed after ${timeoutSeconds}s, found ${gentlyDevicesFound} Gently devices`,
+                `[BLE Context] Device scan completed after ${timeoutSeconds}s, found ${gentlyDevicesFound} Gently devices`,
               );
               resolve();
             })
             .catch((error) => {
-              console.error(`❌ [BLE Context] Error stopping scan:`, error);
+              console.error(`[BLE Context] Error stopping scan:`, error);
               reject(error instanceof Error ? error : new Error(String(error)));
             });
         }, timeoutSeconds * 1000);
@@ -1485,7 +1360,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
           if (peripheral.name === "Gently") {
             gentlyDevicesFound++;
             console.log(
-              `🎯 [BLE Context] Gently device discovered: ${peripheral.id} (${gentlyDevicesFound} total)`,
+              `[BLE Context] Gently device discovered: ${peripheral.id} (${gentlyDevicesFound} total)`,
             );
 
             try {
@@ -1495,45 +1370,36 @@ export function BLEProvider({ children }: BLEProviderProps) {
                 );
                 if (adData) {
                   console.log(
-                    `✅ [BLE Context] Successfully decrypted advertisement data:`,
+                    `[BLE Context] Successfully decrypted advertisement data:`,
                     adData,
                   );
                 } else {
                   console.warn(
-                    `⚠️ [BLE Context] Failed to decrypt advertisement data for Gently device ${peripheral.id}`,
+                    `[BLE Context] Failed to decrypt advertisement data for Gently device ${peripheral.id}`,
                   );
                 }
                 onDeviceFound(peripheral, adData);
               } else {
                 console.log(
-                  `📡 [BLE Context] No manufacturer data for Gently device ${peripheral.id}, calling onDeviceFound anyway`,
+                  `[BLE Context] No manufacturer data for Gently device ${peripheral.id}, calling onDeviceFound anyway`,
                 );
                 onDeviceFound(peripheral);
               }
             } catch (error) {
               console.error(
-                `❌ [BLE Context] Error processing Gently device ${peripheral.id}:`,
+                `[BLE Context] Error processing Gently device ${peripheral.id}:`,
                 error,
               );
               onDeviceFound(peripheral);
             }
           }
-          // Non-Gently devices are completely ignored - not passed to onDeviceFound
         };
 
         // Start scanning
-        console.log(`🚀 [BLE Context] Starting BLE scan with settings:`, {
-          timeout: timeoutSeconds,
-          matchMode: BleScanMatchMode.Sticky,
-          scanMode: BleScanMode.LowLatency,
-          callbackType: BleScanCallbackType.AllMatches,
-          legacy: false,
-        });
-
-        console.log(`👂 [BLE Context] Setting up discovery listener`);
+        console.log(`[BLE Context] Setting up discovery listener`);
         BleManager.onDiscoverPeripheral(handleDiscoverPeripheral);
 
-        console.log(`📡 [BLE Context] Initiating BLE scan...`);
+        console.log(`[BLE Context] Initiating BLE scan...`);
         BleManager.scan({
           serviceUUIDs: [],
           seconds: timeoutSeconds,
@@ -1543,10 +1409,10 @@ export function BLEProvider({ children }: BLEProviderProps) {
           callbackType: BleScanCallbackType.AllMatches,
         })
           .then(() => {
-            console.log(`✅ [BLE Context] BLE scan initiated successfully`);
+            console.log(`[BLE Context] BLE scan initiated successfully`);
           })
           .catch((error) => {
-            console.error(`❌ [BLE Context] Failed to start BLE scan:`, error);
+            console.error(`[BLE Context] Failed to start BLE scan:`, error);
             clearTimeout(scanTimeout);
             reject(
               new Error(error instanceof Error ? error.message : String(error)),
@@ -1572,7 +1438,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
     onProgress?.({
       step: "connecting",
       progress: 60,
-      message: "🔗 Connecting to device...",
+      message: "Connecting to device...",
     });
 
     // Check if already connected and disconnect first
@@ -1595,18 +1461,18 @@ export function BLEProvider({ children }: BLEProviderProps) {
       attempt++
     ) {
       console.log(
-        `🔄 [BLE Context] Starting connection attempt ${attempt}/${config.maxRetries} to ${peripheral.id}`,
+        `[BLE Context] Starting connection attempt ${attempt}/${config.maxRetries} to ${peripheral.id}`,
       );
 
       onProgress?.({
         step: "connecting",
         progress: 60 + (attempt - 1) * 10,
-        message: `🔗 Connection attempt ${attempt}/${config.maxRetries}...`,
+        message: `Connection attempt ${attempt}/${config.maxRetries}...`,
       });
 
       try {
         console.log(
-          `📞 [BLE Context] Calling BleManager.connect() for ${peripheral.id}...`,
+          `[BLE Context] Calling BleManager.connect() for ${peripheral.id}...`,
         );
 
         // Connect with timeout
@@ -1626,12 +1492,12 @@ export function BLEProvider({ children }: BLEProviderProps) {
         await Promise.race([connectPromise, timeoutPromise]);
 
         console.log(
-          `✅ [BLE Context] BleManager.connect() succeeded for ${peripheral.id}`,
+          `[BLE Context] BleManager.connect() succeeded for ${peripheral.id}`,
         );
 
         // Stabilization delay
         console.log(
-          `⏱️ [BLE Context] Waiting ${config.stabilizationDelayMs}ms for connection to stabilize...`,
+          `[BLE Context] Waiting ${config.stabilizationDelayMs}ms for connection to stabilize...`,
         );
         await new Promise((resolve) =>
           setTimeout(resolve, config.stabilizationDelayMs),
@@ -1639,7 +1505,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
         // Verify connection
         console.log(
-          `🔍 [BLE Context] Verifying connection to ${peripheral.id}...`,
+          `[BLE Context] Verifying connection to ${peripheral.id}...`,
         );
         const isNowConnected = await BleManager.isPeripheralConnected(
           peripheral.id,
@@ -1649,22 +1515,18 @@ export function BLEProvider({ children }: BLEProviderProps) {
         }
 
         console.log(
-          `✅ [BLE Context] Connection verified for ${peripheral.id}`,
-        );
-
-        console.log(
-          `✅ [BLE Context] Connection verified for ${peripheral.id}`,
+          `[BLE Context] Connection verified for ${peripheral.id}`,
         );
 
         // Configure MTU for Android
         if (Platform.OS === "android") {
           try {
             console.log(
-              `📏 [BLE Context] Requesting MTU ${config.mtuSize} for ${peripheral.id}...`,
+              `[BLE Context] Requesting MTU ${config.mtuSize} for ${peripheral.id}...`,
             );
             await BleManager.requestMTU(peripheral.id, config.mtuSize);
             console.log(
-              `✅ [BLE Context] MTU configured successfully for ${peripheral.id}`,
+              `[BLE Context] MTU configured successfully for ${peripheral.id}`,
             );
           } catch (mtuError) {
             console.warn("MTU configuration failed:", mtuError);
@@ -1673,17 +1535,17 @@ export function BLEProvider({ children }: BLEProviderProps) {
 
         // Retrieve services and start notifications
         console.log(
-          `🔍 [BLE Context] Retrieving services for ${peripheral.id}...`,
+          `[BLE Context] Retrieving services for ${peripheral.id}...`,
         );
         await BleManager.retrieveServices(peripheral.id);
-        console.log(`✅ [BLE Context] Services retrieved for ${peripheral.id}`);
+        console.log(`[BLE Context] Services retrieved for ${peripheral.id}`);
 
         console.log(
-          `🔔 [BLE Context] Starting notifications for ${peripheral.id}...`,
+          `[BLE Context] Starting notifications for ${peripheral.id}...`,
         );
         await startNotifications(peripheral.id);
         console.log(
-          "🔔 [BLE Context] Notifications enabled for new connection - device will send battery, event, and time notifications",
+          "[BLE Context] Notifications enabled for new connection",
         );
 
         connected = true;
@@ -1691,7 +1553,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
         onProgress?.({
           step: "generating_key",
           progress: 80,
-          message: "🔐 Generating encryption key...",
+          message: "Generating encryption key...",
         });
       } catch (attemptError) {
         lastError =
@@ -1700,7 +1562,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
             : new Error(String(attemptError));
 
         console.error(
-          `❌ [BLE Context] Connection attempt ${attempt} failed:`,
+          `[BLE Context] Connection attempt ${attempt} failed:`,
           lastError.message,
         );
 
@@ -1709,7 +1571,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
           onProgress?.({
             step: "retrying",
             progress: 60 + (attempt - 1) * 10,
-            message: `⏳ Attempt ${attempt} failed, retrying in ${retryDelay / 1000}s...`,
+            message: `Attempt ${attempt} failed, retrying in ${retryDelay / 1000}s...`,
           });
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
         }
@@ -1737,7 +1599,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
     onProgress?.({
       step: "validating",
       progress: 90,
-      message: "📋 Validating connection...",
+      message: "Validating connection...",
     });
 
     // Validate with device info
@@ -1754,7 +1616,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
     }
 
     // Set device time to current time
-    console.log(`⏰ [BLE Context] Syncing device time for ${peripheral.id}...`);
+    console.log(`[BLE Context] Syncing device time for ${peripheral.id}...`);
     try {
       await sendCommand({
         peripheralId: peripheral.id,
@@ -1762,13 +1624,12 @@ export function BLEProvider({ children }: BLEProviderProps) {
         encryptionKey: foundEncryptionKey,
         timeoutMs: 10000,
       });
-      console.log(`✅ [BLE Context] Device time synced successfully`);
+      console.log(`[BLE Context] Device time synced successfully`);
     } catch (timeError) {
       console.warn(
-        `⚠️ [BLE Context] Failed to sync device time (non-critical):`,
+        `[BLE Context] Failed to sync device time (non-critical):`,
         timeError,
       );
-      // Don't throw - time sync failure shouldn't prevent connection
     }
 
     // Store the encryption key
@@ -1794,7 +1655,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
     onProgress?.({
       step: "connection_complete",
       progress: 100,
-      message: "🎉 Device connected successfully!",
+      message: "Device connected successfully!",
     });
   };
 

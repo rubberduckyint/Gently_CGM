@@ -6,7 +6,6 @@ import { vexo } from "vexo-analytics";
 
 import "react-native-reanimated";
 
-import { AlarmNotificationModal } from "~/components/AlarmNotificationModal";
 import { BLEProvider } from "~/contexts/BLEContext";
 import { NotificationService } from "~/services/notifications";
 import { queryClient } from "~/utils/api";
@@ -17,9 +16,9 @@ if (!__DEV__) {
   const vexoApiKey = process.env.EXPO_PUBLIC_VEXO_API_KEY;
   if (vexoApiKey) {
     vexo(vexoApiKey);
-    console.log("📊 Vexo Analytics initialized");
+    console.log("Vexo Analytics initialized");
   } else {
-    console.warn("📊 Vexo Analytics: EXPO_PUBLIC_VEXO_API_KEY not set");
+    console.warn("Vexo Analytics: EXPO_PUBLIC_VEXO_API_KEY not set");
   }
 }
 
@@ -32,27 +31,23 @@ export default function RootLayout() {
       .then((token) => {
         if (token) {
           console.log(
-            "📱 Push notifications initialized with token:",
+            "Push notifications initialized with token:",
             token.substring(0, 30) + "...",
           );
         } else {
           console.log(
-            "⚠️ Push notifications not available (may need physical device)",
+            "Push notifications not available (may need physical device)",
           );
         }
       })
       .catch((error) => {
-        console.error("❌ Failed to initialize push notifications:", error);
+        console.error("Failed to initialize push notifications:", error);
       });
   }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
       <BLEProvider>
-        {/*
-            The Stack component displays the current page.
-            It also allows you to configure your screens 
-          */}
         <Stack
           screenOptions={{
             headerStyle: {
@@ -92,21 +87,6 @@ export default function RootLayout() {
               headerShown: false,
             }}
           />
-
-          <Stack.Screen
-            name="devices/[deviceId]/alarms/add"
-            options={{
-              title: "Add Alarm",
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name="devices/[deviceId]/alarms/edit/[alarmId]"
-            options={{
-              title: "Edit Alarm",
-              headerShown: false,
-            }}
-          />
           <Stack.Screen
             name="devices/[deviceId]/index"
             options={{
@@ -137,8 +117,6 @@ export default function RootLayout() {
           />
         </Stack>
         <StatusBar style="dark" />
-        {/* Global alarm notification modal - shows when BLE context has activeAlarm */}
-        <AlarmNotificationModal />
       </BLEProvider>
     </QueryClientProvider>
   );

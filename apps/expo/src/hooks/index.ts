@@ -4,8 +4,6 @@
  * Centralized export of all custom hooks.
  */
 
-// Alarm hooks
-export { useAlarmSync } from "./useAlarmSync";
 export { usePatternPreview } from "./usePatternPreview";
 
 // BLE hooks

@@ -13,8 +13,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useBLE } from "~/contexts/BLEContext";
-import { createRemoveAllEventsRequest } from "~/services/ble/commands/removeAllEvents";
-import { ResponseStatus } from "~/services/ble/types";
 import {
   buttons,
   cards,
@@ -31,7 +29,7 @@ export default function DeleteDevicePage() {
   const queryClient = useQueryClient();
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const { connectionState, disconnectDevice, connectedDevice, sendBLECommand } =
+  const { connectionState, disconnectDevice, connectedDevice } =
     useBLE();
 
   const {
@@ -63,51 +61,16 @@ export default function DeleteDevicePage() {
         // Check if the connected device's serial number matches this device
         if (connectedDevice.serialNumber === device.serialNumber) {
           console.log(
-            `🔌 Device ${device.serialNumber} is connected, will remove all events first...`,
+            `Device ${device.serialNumber} is connected, disconnecting before deletion...`,
           );
 
-          // Only try to send command if actually connected
-          if (connectionState === "connected") {
-            try {
-              // First, remove all events from the peripheral
-              console.log(
-                "🗑️ Sending REMOVE_ALL_EVENTS command to peripheral...",
-              );
-              const removeAllEventsCommand = createRemoveAllEventsRequest();
-              const response = await sendBLECommand(
-                removeAllEventsCommand,
-                5000,
-              );
-
-              if (response.status === ResponseStatus.OK) {
-                console.log(
-                  "✅ Successfully removed all events from peripheral",
-                );
-              } else {
-                console.warn(
-                  "⚠️ Failed to remove all events from peripheral, continuing with deletion...",
-                );
-              }
-            } catch (removeEventsError) {
-              console.warn(
-                `⚠️ Error removing events from ${device.serialNumber}:`,
-                removeEventsError,
-              );
-              // Continue with deletion even if removing events fails
-            }
-          } else {
-            console.log(
-              `⚠️ Device state is ${connectionState}, skipping REMOVE_ALL_EVENTS command`,
-            );
-          }
-
-          // Then disconnect the device
+          // Disconnect the device
           try {
             await disconnectDevice();
-            console.log(`✅ Disconnected device: ${device.serialNumber}`);
+            console.log(`Disconnected device: ${device.serialNumber}`);
           } catch (disconnectError) {
             console.warn(
-              `⚠️ Failed to disconnect ${device.serialNumber}:`,
+              `Failed to disconnect ${device.serialNumber}:`,
               disconnectError,
             );
           }
@@ -471,8 +434,7 @@ export default function DeleteDevicePage() {
                       { flex: 1, color: colors.text.primary },
                     ]}
                   >
-                    All alarms ({device.alarms.length}) will be removed from the
-                    Gently
+                    Device data will be removed
                   </Text>
                 </View>
                 <View

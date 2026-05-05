@@ -1,8 +1,7 @@
 /**
  * Settings Screen
  *
- * Allows users to update their profile information, alarm preferences, and notification settings.
- * Organized with tabs for better navigation.
+ * Allows users to update their profile information and notification settings.
  */
 
 import { useEffect, useState } from "react";
@@ -20,11 +19,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { LedColor, LedPattern, VibrationIntensity } from "~/types";
-import { AlarmPreferencesSection } from "~/components/AlarmPreferencesSection";
 import { Header } from "~/components/ui/Header";
 import {
-  trackAlarmPreferencesChanged,
   trackSettingsUpdated,
 } from "~/services/analytics";
 import {
@@ -40,7 +36,7 @@ import {
 import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 
-type SettingsTab = "profile" | "alarms" | "notifications";
+type SettingsTab = "profile" | "notifications";
 
 interface TabButtonProps {
   tab: SettingsTab;
@@ -117,13 +113,6 @@ export default function SettingsPage() {
     enabled: !!session?.user,
   });
 
-  // Alarm preference states (using shared types)
-  const [ledPattern, setLedPattern] = useState<LedPattern>("OFF");
-  const [ledColor, setLedColor] = useState<LedColor>("BLUE");
-  const [vibrationIntensity, setVibrationIntensity] =
-    useState<VibrationIntensity>("MEDIUM");
-  const [snoozePeriod, setSnoozePeriod] = useState("5");
-
   // Notification preference states
   const [defaultPushNotification, setDefaultPushNotification] = useState(true);
   const [defaultEmailNotification, setDefaultEmailNotification] =
@@ -132,10 +121,6 @@ export default function SettingsPage() {
   // Update local state when preferences load
   useEffect(() => {
     if (preferences) {
-      setLedPattern(preferences.defaultLedPattern);
-      setLedColor(preferences.defaultLedColor);
-      setVibrationIntensity(preferences.defaultVibrationIntensity);
-      setSnoozePeriod(preferences.defaultSnoozePeriod.toString());
       setDefaultPushNotification(preferences.defaultPushNotification ?? true);
       setDefaultEmailNotification(
         preferences.defaultEmailNotification ?? false,
@@ -146,10 +131,6 @@ export default function SettingsPage() {
   const updatePreferencesMutation = useMutation({
     mutationFn: async (
       data: Partial<{
-        defaultLedPattern: LedPattern;
-        defaultLedColor: LedColor;
-        defaultVibrationIntensity: VibrationIntensity;
-        defaultSnoozePeriod: number;
         defaultPushNotification: boolean;
         defaultEmailNotification: boolean;
       }>,
@@ -158,11 +139,10 @@ export default function SettingsPage() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["userPreferences"] });
-      trackAlarmPreferencesChanged();
       Alert.alert("Success", "Preferences updated successfully!");
     },
     onError: (error: Error) => {
-      console.error("❌ Failed to update preferences:", error);
+      console.error("Failed to update preferences:", error);
       Alert.alert("Error", error.message || "Failed to update preferences");
     },
   });
@@ -177,7 +157,7 @@ export default function SettingsPage() {
       Alert.alert("Success", "Profile updated successfully!");
     },
     onError: (error: Error) => {
-      console.error("❌ Failed to update profile:", error);
+      console.error("Failed to update profile:", error);
       Alert.alert("Error", error.message || "Failed to update profile");
     },
   });
@@ -213,27 +193,6 @@ export default function SettingsPage() {
     }
 
     updateProfileMutation.mutate(data);
-  };
-
-  const handleSaveAlarmPreferences = () => {
-    const snooze = parseInt(snoozePeriod);
-
-    if (isNaN(snooze)) {
-      Alert.alert("Error", "Please enter a valid number for snooze period");
-      return;
-    }
-
-    if (snooze < 1 || snooze > 60) {
-      Alert.alert("Error", "Snooze period must be between 1 and 60 minutes");
-      return;
-    }
-
-    updatePreferencesMutation.mutate({
-      defaultLedPattern: ledPattern,
-      defaultLedColor: ledColor,
-      defaultVibrationIntensity: vibrationIntensity,
-      defaultSnoozePeriod: snooze,
-    });
   };
 
   const handleSaveNotificationPreferences = () => {
@@ -357,47 +316,6 @@ export default function SettingsPage() {
     </View>
   );
 
-  const renderAlarmsTab = () => (
-    <View style={cards.base}>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          marginBottom: spacing[2],
-        }}
-      >
-        <Ionicons
-          name="alarm-outline"
-          size={24}
-          color={colors.primary[500]}
-          style={{ marginRight: spacing[2] }}
-        />
-        <Text style={typography.h5}>Alarm Defaults</Text>
-      </View>
-      <Text
-        style={[
-          typography.caption,
-          { color: colors.text.secondary, marginBottom: spacing[4] },
-        ]}
-      >
-        These settings will be used as defaults when creating new alarms
-      </Text>
-
-      <AlarmPreferencesSection
-        ledPattern={ledPattern}
-        setLedPattern={setLedPattern}
-        ledColor={ledColor}
-        setLedColor={setLedColor}
-        vibrationIntensity={vibrationIntensity}
-        setVibrationIntensity={setVibrationIntensity}
-        snoozePeriod={snoozePeriod}
-        setSnoozePeriod={setSnoozePeriod}
-        onSave={handleSaveAlarmPreferences}
-        isSaving={updatePreferencesMutation.isPending}
-      />
-    </View>
-  );
-
   const renderNotificationsTab = () => (
     <View style={{ gap: spacing[4] }}>
       {/* Notification Defaults Card */}
@@ -415,7 +333,7 @@ export default function SettingsPage() {
             color={colors.primary[500]}
             style={{ marginRight: spacing[2] }}
           />
-          <Text style={typography.h5}>Default Notifications</Text>
+          <Text style={typography.h5}>Notification Settings</Text>
         </View>
         <Text
           style={[
@@ -423,7 +341,7 @@ export default function SettingsPage() {
             { color: colors.text.secondary, marginBottom: spacing[4] },
           ]}
         >
-          These settings will be applied to new alarms by default
+          Configure how you receive notifications
         </Text>
 
         {/* Push Notifications Toggle */}
@@ -457,7 +375,7 @@ export default function SettingsPage() {
                 },
               ]}
             >
-              Receive alerts on your phone when alarms go off
+              Receive alerts on your phone
             </Text>
           </View>
           <Switch
@@ -499,7 +417,7 @@ export default function SettingsPage() {
                 },
               ]}
             >
-              Receive email alerts when alarms go off
+              Receive email alerts
             </Text>
           </View>
           <Switch
@@ -589,8 +507,7 @@ export default function SettingsPage() {
                   { color: colors.text.secondary, marginTop: spacing[2] },
                 ]}
               >
-                Push notifications will be set up when an alarm with push
-                notifications enabled first triggers.
+                Push notifications will be configured automatically when needed.
               </Text>
             </View>
           )}
@@ -620,13 +537,6 @@ export default function SettingsPage() {
           onPress={() => setActiveTab("profile")}
         />
         <TabButton
-          tab="alarms"
-          activeTab={activeTab}
-          label="Alarms"
-          icon="alarm-outline"
-          onPress={() => setActiveTab("alarms")}
-        />
-        <TabButton
           tab="notifications"
           activeTab={activeTab}
           label="Notifications"
@@ -641,7 +551,6 @@ export default function SettingsPage() {
       >
         <View style={{ paddingVertical: spacing[4] }}>
           {activeTab === "profile" && renderProfileTab()}
-          {activeTab === "alarms" && renderAlarmsTab()}
           {activeTab === "notifications" && renderNotificationsTab()}
         </View>
       </ScrollView>

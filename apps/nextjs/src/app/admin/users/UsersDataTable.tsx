@@ -82,7 +82,6 @@ export function UsersDataTable() {
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Devices</TableHead>
-              <TableHead>Alarms</TableHead>
               <TableHead>Created</TableHead>
             </TableRow>
           </TableHeader>
@@ -134,7 +133,6 @@ export function UsersDataTable() {
                     </Badge>
                   </TableCell>
                   <TableCell>{user._count.devices}</TableCell>
-                  <TableCell>{user._count.alarms}</TableCell>
                   <TableCell>
                     {new Date(user.createdAt).toLocaleDateString()}
                   </TableCell>

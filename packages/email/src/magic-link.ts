@@ -34,7 +34,7 @@ Welcome to ${options.productName}!
 
 We received a request to sign you in to your ${options.productName} account using ${options.email}.
 
-${options.productName} is your personal vibration and light notification device. Use this app to manage your custom alarms and notifications.
+${options.productName} is your personal vibration and light notification device. Use this app to manage your custom notifications.
 
 Complete your sign in: ${options.url}
 

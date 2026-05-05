@@ -2,7 +2,7 @@
  * Push Notifications Service
  *
  * Handles local and push notifications for the Gently app.
- * Used to notify users when alarms trigger on their bracelet.
+ * Used to notify users when device alerts trigger on their bracelet.
  */
 
 import { Platform } from "react-native";
@@ -22,9 +22,9 @@ Notifications.setNotificationHandler({
     }),
 });
 
-export interface AlarmNotificationData {
-  alarmId: string;
-  alarmTitle: string;
+export interface AlertNotificationData {
+  alertId: string;
+  alertTitle: string;
   eventIndex: number;
   deviceId?: string;
   deviceName?: string;
@@ -40,7 +40,7 @@ export async function registerForPushNotificationsAsync(): Promise<
 
   // Must be on a physical device
   if (!Device.isDevice) {
-    console.log("⚠️ Push notifications require a physical device");
+    console.log("Push notifications require a physical device");
     return null;
   }
 
@@ -54,7 +54,7 @@ export async function registerForPushNotificationsAsync(): Promise<
   }
 
   if (finalStatus !== Notifications.PermissionStatus.GRANTED) {
-    console.log("❌ Push notification permissions not granted");
+    console.log("Push notification permissions not granted");
     return null;
   }
 
@@ -63,7 +63,7 @@ export async function registerForPushNotificationsAsync(): Promise<
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
 
     if (!projectId) {
-      console.warn("⚠️ No EAS project ID found, using experience ID fallback");
+      console.warn("No EAS project ID found, using experience ID fallback");
     }
 
     const tokenData = await Notifications.getExpoPushTokenAsync({
@@ -71,15 +71,15 @@ export async function registerForPushNotificationsAsync(): Promise<
     });
 
     token = tokenData.data;
-    console.log("✅ Push token obtained:", token);
+    console.log("Push token obtained:", token);
   } catch (error) {
-    console.error("❌ Error getting push token:", error);
+    console.error("Error getting push token:", error);
   }
 
   // Android-specific channel configuration
   if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("alarms", {
-      name: "Alarm Notifications",
+    await Notifications.setNotificationChannelAsync("alerts", {
+      name: "Alert Notifications",
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 500, 250, 500],
       lightColor: "#3b82f6",
@@ -101,17 +101,17 @@ export async function registerForPushNotificationsAsync(): Promise<
 }
 
 /**
- * Show a local notification when an alarm triggers
+ * Show a local notification when an alert triggers
  */
-export async function showAlarmNotification(
-  data: AlarmNotificationData,
+export async function showAlertNotification(
+  data: AlertNotificationData,
 ): Promise<void> {
-  const { alarmTitle, eventIndex, deviceName } = data;
+  const { alertTitle, eventIndex, deviceName } = data;
 
-  const title = "🔔 Alarm Triggered";
-  const body = alarmTitle
-    ? `${alarmTitle}${deviceName ? ` on ${deviceName}` : ""}`
-    : `Alarm #${eventIndex + 1} is going off${deviceName ? ` on ${deviceName}` : ""}`;
+  const title = "Alert Triggered";
+  const body = alertTitle
+    ? `${alertTitle}${deviceName ? ` on ${deviceName}` : ""}`
+    : `Alert #${eventIndex + 1}${deviceName ? ` on ${deviceName}` : ""}`;
 
   try {
     await Notifications.scheduleNotificationAsync({
@@ -119,38 +119,36 @@ export async function showAlarmNotification(
         title,
         body,
         data: {
-          type: "alarm_triggered",
+          type: "alert_triggered",
           ...data,
         },
         sound: "default",
         priority: Notifications.AndroidNotificationPriority.MAX,
-        sticky: true, // Notification stays until dismissed
+        sticky: true,
         autoDismiss: false,
       },
       trigger: null, // Show immediately
     });
 
-    console.log(`📲 Local notification shown: ${title} - ${body}`);
+    console.log(`Local notification shown: ${title} - ${body}`);
   } catch (error) {
-    console.error("❌ Error showing notification:", error);
+    console.error("Error showing notification:", error);
   }
 }
 
 /**
- * Clear alarm notification when acknowledged
+ * Clear alert notification when acknowledged
  */
-export async function clearAlarmNotification(alarmId?: string): Promise<void> {
+export async function clearAlertNotification(alertId?: string): Promise<void> {
   try {
-    if (alarmId) {
-      // Clear specific notification by identifier
-      await Notifications.dismissNotificationAsync(alarmId);
+    if (alertId) {
+      await Notifications.dismissNotificationAsync(alertId);
     } else {
-      // Clear all notifications
       await Notifications.dismissAllNotificationsAsync();
     }
-    console.log("🧹 Alarm notifications cleared");
+    console.log("Alert notifications cleared");
   } catch (error) {
-    console.error("❌ Error clearing notifications:", error);
+    console.error("Error clearing notifications:", error);
   }
 }
 
@@ -195,7 +193,7 @@ export async function setBadgeCount(count: number): Promise<void> {
   try {
     await Notifications.setBadgeCountAsync(count);
   } catch (error) {
-    console.error("❌ Error setting badge count:", error);
+    console.error("Error setting badge count:", error);
   }
 }
 
@@ -218,10 +216,10 @@ export class NotificationService {
     try {
       this.pushToken = await registerForPushNotificationsAsync();
       this.isInitialized = true;
-      console.log("✅ NotificationService initialized");
+      console.log("NotificationService initialized");
       return this.pushToken;
     } catch (error) {
-      console.error("❌ Failed to initialize NotificationService:", error);
+      console.error("Failed to initialize NotificationService:", error);
       return null;
     }
   }
@@ -241,27 +239,27 @@ export class NotificationService {
   }
 
   /**
-   * Show an alarm notification
+   * Show an alert notification
    */
-  static async showAlarmNotification(
-    alarmTitle: string,
+  static async showAlertNotification(
+    alertTitle: string,
     deviceName?: string,
     eventIndex = 0,
-    alarmId?: string,
+    alertId?: string,
   ): Promise<void> {
-    await showAlarmNotification({
-      alarmId: alarmId ?? `alarm-${eventIndex}`,
-      alarmTitle,
+    await showAlertNotification({
+      alertId: alertId ?? `alert-${eventIndex}`,
+      alertTitle,
       eventIndex,
       deviceName,
     });
   }
 
   /**
-   * Clear alarm notifications
+   * Clear alert notifications
    */
-  static async clearAlarmNotifications(alarmId?: string): Promise<void> {
-    await clearAlarmNotification(alarmId);
+  static async clearAlertNotifications(alertId?: string): Promise<void> {
+    await clearAlertNotification(alertId);
   }
 
   /**

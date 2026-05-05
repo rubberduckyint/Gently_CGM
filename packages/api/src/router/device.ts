@@ -1,46 +1,24 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import { TRPCError } from "@trpc/server";
-import { and, count, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod/v4";
 
-import { Alarm, Device } from "@gently/db/schema";
+import { Device } from "@gently/db/schema";
 
 import { protectedProcedure } from "../trpc";
 
 export const deviceRouter = {
   // Get all devices for current user
   getAll: protectedProcedure.input(z.object({})).query(async ({ ctx }) => {
-    // Get owned devices
     const ownedDevices = await ctx.db
       .select()
       .from(Device)
       .where(eq(Device.userId, ctx.session.user.id));
 
-    if (ownedDevices.length === 0) {
-      return [];
-    }
-
-    // Get alarm counts efficiently
-    const devicesWithCounts = await Promise.all(
-      ownedDevices.map(async (device) => {
-        const alarmCount = await ctx.db
-          .select({ count: count() })
-          .from(Alarm)
-          .where(eq(Alarm.deviceId, device.id));
-
-        return {
-          ...device,
-          _count: {
-            alarms: alarmCount[0]?.count ?? 0,
-          },
-        };
-      }),
-    );
-
-    return devicesWithCounts;
+    return ownedDevices;
   }),
 
-  // Get device by ID (owned or shared with user)
+  // Get device by ID (owned by user)
   getById: protectedProcedure
     .input(
       z.object({
@@ -48,7 +26,6 @@ export const deviceRouter = {
       }),
     )
     .query(async ({ input, ctx }) => {
-      // Check if user owns the device
       const ownedDevice = await ctx.db
         .select()
         .from(Device)
@@ -66,24 +43,7 @@ export const deviceRouter = {
         });
       }
 
-      // Get related alarms
-      const alarms = await ctx.db.query.Alarm.findMany({
-        where: eq(Alarm.deviceId, input.id),
-      });
-
-      // Get alarm count
-      const alarmCount = await ctx.db
-        .select({ count: count() })
-        .from(Alarm)
-        .where(eq(Alarm.deviceId, input.id));
-
-      return {
-        ...device,
-        alarms,
-        _count: {
-          alarms: alarmCount[0]?.count ?? 0,
-        },
-      };
+      return device;
     }),
 
   // Create device for current user
@@ -94,7 +54,6 @@ export const deviceRouter = {
         description: z.string(),
         serialNumber: z.string().optional(),
         batteryLevel: z.number().int().min(0).max(100).optional(),
-        // firmwareVersion is not stored in DB, only used for initial pairing info
         firmwareVersion: z.string().optional(),
       }),
     )
@@ -126,7 +85,6 @@ export const deviceRouter = {
     .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
 
-      // First check if the device belongs to the current user
       const existingDevice = await ctx.db
         .select()
         .from(Device)
@@ -164,7 +122,6 @@ export const deviceRouter = {
     .mutation(async ({ input, ctx }) => {
       const { id, serialNumber, batteryLevel, firmwareVersion } = input;
 
-      // First check if the device belongs to the current user
       const existingDevice = await ctx.db
         .select()
         .from(Device)
@@ -178,7 +135,6 @@ export const deviceRouter = {
         });
       }
 
-      // Check if we already have this serial number stored and it matches
       const currentDevice = existingDevice[0];
       if (
         currentDevice?.serialNumber &&
@@ -197,7 +153,6 @@ export const deviceRouter = {
         firmwareVersion,
       });
 
-      // Prepare update data
       const updateData: Partial<typeof Device.$inferInsert> = {
         serialNumber,
         lastSync: new Date(),
@@ -251,7 +206,6 @@ export const deviceRouter = {
     .mutation(async ({ input, ctx }) => {
       const { id, syncStatus, lastSync } = input;
 
-      // Verify device ownership
       const existingDevice = await ctx.db
         .select()
         .from(Device)
@@ -265,7 +219,6 @@ export const deviceRouter = {
         });
       }
 
-      // Prepare update data
       const updateData: {
         syncStatus: "NOT_SYNCED" | "SYNCING" | "SYNCED" | "ERROR";
         lastSync?: Date;
@@ -286,7 +239,7 @@ export const deviceRouter = {
       return result[0];
     }),
 
-  // Delete device (only if it belongs to the current user)
+  // Delete device
   delete: protectedProcedure
     .input(
       z.object({
@@ -294,7 +247,6 @@ export const deviceRouter = {
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      // First check if the device belongs to the current user
       const existingDevice = await ctx.db
         .select()
         .from(Device)
@@ -310,7 +262,6 @@ export const deviceRouter = {
         });
       }
 
-      // Delete the device - alarms will be cascade deleted automatically by the database
       await ctx.db.delete(Device).where(eq(Device.id, input.id));
 
       return { success: true };

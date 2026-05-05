@@ -33,8 +33,8 @@ export default function UserLoginVerification({
           </Text>
           <Text style={textStyle}>
             Gently is your personal vibration and light notification device that
-            you wear on your wrist. Use this app to manage your custom alarms
-            and notifications.
+            you wear on your wrist. Use this app to manage your custom
+            notifications.
           </Text>
           <Button href={url} style={buttonStyle}>
             Complete Sign In
@@ -66,7 +66,7 @@ export const sendVerificationEmail = async ({
     await sendMail({
       recipient: email,
       subject: `Complete your sign in to Gently`,
-      contentText: `Welcome to Gently!\n\nWe received a request to sign you in to your Gently account using ${email}.\n\nGently is your personal vibration and light notification device. Use this app to manage your custom alarms and notifications.\n\nComplete your sign in: ${url}\n\nThis link will expire in 24 hours for your security.\n\nIf you did not request this sign-in link, please ignore this email.`,
+      contentText: `Welcome to Gently!\n\nWe received a request to sign you in to your Gently account using ${email}.\n\nGently is your personal vibration and light notification device. Use this app to manage your custom notifications.\n\nComplete your sign in: ${url}\n\nThis link will expire in 24 hours for your security.\n\nIf you did not request this sign-in link, please ignore this email.`,
       html: render(<UserLoginVerification email={email} url={url} />),
     });
   } catch (error) {

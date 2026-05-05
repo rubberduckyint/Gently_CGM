@@ -1,585 +1,302 @@
-# Gently App
+# Gently
 
-A comprehensive health management platform featuring a React Native mobile app and Next.js web application designed to work seamlessly with Gently smart bracelets for medication reminders and health tracking.
+A health management platform for controlling a BLE smart bracelet. The bracelet delivers notifications via vibration, sound, and LED light patterns. The system consists of a React Native mobile app, a Next.js web dashboard, and a shared backend.
 
-## Table of Contents
+## Architecture
 
-- [Overview](#overview)
-- [Features](#features)
-- [Quick Start](#quick-start)
-- [Architecture](#architecture)
-- [Development Setup](#development-setup)
-- [Environment Configuration](#environment-configuration)
-- [Mobile Development](#mobile-development)
-- [BLE Protocol](#ble-protocol)
-- [Authentication](#authentication)
-- [Apple App Review Test Mode](#apple-app-review-test-mode)
-- [Deployment](#deployment)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
+```
+apps/
+  expo/          React Native mobile app (iOS + Android)
+  nextjs/        Next.js 15 web dashboard
 
-## Overview
+packages/
+  api/           tRPC API router definitions
+  auth/          Better-Auth configuration
+  db/            Drizzle ORM schema + PostgreSQL
+  email/         React Email templates + SMTP sender
+  shared/        Shared utilities
+  validators/    Zod validation schemas
 
-The Gently app ecosystem consists of a mobile application built with React Native/Expo and a web dashboard built with Next.js. The mobile app connects to Gently smart bracelets via Bluetooth Low Energy (BLE) to manage medication reminders, alarms, and health tracking features.
+tooling/
+  eslint/        Shared ESLint config
+  prettier/      Code formatting
+  typescript/    Shared tsconfig
+```
 
-### Key Technologies
+**Monorepo**: Turborepo + pnpm workspaces. All packages are TypeScript with end-to-end type safety via tRPC.
 
-- **Mobile**: React Native with Expo SDK 53, React 19
-- **Web**: Next.js 15, React 19
-- **Authentication**: Better-Auth with OTP, Google, and Apple Sign In
-- **Database**: Drizzle ORM with PostgreSQL
-- **Styling**: Tailwind CSS / NativeWind
-- **Monorepo**: Turborepo with PNPM
-- **Type Safety**: End-to-end TypeScript with tRPC
+## Tech Stack
 
-## Features
+| Layer        | Technology                                           |
+| ------------ | ---------------------------------------------------- |
+| Mobile       | React Native, Expo SDK 55, Expo Router               |
+| Web          | Next.js 15, React 19, Tailwind CSS v4                |
+| Styling      | NativeWind (mobile), Tailwind + Radix UI (web)       |
+| API          | tRPC with React Query                                |
+| Auth         | Better-Auth (email OTP, Google OAuth, Apple Sign In)  |
+| Database     | PostgreSQL 17, Drizzle ORM                           |
+| BLE          | react-native-ble-manager, TEA encryption             |
+| Email        | React Email, SMTP (MailHog in dev)                   |
+| Analytics    | Vexo Analytics                                       |
+| Build        | Turborepo, EAS Build (mobile), Node 22               |
+| CI           | GitHub Actions (lint, format, typecheck)              |
 
-### Mobile App
+## Getting Started
 
-- 🔗 **BLE Device Management** - Connect and manage Gently smart bracelets
-- 💊 **Medication Reminders** - Set, modify, and sync alarms with the bracelet
-- 🔐 **Secure Communication** - TEA encryption for BLE data transmission
-- 📱 **Cross-Platform** - iOS and Android support
-- 🎨 **Native UI** - Consistent design with custom navigation
+### Prerequisites
 
-### Web Dashboard
+- Node.js >= 22.11.0
+- pnpm 10.x (`corepack enable && corepack prepare`)
+- Docker (for PostgreSQL + MailHog)
+- Xcode (iOS development)
+- Android Studio (Android development)
+- EAS CLI (`npm install -g eas-cli`)
 
-- 👤 **User Management** - Admin panel for user accounts
-- 📊 **Device Analytics** - Monitor device usage and health metrics
-- 🔑 **Authentication** - OTP, Google, and Apple Sign In support
-- ⚡ **Real-time Updates** - Live sync with mobile app data
-
-### Smart Bracelet Integration
-
-- ⏰ **Alarm Management** - Create, modify, and delete medication reminders
-- 🔋 **Battery Monitoring** - Real-time battery status notifications
-- 🔍 **Find Device** - Locate misplaced bracelets
-- 📡 **Secure BLE Protocol** - Encrypted communication with TEA algorithm
-
-## Quick Start
-
-> **System Requirements**: Node.js ≥22.11.0, PNPM ≥10.18.1
-
-### 1. Clone and Install
+### Setup
 
 ```bash
 # Install dependencies
 pnpm install
 
-# Copy environment configuration
-cp .env.example .env
+# Start infrastructure (Postgres on :5832, MailHog on :8025)
+docker compose up -d
 
-# Start Docker services (database + mailhog)
-docker-compose up -d
-
-# Configure your environment variables (see Environment Configuration)
-# Then push database schema and start development
-pnpm db:push
-pnpm dev
-```
-
-### 2. Access the Applications
-
-- **Next.js Web App**: <http://localhost:3000>
-- **Expo Mobile App**: Use Expo Go app or run on simulator
-
-## Architecture
-
-The Gently app uses a modern monorepo architecture built with Turborepo:
-
-```text
-apps/
-├── expo/                    # React Native mobile app
-│   ├── src/app/            # Expo Router pages
-│   ├── src/services/ble/   # Bluetooth Low Energy services
-│   └── BLE_protocol.md     # Device communication protocol
-└── nextjs/                 # Next.js web dashboard
-    └── src/app/            # App Router pages
-
-packages/
-├── api/                    # tRPC API definitions
-├── auth/                   # Better-Auth configuration
-├── db/                     # Drizzle database schema
-├── email/                  # Email service utilities
-└── validators/             # Shared Zod schemas
-
-tooling/
-├── eslint/                 # Shared ESLint configurations
-├── prettier/               # Code formatting rules
-├── typescript/             # TypeScript configurations
-└── github/                 # CI/CD workflows
-```
-
-## Development Setup
-
-### Prerequisites
-
-- Node.js ≥22.11.0
-- PNPM ≥10.18.1
-- Android Studio (for Android development)
-- Xcode (for iOS development, macOS only)
-- Expo CLI: `pnpm add -g @expo/cli`
-
-### Initial Setup
-
-```bash
-git clone <repository-url>
-cd gently
-pnpm install
-cp .env.example .env
-```
-
-### Docker Development Environment
-
-The project includes a Docker Compose setup for local development with PostgreSQL database and MailHog for email testing.
-
-#### Starting Docker Services
-
-```bash
-# Start all services (database + mailhog)
-docker-compose up -d
-
-# View running containers
-docker ps
-
-# Stop all services
-docker-compose down
-```
-
-#### Included Services
-
-- **PostgreSQL Database**:
-  - **Host**: `localhost:5832`
-  - **Database**: `gently`
-  - **Username**: `gently`
-  - **Password**: `gently`
-  - **Connection String**: `postgresql://gently:gently@localhost:5832/gently`
-
-- **MailHog Email Testing**:
-  - **SMTP Server**: `localhost:1025`
-  - **Web Interface**: <http://localhost:8025>
-  - **Purpose**: Captures all outgoing emails for testing OTP and magic links
-
-#### Database Setup with Docker
-
-```bash
-# Start Docker services
-docker-compose up -d
+# Copy environment variables
+cp .env.bk .env
+# Edit .env with your secrets (see Environment Variables below)
 
 # Push database schema
 pnpm db:push
 
-# (Optional) Open database studio
+# Optional: seed test data
+pnpm -F @gently/db seed
+```
+
+### Development
+
+```bash
+# Run everything (mobile + web + API)
+pnpm dev
+
+# Web dashboard only
+pnpm dev:next
+
+# Mobile app
+cd apps/expo
+pnpm dev           # Expo dev server
+pnpm ios           # Run on iOS simulator
+pnpm android       # Run on Android emulator
+
+# Database studio (GUI)
 pnpm db:studio
 ```
 
-## Environment Configuration
-
-### Required Environment Variables
-
-Copy the example file and configure with your values:
+### Quality
 
 ```bash
-cp .env.example .env
+pnpm typecheck     # TypeScript validation
+pnpm lint          # ESLint
+pnpm format        # Prettier check
+pnpm format:fix    # Auto-fix formatting
 ```
 
-#### Database Configuration
+## Environment Variables
 
-````bash
-```env
-# Database (Required) - Use Docker setup
-POSTGRES_URL="postgresql://gently:gently@localhost:5832/gently"
-
-# Authentication (Required)
-AUTH_SECRET="supersecret"  # Generate with: openssl rand -base64 32
-
-# Apple Sign In (Optional)
-APPLE_CLIENT_ID="com.gentlyus.gently.web"
-APPLE_CLIENT_SECRET="your-apple-client-secret-jwt"
-
-# Google OAuth (Optional)
-GOOGLE_CLIENT_ID="your-google-client-id.googleusercontent.com"
-GOOGLE_CLIENT_SECRET="your-google-client-secret"
-
-# Email Configuration (MailHog for development)
-EMAIL_SERVER_HOST="localhost"
-EMAIL_SERVER_PORT="1025"
-EMAIL_SERVER_USER=""  # Leave empty for MailHog
-EMAIL_SERVER_PASSWORD=""  # Leave empty for MailHog
-EMAIL_FROM="noreply@gently.dev"
-
-# API Endpoints
-NEXT_PUBLIC_BASE_URL="http://localhost:3000"
-EXPO_PUBLIC_BASE_URL="http://localhost:3000"  # Use your local IP for physical devices
-````
-
-> **Development Tip**: When testing on physical devices, replace `localhost` with your computer's IP address (e.g., `http://192.168.1.100:3000`)
-
-#### OAuth Provider Setup
-
-##### Apple Sign In (Optional)
-
-1. **Apple Developer Account**: Create an App ID and Service ID
-2. **Generate Client Secret**: Create a JWT client secret using your Apple credentials
-3. **Environment Variable**: Add `APPLE_CLIENT_SECRET` to your `.env` file
-
-The client secret should be a JWT token signed with your Apple private key. You can generate this using tools like:
-
-- Apple's official client secret generator
-- Third-party JWT generators with ES256 support
-- Custom scripts using your Apple private key (.p8 file)
-
-##### Google OAuth (Optional)
-
-1. **Google Cloud Console**: Create a new project or use existing
-2. **Enable APIs**: Enable Google+ API and Google OAuth2 API
-3. **Create Credentials**: Create OAuth 2.0 Client IDs
-4. **Configure Domains**: Add your development and production URLs
-5. **Environment Variables**: Add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
-
-##### OTP Authentication (Default)
-
-OTP (One-Time Password) authentication works out of the box with MailHog for development:
-
-- **Development**: Emails are captured by MailHog at <http://localhost:8025>
-- **Production**: Configure a real SMTP server in production environment
-
-For detailed setup, see the [Better-Auth documentation](https://www.better-auth.com/docs/authentication/social-signin).
-
-## Mobile Development
-
-### iOS Development
-
-#### iOS Requirements
-
-- macOS with Xcode installed
-- iOS Simulator or physical iOS device
-- Apple Developer account (for device testing)
-
-```bash
-
-```
-
-Update the `.env` file with your specific configuration:
+Create a `.env` file at the project root:
 
 ```bash
 # Database
 POSTGRES_URL="postgresql://gently:gently@localhost:5832/gently"
 
-# Authentication
-AUTH_SECRET='supersecret'  # Generate with: openssl rand -base64 32
+# Auth
+AUTH_SECRET="<openssl rand -base64 32>"
 
-# Email Configuration (for magic link authentication)
-EMAIL_SERVER_HOST="smtp.gmail.com"
-EMAIL_SERVER_PORT="587"
-EMAIL_SERVER_USER="your-email@gmail.com"
-EMAIL_SERVER_PASSWORD="your-app-password"
-EMAIL_FROM="noreply@yourdomain.com"
+# Email (SMTP)
+EMAIL_SERVER_HOST="localhost"    # MailHog in dev, smtp.gmail.com in prod
+EMAIL_SERVER_PORT="1025"         # 1025 for MailHog, 587 for Gmail
+EMAIL_SERVER_USER=""
+EMAIL_SERVER_PASSWORD=""
+EMAIL_FROM="noreply@gentlyus.com"
 
-# Base URLs for API communication
+# URLs
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 EXPO_PUBLIC_BASE_URL=http://localhost:3000
+
+# Google OAuth
+AUTH_GOOGLE_ID="<google-client-id>"
+AUTH_GOOGLE_SECRET="<google-client-secret>"
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID="<google-web-client-id>"
+
+# Apple Sign In
+APPLE_TEAM_ID="K2ZWWF4P2G"
+APPLE_KEY_ID="R984ML9MQ8"
+APPLE_CLIENT_ID="com.gentlyus.gently.web"
+APPLE_APP_BUNDLE_ID="com.gentlyus.gently"
+APPLE_PRIVATE_KEY="<apple-private-key>"
 ```
 
-> **Important**: When developing with Expo on a physical device, replace `localhost` in `EXPO_PUBLIC_BASE_URL` with your computer's local IP address (e.g., `http://192.168.1.100:3000`). You can find your IP with `ipconfig` (Windows) or `ifconfig` (Mac/Linux).
+## Infrastructure
 
-#### Expo-Specific Environment Variables
+### Local Development
 
-The Expo app requires `EXPO_PUBLIC_BASE_URL` to communicate with your backend. This should point to:
+Docker Compose provides:
+- **PostgreSQL 17** on port `5832` (user: gently, pass: gently, db: gently)
+- **MailHog** on port `1025` (SMTP) / `8025` (web UI for viewing emails)
 
-- **Development**: Your local development server (e.g., `http://192.168.1.100:3000`)
-- **Production**: Your deployed Next.js app URL (e.g., `https://your-app.vercel.app`)
+### Mobile Builds (EAS)
 
-#### Setup Steps
+Three build profiles in `apps/expo/eas.json`:
+
+| Profile       | Purpose              | Distribution |
+| ------------- | -------------------- | ------------ |
+| `development` | Dev client builds    | Internal     |
+| `preview`     | Testing builds       | Internal     |
+| `production`  | App Store / Play Store | Store      |
 
 ```bash
-# Start iOS development
-cd apps/expo
-pnpm dev:ios
+# Build for iOS
+eas build --platform ios --profile production
 
-# Or run in specific simulator
-pnpm expo start --ios
+# Build for Android
+eas build --platform android --profile production
+
+# Submit to App Store
+eas submit --platform ios --profile production
 ```
 
-### Android Development
+**App identifiers:**
 
-#### Android Prerequisites
+| Platform | Production                | Development                |
+| -------- | ------------------------- | -------------------------- |
+| iOS      | `com.gentlyus.mobile`     | `com.gentlyus.mobile-dev`  |
+| Android  | `com.gentlyus.gently`     | `com.gentlyus.gently.dev`  |
 
-1. **Install Android Studio**: Download from [developer.android.com](https://developer.android.com/studio)
-2. **Configure SDK**: Install Android SDK and create virtual device
-3. **Set environment variables**:
+App Store Connect ID: `6752447097`
+EAS Project ID: `e881c3b6-0d21-4cc4-8933-176c9d6eb00e`
 
-```bash
-# Add to ~/.zshrc or ~/.bashrc
-export ANDROID_HOME=$HOME/Library/Android/sdk
-export PATH=$PATH:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools
-```
+### Web Deployment
 
-#### Android Development Commands
+The Next.js app is configured for standard Node.js hosting. Turbo remote caching uses Vercel tokens (configured in CI via `TURBO_TEAM` and `TURBO_TOKEN`).
 
-```bash
-# Start Android development
-cd apps/expo
-pnpm dev:android
+### CI/CD
 
-# Or run on specific device
-pnpm expo start --android
-```
+GitHub Actions (`.github/workflows/ci.yml`) runs on PRs and pushes to `main`:
+- ESLint across all workspaces
+- Prettier format validation
+- TypeScript type checking
 
-## BLE Protocol
+## BLE Device Communication
 
-The Gently app communicates with smart bracelets using a secure Bluetooth Low Energy protocol with TEA encryption. Key features:
+The app communicates with Gently bracelets over Bluetooth Low Energy using a custom encrypted protocol. See `apps/expo/BLE_protocol.md` for the full spec.
 
-### Supported Commands
+### Connection Flow
 
-- **Device Management**: Get device info, battery status, find device
-- **Alarm Operations**: Add, modify, delete, and sync medication reminders
-- **Time Synchronization**: Keep bracelet time accurate
-- **Secure Communication**: All data encrypted with TEA algorithm
+1. Request Bluetooth permissions
+2. Scan for devices advertising as "Gently"
+3. Parse encrypted advertisement data (serial number, battery, firmware)
+4. Connect with retry logic (3 attempts, configurable timeout)
+5. Request MTU (Android)
+6. Discover services, start notifications
+7. Generate dynamic encryption key from device uptime + serial
+8. Validate connection with device info query
+9. Sync device clock
 
-### Protocol Documentation
+### Encryption
 
-Detailed BLE protocol specifications are available in [`apps/expo/BLE_protocol.md`](./apps/expo/BLE_protocol.md), including:
+- **Algorithm**: TEA (Tiny Encryption Algorithm), 64-bit blocks, 128-bit key
+- **Factory key**: Used for initial connection and uptime query
+- **Dynamic key**: Generated per-session from factory key XOR'd with uptime bytes and serial number
+- All command payloads are encrypted/decrypted at the transport layer
 
-- Packet formats and encryption
-- Command specifications
-- Response handling
-- Security implementation
+### BLE Service UUIDs
+
+| UUID   | Purpose                        |
+| ------ | ------------------------------ |
+| `F021` | Gently BLE Service             |
+| `F023` | Request characteristic (write) |
+| `F024` | Response characteristic (notify) |
+
+### Device Commands
+
+| Code   | Command                    | Purpose                        |
+| ------ | -------------------------- | ------------------------------ |
+| `0x01` | GET_UPTIME                 | Device uptime (for key gen)    |
+| `0x02` | GET_DEVICE_INFO            | Hardware/firmware version       |
+| `0x0A` | GET_TIME                   | Read device clock              |
+| `0x0B` | SET_TIME                   | Sync device clock              |
+| `0x0C` | GET_DEVICE_STATUS          | Battery, charging, error codes |
+| `0x10` | FIND_ME                    | Trigger sound/light to locate  |
+| `0x11` | ENTER_DFU_MODE             | Firmware update mode           |
+| `0x12` | REBOOT_BRACELET            | Restart device                 |
+| `0x14` | TRIGGER_LED_PATTERN        | Activate LED with color/timing |
+| `0x15` | TRIGGER_VIBRATION_PATTERN  | Activate motor with pattern    |
+| `0x16` | TRIGGER_AUDIO_PATTERN      | Activate buzzer with timing    |
+
+### Device Capabilities
+
+- **Vibration motor**: 64 patterns (0-63), 4 intensity levels, 1-60s duration
+- **LED**: 7 colors (Blue, Green, Cyan, Red, Yellow, Magenta, White), configurable on/off timing
+- **Audio buzzer**: Configurable beep pattern (on/off duration), 1-60s total
+- **Battery**: Voltage monitoring, charging detection, 5-level status (Critical to Full)
+- **Notifications**: Async push from device for battery status (0x80), event state (0x81), time sync (0x82)
+
+### Test Mode
+
+A test user (`extraspecialtestuser@gentlyus.com`, OTP: `123456`) bypasses all Bluetooth operations using a mock BLE service. This allows Apple App Review testing without a physical device.
 
 ## Authentication
 
-### Better-Auth Integration
+Three sign-in methods:
 
-The app uses Better-Auth for authentication with multiple sign-in options:
+1. **Email OTP** (default) - 6-digit code sent via email
+2. **Google OAuth** - Social login
+3. **Apple Sign In** - iOS native auth
 
-- **OTP (One-Time Password)**: Email-based authentication with magic links
-- **Google OAuth**: Sign in with Google accounts
-- **Apple Sign In**: Sign in with Apple ID (iOS/macOS)
-- **Session Management**: Secure JWT tokens
-- **Cross-Platform**: Shared auth state between web and mobile
+Sessions are managed by Better-Auth with JWT tokens stored in Expo SecureStore (mobile) or HTTP-only cookies (web).
 
-### Development Authentication
+## Mobile App Structure
 
-#### Email Testing with MailHog
+```
+apps/expo/src/
+  app/                    Expo Router screens
+    index.tsx             Login
+    dashboard.tsx         Device list
+    settings.tsx          User settings
+    add-device/           Device pairing flow
+    devices/[deviceId]/
+      index.tsx           Device detail + trigger buttons
+      edit/               Edit device name
+      delete/             Delete device
+      ble-test.tsx        BLE command testing (debug)
 
-- **MailHog Interface**: <http://localhost:8025>
-- **Purpose**: Captures all outgoing emails (OTP codes, magic links)
-- **SMTP**: `localhost:1025` (configured in Docker setup)
+  contexts/
+    BLEContext.tsx         Global BLE state + connection management
 
-#### OAuth Development
+  services/
+    ble/
+      connection.ts       Connect/disconnect with retry
+      manager.ts          Send/receive encrypted commands
+      encryption.ts       TEA cipher + advertisement parsing
+      storage.ts          Secure key storage
+      notifications.ts    Parse async device notifications
+      mockBLEService.ts   Simulated BLE for test users
+      commands/            Individual BLE command builders
+    analytics/            Vexo event tracking
+    notifications/        Push notification infrastructure
 
-- **Google OAuth**: Works in development with proper client configuration
-- **Apple Sign In**: Requires production domain for full testing
-- **Auth Proxy**: Better-Auth proxy enables OAuth in development/preview deployments
-
-### Production Notes
-
-- **Apple Client Secret**: Use pre-generated JWT client secret from environment variable
-- **Email Service**: Replace MailHog with production SMTP service (AWS SES, SendGrid, etc.)
-- **OAuth Domains**: Configure production URLs in Google/Apple developer consoles
-- **Security**: Ensure all secrets are properly secured in production environment
-
-## Apple App Review Test Mode
-
-The app includes a special test mode designed for Apple App Store review. This allows Apple reviewers to test the full app functionality without requiring a physical Gently device or access to a real email account.
-
-### Test User Credentials
-
-| Field        | Value                               |
-| ------------ | ----------------------------------- |
-| **Email**    | `extraspecialtestuser@gentlyus.com` |
-| **OTP Code** | `123456`                            |
-
-### How It Works
-
-1. **Login Flow**:
-   - Enter the test email address on the login screen
-   - Tap "Send Verification Code" (no actual email is sent)
-   - Enter `123456` as the OTP code
-   - The test user is authenticated and redirected to the dashboard
-
-2. **Device Pairing**:
-   - Navigate to "Add a Gently" screen
-   - A yellow "Test Mode" section appears (only visible for the test user)
-   - Tap "Simulate Device Pairing" to create a mock device
-   - The simulated device appears with realistic dummy data (85% battery, firmware 1.0.0)
-   - Name the device and it's added to the account
-
-3. **Bluetooth Bypass** (NEW):
-   - All Bluetooth operations are automatically simulated for the test user
-   - No need to pair with a physical device - scanning and connection work automatically
-   - All BLE commands (add alarm, sync time, get battery, etc.) return mock responses
-   - Alarms and events are stored in-memory and work as if on a real device
-   - Mock device: "Test Gently Device" (Serial: GENTLY-TEST-001)
-
-4. **Full Functionality**:
-   - Create, edit, and delete alarms on the simulated device
-   - All app features work normally with the test device
-   - No physical Gently bracelet or BLE connection required
-   - Test user can use the regular "Scan for Devices" flow which will find the simulated device
-
-### Technical Implementation
-
-The test mode is implemented across several files:
-
-- **`apps/expo/src/utils/testMode.ts`** - Test user constants and helper functions
-- **`packages/auth/src/index.ts`** - Server-side OTP generation for test user
-- **`apps/expo/src/app/index.tsx`** - Client-side login handling
-- **`apps/expo/src/app/add-device/index.tsx`** - Simulated device pairing UI
-- **`apps/expo/src/services/ble/mockBLEService.ts`** - Mock Bluetooth service for test users (NEW)
-- **`apps/expo/src/contexts/BLEContext.tsx`** - Automatic routing to mock BLE for test users (NEW)
-
-The BLE bypass works by:
-
-1. Detecting when the logged-in user is the test user (`extraspecialtestuser@gentlyus.com`)
-2. Routing all Bluetooth operations to the mock service instead of real BLE hardware
-3. Simulating device discovery, connection, commands, and notifications
-4. Maintaining in-memory state for alarms and device settings
-
-### Security Notes
-
-- Test mode only activates for the exact email `extraspecialtestuser@gentlyus.com`
-- The fixed OTP (`123456`) is only generated server-side for this specific email
-- Regular users always receive randomly generated OTPs via email
-- Test mode UI elements are only visible when logged in as the test user
-
-## Deployment
-
-### Web Application (Next.js)
-
-#### Vercel Deployment
-
-1. **Create Vercel Project**: Select `apps/nextjs` as root directory
-2. **Environment Variables**: Add all required variables from `.env`
-3. **Deploy**: Vercel handles build configuration automatically
-
-#### Environment Variables for Production
-
-```env
-POSTGRES_URL="your-production-database-url"
-AUTH_SECRET="your-production-secret"
-APPLE_CLIENT_ID="com.gentlyus.gently.web"
-APPLE_CLIENT_SECRET="your-apple-client-secret-jwt"
-GOOGLE_CLIENT_ID="your-google-client-id.googleusercontent.com"
-GOOGLE_CLIENT_SECRET="your-google-client-secret"
+  components/             Reusable UI components
+  hooks/                  Custom React hooks
+  styles/                 Design system tokens
+  types/                  Shared TypeScript types
+  utils/                  Helper functions
 ```
 
-### Mobile Application (Expo)
+## Database Schema
 
-#### Production Build
-
-```bash
-# Install EAS CLI
-pnpm add -g eas-cli
-
-# Configure builds
-cd apps/expo
-eas build:configure
-
-# Create production builds
-eas build --platform ios --profile production
-eas build --platform android --profile production
+```
+User            Better-Auth managed user record
+Device          id, title, description, serialNumber, batteryLevel, syncStatus, userId
+UserPreferences id, userId, pushNotificationToken
 ```
 
-#### App Store Submission
-
-```bash
-# Submit to app stores
-eas submit --platform ios --latest
-eas submit --platform android --latest
-```
-
-## Troubleshooting
-
-### Common Issues
-
-#### BLE Connection Problems
-
-- **Device not found**: Ensure Bluetooth is enabled and device is in pairing mode
-- **Connection timeouts**: Check device proximity and interference
-- **Encryption errors**: Verify TEA key synchronization
-
-#### Authentication Issues
-
-- **Apple Sign In fails**: Check Apple Developer configuration and private key format
-- **JWT errors**: Ensure private key is PKCS#8 format (`-----BEGIN PRIVATE KEY-----`)
-- **Session expired**: Verify `AUTH_SECRET` configuration
-
-#### Development Environment
-
-- **Metro bundler issues**: Clear cache with `pnpm expo start --clear`
-- **TypeScript errors**: Run `pnpm typecheck` to identify issues
-- **Database connection**: Verify `POSTGRES_URL` and run `pnpm db:push`
-
-### Debugging Commands
-
-```bash
-# Clear all caches
-pnpm clean:workspaces
-
-# Type checking
-pnpm typecheck
-
-# Database operations
-pnpm db:studio    # Open database GUI
-pnpm db:push      # Push schema changes
-
-# Linting and formatting
-pnpm lint:fix
-pnpm format:fix
-```
-
-## Contributing
-
-### Development Workflow
-
-1. **Clone repository**: `git clone <repo-url>`
-2. **Install dependencies**: `pnpm install`
-3. **Create feature branch**: `git checkout -b feature/your-feature`
-4. **Make changes**: Follow coding standards
-5. **Test thoroughly**: Run tests and manual testing
-6. **Submit PR**: Include detailed description
-
-### Code Standards
-
-- **TypeScript**: Strict type checking enabled
-- **ESLint**: Configured for React/React Native
-- **Prettier**: Consistent code formatting
-- **Monorepo**: Use workspace dependencies where possible
-
-### Testing
-
-- **Mobile App**: Test on both iOS and Android
-- **BLE Features**: Test with actual Gently device
-- **Authentication**: Verify all auth flows
-- **Cross-platform**: Ensure consistency between web and mobile
-
----
-
-## References
-
-- **Better-Auth**: [Authentication Documentation](https://www.better-auth.com)
-- **Expo**: [React Native Framework](https://expo.dev)
-- **Next.js**: [Web Framework](https://nextjs.org)
-- **Turborepo**: [Monorepo Tool](https://turborepo.org)
-- **Drizzle ORM**: [Database Toolkit](https://orm.drizzle.team)
-
-Built with ❤️ for better health management.
-
-### Package Management
-
-#### Adding UI Components
-
-```bash
-# Add shadcn/ui components
-pnpm ui-add
-```
-
-#### Creating New Packages
-
-```bash
-# Generate new package in monorepo
-pnpm turbo gen init
-```
-
-This will create a new package with proper TypeScript, ESLint, and Prettier configuration.
+Managed via Drizzle ORM. Push schema changes with `pnpm db:push`. View data with `pnpm db:studio`.

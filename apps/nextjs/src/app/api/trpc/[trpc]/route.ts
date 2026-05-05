@@ -1,23 +1,9 @@
 import type { NextRequest } from "next/server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 
-import {
-  appRouter,
-  createTRPCContext,
-  initNotificationRouter,
-} from "@gently/api";
+import { appRouter, createTRPCContext } from "@gently/api";
 
 import { auth } from "~/auth/server";
-import { env } from "~/env";
-
-// Initialize the notification router with email configuration
-initNotificationRouter({
-  smtpHost: env.EMAIL_SERVER_HOST,
-  smtpPort: env.EMAIL_SERVER_PORT,
-  smtpUser: env.EMAIL_SERVER_USER,
-  smtpPassword: env.EMAIL_SERVER_PASSWORD,
-  emailFrom: env.EMAIL_FROM,
-});
 
 /**
  * Configure basic CORS headers

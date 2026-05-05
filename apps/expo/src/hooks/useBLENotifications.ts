@@ -7,10 +7,7 @@
 
 import { useCallback, useState } from "react";
 
-import type {
-  ActiveAlarmNotification,
-  BLENotification,
-} from "~/contexts/BLEContext";
+import type { BLENotification } from "~/contexts/BLEContext";
 import { TEAEncryption } from "~/services/ble/encryption";
 import {
   parseActiveEventNotification,
@@ -24,23 +21,12 @@ function getCommandName(command: number): string {
   const commandNames: Record<number, string> = {
     0x01: "GET_UPTIME",
     0x02: "GET_DEVICE_INFO",
-    0x03: "GET_EVENT",
-    0x04: "ADD_EVENT",
-    0x05: "SET_EVENT_ON_OFF",
-    0x06: "GET_ALL_EVENTS",
-    0x07: "REMOVE_EVENT",
-    0x08: "REMOVE_ALL_EVENTS",
-    0x09: "GET_NUMBER_OF_EVENTS",
     0x0a: "GET_TIME",
     0x0b: "SET_TIME",
     0x0c: "GET_DEVICE_STATUS",
-    0x0d: "ACKNOWLEDGE_EVENT",
-    0x0e: "SET_BRACELET_KEY",
-    0x0f: "GET_BRACELET_KEY",
     0x10: "FIND_ME",
     0x11: "ENTER_DFU_MODE",
     0x12: "REBOOT_BRACELET",
-    0x13: "SET_DYNAMIC_KEY",
   };
   return (
     commandNames[command] ??
@@ -56,8 +42,6 @@ export function useBLENotifications({
   getEncryptionKey,
 }: UseBLENotificationsProps) {
   const [notifications, setNotifications] = useState<BLENotification[]>([]);
-  const [activeAlarm, setActiveAlarm] =
-    useState<ActiveAlarmNotification | null>(null);
 
   /**
    * Clear all stored notifications
@@ -71,13 +55,6 @@ export function useBLENotifications({
    */
   const addNotification = useCallback((notification: BLENotification) => {
     setNotifications((prev) => [...prev, notification]);
-  }, []);
-
-  /**
-   * Clear the active alarm state
-   */
-  const clearActiveAlarm = useCallback(() => {
-    setActiveAlarm(null);
   }, []);
 
   /**
@@ -115,7 +92,7 @@ export function useBLENotifications({
           // This is a command response, not a notification
           const commandName = getCommandName(command);
           console.log(
-            `📨 [BLE Notifications] Received ${commandName} response`,
+            `[BLE Notifications] Received ${commandName} response`,
           );
           return;
         }
@@ -123,7 +100,7 @@ export function useBLENotifications({
         // Parse the notification
         const notification = parseNotification(decryptedData);
         if (!notification) {
-          console.warn("⚠️ [BLE Notifications] Could not parse notification");
+          console.warn("[BLE Notifications] Could not parse notification");
           return;
         }
 
@@ -139,7 +116,7 @@ export function useBLENotifications({
           detailedDescription = `Battery: ${batteryNotification.batteryLevelText} (${batteryNotification.batteryVoltage}mV)${batteryNotification.isCharging ? " - Charging" : ""}`;
 
           console.log(
-            `🔋 [BLE Notifications] Battery: ${batteryNotification.batteryLevelText} at ${batteryNotification.batteryVoltage}mV`,
+            `[BLE Notifications] Battery: ${batteryNotification.batteryLevelText} at ${batteryNotification.batteryVoltage}mV`,
           );
         } else if (notification.command === 0x81) {
           // Active Event Notification
@@ -148,27 +125,8 @@ export function useBLENotifications({
           detailedDescription = `Event ${eventNotification.eventIndex}: ${eventNotification.eventStateText}`;
 
           console.log(
-            `⚡ [BLE Notifications] Event #${eventNotification.eventIndex}: ${eventNotification.eventStateText}`,
+            `[BLE Notifications] Event #${eventNotification.eventIndex}: ${eventNotification.eventStateText}`,
           );
-
-          // Handle alarm trigger (state 2 = "ON (vibrating)")
-          if (eventNotification.eventState === 2) {
-            console.log(
-              `🚨 [BLE Notifications] ALARM TRIGGERED: Event #${eventNotification.eventIndex}`,
-            );
-            setActiveAlarm({
-              eventIndex: eventNotification.eventIndex,
-              eventState: eventNotification.eventState,
-              eventStateText: eventNotification.eventStateText,
-              timestamp: new Date(),
-            });
-          } else if (eventNotification.eventState === 0) {
-            // Clear active alarm when event turns off
-            console.log(
-              `🔕 [BLE Notifications] ALARM STOPPED: Event #${eventNotification.eventIndex}`,
-            );
-            setActiveAlarm(null);
-          }
         } else {
           // Time Notification (command === 0x82)
           const timeNotification = parseTimeNotification(decryptedData);
@@ -176,7 +134,7 @@ export function useBLENotifications({
           detailedDescription = `Time: ${timeNotification.dateTime.toLocaleString()} (${timeNotification.weekDayText})`;
 
           console.log(
-            `⏰ [BLE Notifications] Time: ${timeNotification.dateTime.toLocaleString()}`,
+            `[BLE Notifications] Time: ${timeNotification.dateTime.toLocaleString()}`,
           );
         }
 
@@ -189,7 +147,7 @@ export function useBLENotifications({
         };
 
         setNotifications((prev) => [...prev, contextNotification]);
-        console.log(`📲 [BLE Notifications] ${detailedDescription}`);
+        console.log(`[BLE Notifications] ${detailedDescription}`);
       } catch (error) {
         console.warn(
           "[BLE Notifications] Failed to parse notification:",
@@ -202,11 +160,8 @@ export function useBLENotifications({
 
   return {
     notifications,
-    activeAlarm,
     clearNotifications,
     addNotification,
-    clearActiveAlarm,
     handleNotificationData,
-    setActiveAlarm,
   };
 }

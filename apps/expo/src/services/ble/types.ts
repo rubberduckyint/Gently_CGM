@@ -54,7 +54,7 @@ export interface StoredDeviceKey {
   createdAt: number;
 }
 
-// Event-related types based on BLE protocol
+// BLE Protocol Enums for device feedback
 export enum VibrationIntensity {
   LOW = 0x00,
   MEDIUM = 0x01,
@@ -78,32 +78,6 @@ export enum LedColor {
   YELLOW = 5,
   MAGENTA = 6,
   WHITE = 7,
-}
-
-export enum SeverityLevel {
-  CRITICAL = 0x01, // Not snoozable, No disarm
-  IMPORTANT = 0x02, // Snoozable, but No disarm
-  INFORMATIONAL = 0x03, // Snoozable & disarm
-}
-
-export interface EventData {
-  eventIndex: number; // 0-49
-  vibrationPattern: number; // 0-63
-  vibrationIntensity: VibrationIntensity;
-  ledPattern: LedPattern;
-  ledColor: LedColor;
-  severityLevel: SeverityLevel;
-  snoozePeriod: number; // minutes
-  snoozeTimeout: number; // minutes
-  retriggerDelay: number; // minutes
-  retriggerTimeout: number; // minutes
-  eventName: string; // Max 10 characters
-  cronExpression: string; // Max 42 characters
-}
-
-export interface EventResponse {
-  eventIndex: number;
-  status: ResponseStatus;
 }
 
 // BLE Service and Characteristic UUIDs - Raw values

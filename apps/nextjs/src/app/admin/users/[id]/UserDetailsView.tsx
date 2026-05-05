@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Clock, Smartphone, User as UserIcon } from "lucide-react";
+import { ArrowLeft, Smartphone, User as UserIcon } from "lucide-react";
 
 import { Badge } from "~/_components/ui/badge";
 import { Button } from "~/_components/ui/button";
@@ -21,9 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/_components/ui/table";
-import { AlarmCard } from "~/components/alarms/AlarmCard";
 import { useTRPC } from "~/trpc/react";
-import { formatCronExpressionWithStartEnd } from "~/utils/alarmFormatters";
 
 interface UserDetailsViewProps {
   userId: string;
@@ -143,21 +141,12 @@ export function UserDetailsView({ userId }: UserDetailsViewProps) {
 
           <Separator className="my-4" />
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="flex items-center gap-2">
-              <Smartphone className="text-muted-foreground h-4 w-4" />
-              <span className="text-sm">
-                <strong>{user._count.devices}</strong> device
-                {user._count.devices !== 1 ? "s" : ""}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Clock className="text-muted-foreground h-4 w-4" />
-              <span className="text-sm">
-                <strong>{user._count.alarms}</strong> alarm
-                {user._count.alarms !== 1 ? "s" : ""}
-              </span>
-            </div>
+          <div className="flex items-center gap-2">
+            <Smartphone className="text-muted-foreground h-4 w-4" />
+            <span className="text-sm">
+              <strong>{user._count.devices}</strong> device
+              {user._count.devices !== 1 ? "s" : ""}
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -178,7 +167,6 @@ export function UserDetailsView({ userId }: UserDetailsViewProps) {
                 <TableRow>
                   <TableHead>Title</TableHead>
                   <TableHead>Description</TableHead>
-                  <TableHead>Alarms</TableHead>
                   <TableHead>Battery</TableHead>
                   <TableHead>Sync Status</TableHead>
                   <TableHead>Created</TableHead>
@@ -191,7 +179,6 @@ export function UserDetailsView({ userId }: UserDetailsViewProps) {
                       {device.title}
                     </TableCell>
                     <TableCell>{device.description}</TableCell>
-                    <TableCell>{device._count.alarms}</TableCell>
                     <TableCell>{device.batteryLevel}%</TableCell>
                     <TableCell>
                       <Badge
@@ -208,34 +195,6 @@ export function UserDetailsView({ userId }: UserDetailsViewProps) {
                 ))}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Alarms */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Alarms ({user.alarms.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {user.alarms.length === 0 ? (
-            <p className="text-muted-foreground py-8 text-center">
-              No alarms found.
-            </p>
-          ) : (
-            <ul className="divide-border divide-y">
-              {user.alarms.map((alarm) => (
-                <li key={alarm.id} className="py-6">
-                  <AlarmCard
-                    alarm={alarm}
-                    formatCronExpressionWithStartEnd={
-                      formatCronExpressionWithStartEnd
-                    }
-                    showExpiredBadge={true}
-                  />
-                </li>
-              ))}
-            </ul>
           )}
         </CardContent>
       </Card>

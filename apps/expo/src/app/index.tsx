@@ -650,7 +650,7 @@ export default function LoginPage() {
                 { textAlign: "center", color: colors.text.tertiary },
               ]}
             >
-              Manage your devices and gentle alarms with ease
+              Manage your devices and notifications with ease
             </Text>
           </View>
         </View>

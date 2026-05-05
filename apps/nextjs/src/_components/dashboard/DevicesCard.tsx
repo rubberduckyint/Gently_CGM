@@ -3,7 +3,6 @@
 import { useTranslations } from "next-intl";
 
 import { Avatar, AvatarFallback, AvatarImage } from "~/_components/ui/avatar";
-import { Badge } from "~/_components/ui/badge";
 import { Card, CardContent } from "~/_components/ui/card";
 
 // Device type from the API
@@ -11,9 +10,6 @@ interface Device {
   id: string;
   title: string;
   description: string | null;
-  _count: {
-    alarms: number;
-  };
 }
 
 export function DevicesCard({ devices }: { devices: Device[] }) {
@@ -53,14 +49,6 @@ export function DevicesCard({ devices }: { devices: Device[] }) {
                         {device.description}
                       </div>
                     </div>
-                  </div>
-                  <div className="flex min-w-[120px] flex-col items-end">
-                    <Badge variant="outline" className="mb-1">
-                      {device._count.alarms}{" "}
-                      {device._count.alarms === 1
-                        ? t("devices.alarm")
-                        : t("devices.alarms")}
-                    </Badge>
                   </div>
                 </a>
               </li>

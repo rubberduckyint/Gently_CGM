@@ -36,8 +36,8 @@ export default function MagicLinkEmail({
             </Text>
             <Text style={text}>
               {productName} is your personal vibration and light notification device that
-              you wear on your wrist. Use this app to manage your custom alarms
-              and notifications.
+              you wear on your wrist. Use this app to manage your custom
+              notifications.
             </Text>
             <Button href={url} style={button}>
               Complete Sign In

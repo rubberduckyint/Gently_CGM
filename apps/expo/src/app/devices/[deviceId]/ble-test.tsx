@@ -19,12 +19,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 
-import type { AllEventsResponse } from "~/services/ble/commands/getAllEvents";
 import { useBLE } from "~/contexts/BLEContext";
-import {
-  createAddEventRequest,
-  parseAddEventResponse,
-} from "~/services/ble/commands/addEvent";
 // Custom header - not using expo navigation
 import {
   createEnterDfuModeRequest,
@@ -35,25 +30,13 @@ import {
   parseFindMeResponse,
 } from "~/services/ble/commands/findMe";
 import {
-  createGetAllEventsRequest,
-  handleGetAllEventsPacket,
-} from "~/services/ble/commands/getAllEvents";
-import {
   createGetDeviceStatusRequest,
   parseGetDeviceStatusResponse,
 } from "~/services/ble/commands/getDeviceStatus";
 import {
-  createGetNumberOfEventsRequest,
-  parseGetNumberOfEventsResponse,
-} from "~/services/ble/commands/getNumberOfEvents";
-import {
   createGetTimeRequest,
   parseGetTimeResponse,
 } from "~/services/ble/commands/getTime";
-import {
-  createSetEventOnOffRequest,
-  parseSetEventOnOffResponse,
-} from "~/services/ble/commands/setEventOnOff";
 import {
   createSetTimeRequest,
   parseSetTimeResponse,
@@ -82,7 +65,6 @@ export default function BleTestPage() {
     encryptionKey,
     notifications,
     sendBLECommand,
-    sendMultiPacketBLECommand,
     clearNotifications,
     addNotification: _addNotification,
     isDeviceConnected: _isDeviceConnected,
@@ -360,25 +342,6 @@ export default function BleTestPage() {
     );
   };
 
-  const testGetEventCount = async () => {
-    if (!connectedDevice || !encryptionKey) return;
-
-    const response = await sendBLECommand(createGetNumberOfEventsRequest());
-
-    const result = parseGetNumberOfEventsResponse(response.payload);
-    const statusText = response.status === ResponseStatus.OK ? "OK" : "ERROR";
-    addTestResult(
-      `✅ Event Count: ${result.count} events (max: ${result.maxEvents})`,
-    );
-    addTestResult(
-      `📊 Event Count Response: Status=${statusText} (0x${response.status.toString(16)}), Command=0x${response.commandCode.toString(16)}, Count=${result.count}, MaxEvents=${result.maxEvents}, Raw=[${Array.from(
-        response.payload,
-      )
-        .map((b) => "0x" + b.toString(16).padStart(2, "0"))
-        .join(", ")}]`,
-    );
-  };
-
   const testGetDeviceStatus = async () => {
     if (!connectedDevice || !encryptionKey) return;
 
@@ -471,194 +434,6 @@ export default function BleTestPage() {
         ],
       );
     });
-  };
-
-  const testGetAllEvents = async () => {
-    if (!connectedDevice || !encryptionKey) {
-      addTestResult("❌ Device not connected or encryption key missing");
-      return;
-    }
-
-    // Verify connection state
-    if (connectionState !== "connected") {
-      addTestResult(`❌ Invalid connection state: ${connectionState}`);
-      return;
-    }
-
-    try {
-      addTestResult(
-        `🔍 Getting all events using context multi-packet handler...`,
-      );
-
-      const result = (await sendMultiPacketBLECommand(
-        createGetAllEventsRequest(),
-        handleGetAllEventsPacket,
-      )) as AllEventsResponse;
-
-      addTestResult(`✅ Get All Events: Found ${result.totalEvents} events`);
-      if (result.events.length > 0) {
-        result.events.forEach((event, index) => {
-          const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-          const activeDays = daysOfWeek
-            .filter((_, i) => (event.days & (1 << i)) !== 0)
-            .join(", ");
-          addTestResult(
-            `  📅 Event ${index + 1}: ${event.hour.toString().padStart(2, "0")}:${event.minute.toString().padStart(2, "0")} on ${activeDays || "No days"}, ${event.enabled ? "Enabled" : "Disabled"}, Pattern: ${event.vibratePattern}${event.name ? `, Name: "${event.name}"` : ""}`,
-          );
-        });
-      } else {
-        addTestResult(`  📝 No events found on device`);
-      }
-      addTestResult(
-        `📊 Multi-packet All Events: Total=${result.totalEvents}, Parsed=${result.events.length}`,
-      );
-    } catch (error) {
-      addTestResult(
-        `❌ Get All Events failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  };
-
-  const testAddEvent = async () => {
-    if (!connectedDevice || !encryptionKey) return;
-
-    const now = new Date();
-    const future = new Date(now.getTime() + 2 * 60 * 1000); // 2 minutes in the future
-
-    const eventRequest = createAddEventRequest({
-      eventIndex: 0,
-      eventName: "Test",
-      cronExpression: `${future.getMinutes()} ${future.getHours()} * * *`,
-      vibrationPattern: 1,
-      vibrationIntensity: 2,
-      ledPattern: 1,
-      ledColor: 1,
-      severityLevel: 2,
-      snoozePeriod: 5,
-      snoozeTimeout: 15,
-      retriggerDelay: 0,
-      retriggerTimeout: 0,
-    });
-
-    // Log comprehensive encryption details to console
-    logCommandEncryptionDetails(eventRequest, "ADD_EVENT");
-
-    // Also add basic info to test results UI
-    addTestResult(`📤 Add Event command encryption details logged to console`);
-    addTestResult(
-      `🔐 Using encryption key: ${encryptionKey.substring(0, 8)}...`,
-    );
-    addTestResult(`📱 Sending to device: ${connectedDevice.id}`);
-
-    const response = await sendBLECommand(eventRequest);
-
-    const result = parseAddEventResponse(
-      response.payload,
-      response.status,
-      response.commandCode,
-    );
-    const statusText = result.status === "OK" ? "OK" : "ERROR";
-    addTestResult(`✅ Add Event: Event added at index ${result.eventIndex}`);
-    addTestResult(
-      `📊 Add Event Response: Status=${statusText}, EventIndex=${result.eventIndex}`,
-    );
-  };
-
-  const testSetEventOnOff = async () => {
-    if (!connectedDevice || !encryptionKey) return;
-
-    const response = await sendBLECommand(createSetEventOnOffRequest(0, true)); // Enable event at index 0
-
-    const result = parseSetEventOnOffResponse(
-      response.payload,
-      response.status,
-    );
-    const statusText = response.status === ResponseStatus.OK ? "OK" : "ERROR";
-    addTestResult(`✅ Set Event ON/OFF: Event ${result.eventIndex} enabled`);
-    addTestResult(
-      `📊 Set Event Response: Status=${statusText}, EventIndex=${result.eventIndex}`,
-    );
-  };
-
-  const testSyncAlarm = async () => {
-    if (!connectedDevice || !encryptionKey) return;
-
-    try {
-      addTestResult("🔄 Starting alarm sync process...");
-
-      const now = new Date();
-      const future = new Date(now.getTime() + 2 * 60 * 1000); // 2 minutes in the future
-      const eventIndex = 0;
-
-      // Step 1: Add the event
-      addTestResult("📝 Step 1: Adding event to device...");
-
-      const eventRequest = createAddEventRequest({
-        eventIndex,
-        eventName: "Sync Test",
-        cronExpression: `${future.getMinutes()} ${future.getHours()} * * *`,
-        vibrationPattern: 1,
-        vibrationIntensity: 2,
-        ledPattern: 1,
-        ledColor: 1,
-        severityLevel: 2,
-        snoozePeriod: 5,
-        snoozeTimeout: 15,
-        retriggerDelay: 0,
-        retriggerTimeout: 0,
-      });
-
-      // Log comprehensive encryption details to console
-      logCommandEncryptionDetails(eventRequest, "SYNC_ALARM_ADD_EVENT");
-
-      // Also add to test results for UI visibility
-      addTestResult(`📤 Sync alarm event encryption details logged to console`);
-      addTestResult(
-        `🔐 Using encryption key: ${encryptionKey.substring(0, 8)}...`,
-      );
-      addTestResult(`📱 Sending to device: ${connectedDevice.id}`);
-
-      const addResponse = await sendBLECommand(eventRequest);
-
-      const addResult = parseAddEventResponse(
-        addResponse.payload,
-        addResponse.status,
-        addResponse.commandCode,
-      );
-
-      if (addResult.status !== "OK") {
-        addTestResult(`❌ Failed to add event: ${addResult.status}`);
-        return;
-      }
-
-      addTestResult(`✅ Event added at index ${addResult.eventIndex}`);
-
-      // Step 2: Enable the event
-      addTestResult("🔛 Step 2: Enabling event...");
-      const enableResponse = await sendBLECommand(
-        createSetEventOnOffRequest(addResult.eventIndex, true),
-      );
-
-      const enableResult = parseSetEventOnOffResponse(
-        enableResponse.payload,
-        enableResponse.status,
-      );
-
-      if (enableResponse.status === ResponseStatus.OK) {
-        addTestResult(
-          `✅ Event ${enableResult.eventIndex} enabled successfully`,
-        );
-        addTestResult(
-          `🎉 Alarm sync completed! Event will trigger at ${future.getHours()}:${future.getMinutes().toString().padStart(2, "0")}`,
-        );
-      } else {
-        addTestResult(`❌ Failed to enable event ${enableResult.eventIndex}`);
-      }
-    } catch (error) {
-      addTestResult(
-        `❌ Sync failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   };
 
   if (isLoading) {
@@ -912,36 +687,11 @@ export default function BleTestPage() {
                 { name: "Get Time", test: testGetTime, icon: "time" },
                 { name: "Set Time", test: testSetTime, icon: "time-outline" },
                 {
-                  name: "Get Event Count",
-                  test: testGetEventCount,
-                  icon: "list",
-                },
-                {
-                  name: "Get All Events",
-                  test: testGetAllEvents,
-                  icon: "calendar",
-                },
-                {
                   name: "Get Device Status",
                   test: testGetDeviceStatus,
                   icon: "hardware-chip",
                 },
                 { name: "Find Me", test: testFindMe, icon: "flashlight" },
-                {
-                  name: "Add Test Event",
-                  test: testAddEvent,
-                  icon: "add-circle-outline",
-                },
-                {
-                  name: "Enable Event (ON/OFF)",
-                  test: testSetEventOnOff,
-                  icon: "toggle",
-                },
-                {
-                  name: "Sync Alarm (Add + Enable)",
-                  test: testSyncAlarm,
-                  icon: "sync",
-                },
                 {
                   name: "Enter DFU Mode",
                   test: testEnterDfuMode,

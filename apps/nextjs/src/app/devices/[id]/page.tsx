@@ -1,5 +1,4 @@
 import { HydrateClient } from "~/trpc/server";
-import AlarmsList from "./AlarmsList";
 import { DeviceCard } from "./DeviceCard";
 
 export default async function DevicePage(props: {
@@ -10,7 +9,6 @@ export default async function DevicePage(props: {
   return (
     <HydrateClient>
       <DeviceCard deviceId={params.id} />
-      <AlarmsList deviceId={params.id} />
     </HydrateClient>
   );
 }

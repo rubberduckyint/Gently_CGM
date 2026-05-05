@@ -142,56 +142,11 @@ export function trackBleCommandError(
 }
 
 // ============================================================================
-// Alarm Events
-// ============================================================================
-
-export function trackAlarmCreated(options: {
-  hasRepeat: boolean;
-  repeatType?: string;
-  severityLevel: string;
-  hasNotifications: boolean;
-}): void {
-  customEvent("alarm_created", options);
-}
-
-export function trackAlarmEdited(alarmId: string): void {
-  customEvent("alarm_edited", { alarmId });
-}
-
-export function trackAlarmDeleted(alarmId: string): void {
-  customEvent("alarm_deleted", { alarmId });
-}
-
-export function trackAlarmToggled(alarmId: string, isActive: boolean): void {
-  customEvent("alarm_toggled", { alarmId, isActive });
-}
-
-export function trackAlarmSynced(alarmId: string): void {
-  customEvent("alarm_synced_to_device", { alarmId });
-}
-
-export function trackAlarmSyncError(alarmId: string, error: string): void {
-  customEvent("alarm_sync_error", { alarmId, error });
-}
-
-export function trackAlarmTriggered(alarmId: string): void {
-  customEvent("alarm_triggered", { alarmId });
-}
-
-export function trackAlarmAcknowledged(alarmId: string): void {
-  customEvent("alarm_acknowledged", { alarmId });
-}
-
-export function trackAlarmSnoozed(alarmId: string): void {
-  customEvent("alarm_snoozed", { alarmId });
-}
-
-// ============================================================================
 // Settings Events
 // ============================================================================
 
 export function trackSettingsUpdated(
-  section: "profile" | "alarms" | "notifications",
+  section: "profile" | "notifications",
 ): void {
   customEvent("settings_updated", { section });
 }
@@ -201,10 +156,6 @@ export function trackNotificationPreferenceChanged(options: {
   emailEnabled: boolean;
 }): void {
   customEvent("notification_preference_changed", options);
-}
-
-export function trackAlarmPreferencesChanged(): void {
-  customEvent("alarm_preferences_changed", {});
 }
 
 // ============================================================================

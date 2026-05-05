@@ -58,7 +58,7 @@ function getSyncStatusInfo(syncStatus: string, lastSync: Date | string | null) {
         label: "Synced",
         description: lastSync
           ? `Last synced ${formatDistanceToNow(new Date(lastSync), { addSuffix: true })}`
-          : "All alarms synced to device",
+          : "Device synced",
       };
     case "SYNCING":
       return {
@@ -67,7 +67,7 @@ function getSyncStatusInfo(syncStatus: string, lastSync: Date | string | null) {
         bgColor: "bg-blue-50",
         borderColor: "border-blue-200",
         label: "Syncing",
-        description: "Syncing alarms to device...",
+        description: "Syncing to device...",
         animate: true,
       };
     case "NOT_SYNCED":

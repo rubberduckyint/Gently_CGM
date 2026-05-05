@@ -18,16 +18,16 @@ import Animated, {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect, useGlobalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
-import { AlarmCard } from "~/components/device";
-import { QuickReminderModal } from "~/components/QuickReminderModal";
 import { RetryConnectionModal } from "~/components/RetryConnectionModal";
 import { HamburgerMenu } from "~/components/ui/HamburgerMenu";
 import { Header } from "~/components/ui/Header";
 import { HelpModal } from "~/components/ui/HelpModal";
 import { useBLE } from "~/contexts/BLEContext";
-import { useAlarmSync } from "~/hooks/useAlarmSync";
+import { createTriggerAudioPatternRequest } from "~/services/ble/commands/triggerAudioPattern";
+import { createTriggerLedPatternRequest } from "~/services/ble/commands/triggerLedPattern";
+import { createTriggerVibrationPatternRequest } from "~/services/ble/commands/triggerVibrationPattern";
 import {
   buttons,
   cards,
@@ -36,14 +36,12 @@ import {
   spacing,
   typography,
 } from "~/styles";
-import { calculateNextAlarmOccurrence } from "~/utils/alarmUtils";
 import { trpc } from "~/utils/api";
 import { devicesBeingDeleted } from "~/utils/deviceDeletionTracker";
 import { markOnboardingComplete } from "~/utils/userPreferences";
 
 export default function DeviceDetailPage() {
   const { deviceId } = useGlobalSearchParams<{ deviceId: string }>();
-  const queryClient = useQueryClient();
   const [autoConnectAttempted, setAutoConnectAttempted] = useState(false);
   const isMountedRef = useRef(true);
   const [connectionProgress, setConnectionProgress] = useState<{
@@ -52,12 +50,9 @@ export default function DeviceDetailPage() {
   } | null>(null);
   const [showRetryModal, setShowRetryModal] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [showQuickReminderModal, setShowQuickReminderModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
-  const [showExpiredAlarms, setShowExpiredAlarms] = useState(false);
 
   // Store the initial device ID to prevent it from changing during navigation
-  // Only set it if deviceId is actually defined
   const [initialDeviceId] = useState(() => {
     return deviceId;
   });
@@ -65,32 +60,25 @@ export default function DeviceDetailPage() {
   // Set mounted flag on mount
   useEffect(() => {
     isMountedRef.current = true;
-
-    // Cleanup function - only runs when component actually unmounts
     return () => {
       isMountedRef.current = false;
-
-      // Note: We don't add the device to devicesBeingDeleted here
-      // because unmounting happens during normal navigation too.
-      // The device is only added to the set in the delete page.
     };
-  }, []); // Empty deps - only run on mount/unmount
+  }, []);
 
   // Use BLE context to show connection status
   const {
     connectionState,
     connectToDevice,
     notifications,
-    connectedDevice,
-    encryptionKey,
+    sendBLECommand,
   } = useBLE();
+  const [triggerLoading, setTriggerLoading] = useState<string | null>(null);
 
   // Animation for connecting status using Reanimated
   const pulseScale = useSharedValue(1);
 
   // Animate the pulse when connecting or showing progress
   useEffect(() => {
-    // Animate if connecting, scanning, or if there's an active connection progress message
     const shouldAnimate =
       connectionState === "connecting" ||
       connectionState === "scanning" ||
@@ -102,7 +90,7 @@ export default function DeviceDetailPage() {
           withTiming(1.5, { duration: 800 }),
           withTiming(1, { duration: 800 }),
         ),
-        -1, // infinite loop
+        -1,
         false,
       );
     } else {
@@ -117,7 +105,7 @@ export default function DeviceDetailPage() {
 
   // Track the latest battery status from notifications
   const [batteryStatus, setBatteryStatus] = useState<{
-    level: number; // 0=CRITICAL, 1=LOW, 2=MEDIUM, 3=GOOD, 4=FULL
+    level: number;
     voltage: number;
     isCharging: boolean;
     levelText: string;
@@ -208,18 +196,16 @@ export default function DeviceDetailPage() {
   } = useQuery({
     queryKey: ["device", "getById", { id: initialDeviceId }],
     queryFn: async () => {
-      // Check if component is still mounted before fetching
       if (!isMountedRef.current) {
         throw new Error("Component unmounted");
       }
       return await trpc.device.getById.query({ id: initialDeviceId });
     },
-    enabled: !!initialDeviceId && !!deviceId, // Only run when we have both IDs and route is valid
-    refetchOnMount: true, // Refetch when component mounts to get latest alarms
-    refetchOnWindowFocus: false, // Don't refetch when window regains focus
-    staleTime: 5000, // Consider data fresh for 5 seconds (reduced to ensure fresh data)
+    enabled: !!initialDeviceId && !!deviceId,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    staleTime: 5000,
     retry: (failureCount, error) => {
-      // Don't retry if the device is not found (likely deleted)
       if (
         error instanceof Error &&
         (error.message.includes("Device not found") ||
@@ -228,7 +214,6 @@ export default function DeviceDetailPage() {
       ) {
         return false;
       }
-      // Default retry behavior for other errors
       return failureCount < 3;
     },
   });
@@ -240,245 +225,22 @@ export default function DeviceDetailPage() {
     }, [refetch]),
   );
 
-  // Initialize alarm sync hook
-  const alarmSync = useAlarmSync({
-    deviceSerialNumber: device?.serialNumber ?? undefined,
-    enabled: !!deviceId && !!initialDeviceId && !!device?.serialNumber, // Only enable when we have valid device data
-    onSyncComplete: () => {
-      void queryClient.invalidateQueries({
-        queryKey: ["device", "getById", { id: initialDeviceId }],
-      });
-    },
-  });
-
-  // Track if we've synced alarms for this connection
-  const initialSyncCompletedRef = useRef(false);
-
-  // Track alarm count to detect when alarms are added/updated/deleted
-  const previousAlarmCountRef = useRef<number | null>(null);
-
-  // Track alarm content hash to detect modifications
-  const previousAlarmHashRef = useRef<string | null>(null);
-
-  // Helper to check if an alarm is expired/completed
-  const isAlarmExpired = useCallback(
-    (alarm: {
-      isActive: boolean;
-      startDate: Date;
-      endDate: Date | null;
-      repeat: boolean;
-      cronExpression: string;
-    }) => {
-      const scheduleInfo = calculateNextAlarmOccurrence({
-        isActive: alarm.isActive,
-        startDate: alarm.startDate,
-        endDate: alarm.endDate,
-        repeat: alarm.repeat,
-        cronExpression: alarm.cronExpression,
-      });
-      return (
-        scheduleInfo.status === "completed" || scheduleInfo.status === "overdue"
-      );
-    },
-    [],
-  );
-
-  // Watch for alarm changes and trigger re-sync if connected
-  useEffect(() => {
-    const currentAlarmCount = device?.alarms.length ?? 0;
-
-    // Create a hash of alarm data to detect modifications (not just count changes)
-    // Only include fields that matter for BLE sync
-    const currentAlarmHash = device?.alarms
-      ? JSON.stringify(
-          device.alarms.map((a) => ({
-            id: a.id,
-            isActive: a.isActive,
-            startDate: a.startDate,
-            endDate: a.endDate,
-            cronExpression: a.cronExpression,
-            severityLevel: a.severityLevel,
-            ledPattern: a.ledPattern,
-            ledColor: a.ledColor,
-            vibrationPattern: a.vibrationPattern,
-            vibrationIntensity: a.vibrationIntensity,
-            snoozePeriod: a.snoozePeriod,
-            snoozeTimeout: a.snoozeTimeout,
-            retriggerDelay: a.retriggerDelay,
-            retriggerTimeout: a.retriggerTimeout,
-          })),
-        )
-      : null;
-
-    // If this is the first load, just store the count and hash
-    if (
-      previousAlarmCountRef.current === null ||
-      previousAlarmHashRef.current === null
-    ) {
-      previousAlarmCountRef.current = currentAlarmCount;
-      previousAlarmHashRef.current = currentAlarmHash;
-      return;
-    }
-
-    // Check if alarms changed (count or content)
-    const countChanged = currentAlarmCount !== previousAlarmCountRef.current;
-    const contentChanged = currentAlarmHash !== previousAlarmHashRef.current;
-
-    // If alarms changed and we're connected, trigger re-sync
-    if (
-      (countChanged || contentChanged) &&
-      connectionState === "connected" &&
-      !alarmSync.isSyncing &&
-      initialSyncCompletedRef.current
-    ) {
-      if (countChanged) {
-        console.log(
-          `📊 Alarm count changed from ${previousAlarmCountRef.current} to ${currentAlarmCount}, triggering re-sync`,
-        );
-      } else {
-        console.log(
-          `✏️ Alarm content modified (count unchanged at ${currentAlarmCount}), triggering re-sync`,
-        );
-      }
-
-      initialSyncCompletedRef.current = false;
-
-      // Trigger immediate re-sync by filtering and syncing active alarms
-      const activeAlarms =
-        device?.alarms.filter((alarm) => !isAlarmExpired(alarm)) ?? [];
-
-      console.log(
-        `🔄 Syncing ${activeAlarms.length} active alarms after alarm change`,
-      );
-
-      void alarmSync.performSync(activeAlarms).then(() => {
-        initialSyncCompletedRef.current = true;
-      });
-    }
-
-    previousAlarmCountRef.current = currentAlarmCount;
-    previousAlarmHashRef.current = currentAlarmHash;
-  }, [
-    device?.alarms,
-    connectionState,
-    alarmSync.isSyncing,
-    alarmSync,
-    isAlarmExpired,
-  ]);
-
-  // Sync alarms when connected: clear all events and re-add only active alarms
-  // This runs ONCE per connection after the device data is loaded
-  useEffect(() => {
-    const performInitialSync = async () => {
-      if (
-        !device?.alarms ||
-        connectionState !== "connected" ||
-        alarmSync.isSyncing ||
-        !connectedDevice ||
-        !encryptionKey ||
-        initialSyncCompletedRef.current // Don't sync again if already completed for this connection
-      ) {
-        return;
-      }
-
-      console.log("🔄 Starting initial sync on connection");
-
-      // Filter out expired/completed alarms before syncing
-      const activeAlarms = device.alarms.filter(
-        (alarm) => !isAlarmExpired(alarm),
-      );
-
-      console.log(
-        `📊 Alarm sync filter - Total: ${device.alarms.length}, Active: ${activeAlarms.length}, Filtered out: ${device.alarms.length - activeAlarms.length}`,
-      );
-
-      try {
-        // Perform full sync: clear all events and re-add only active alarms
-        await alarmSync.performSync(activeAlarms);
-
-        console.log("✅ Initial sync completed successfully");
-
-        // Clear deviceIndex for expired alarms that weren't synced
-        const expiredAlarmIds = device.alarms
-          .filter((alarm) => {
-            const scheduleInfo = calculateNextAlarmOccurrence({
-              isActive: alarm.isActive,
-              startDate: alarm.startDate,
-              endDate: alarm.endDate,
-              repeat: alarm.repeat,
-              cronExpression: alarm.cronExpression,
-            });
-            // Alarm is expired if it has no future occurrences
-            return (
-              scheduleInfo.status === "completed" ||
-              scheduleInfo.status === "overdue"
-            );
-          })
-          .filter((alarm) => alarm.deviceIndex !== null) // Only update alarms that have a deviceIndex
-          .map((alarm) => alarm.id);
-
-        if (expiredAlarmIds.length > 0) {
-          console.log(
-            `🧹 Clearing deviceIndex for ${expiredAlarmIds.length} expired alarms that weren't synced`,
-          );
-
-          // Update each expired alarm to clear its deviceIndex
-          for (const alarmId of expiredAlarmIds) {
-            try {
-              await trpc.alarm.update.mutate({
-                id: alarmId,
-                deviceIndex: null,
-              });
-            } catch (error) {
-              console.error(
-                `❌ Failed to clear deviceIndex for alarm ${alarmId}:`,
-                error,
-              );
-            }
-          }
-
-          // Refresh device data to reflect the cleared deviceIndex values
-          await queryClient.invalidateQueries({
-            queryKey: ["device", "getById", { id: initialDeviceId }],
-          });
-        }
-
-        initialSyncCompletedRef.current = true; // Mark sync as completed
-      } catch (error) {
-        console.error("❌ Initial sync failed:", error);
-      }
-    };
-
-    void performInitialSync();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device?.alarms, connectionState]);
-
-  // Reset sync flag when disconnected
-  useEffect(() => {
-    if (connectionState === "disconnected") {
-      initialSyncCompletedRef.current = false;
-    }
-  }, [connectionState]);
-
   // Handle device not found errors by navigating back automatically
   useEffect(() => {
-    // Only navigate away if we have a valid deviceId and it's an error for the current route
     if (
-      deviceId && // Make sure we're on a valid route
-      initialDeviceId && // Make sure we have an initial ID
-      deviceId === initialDeviceId && // Make sure IDs match (not a stale query)
+      deviceId &&
+      initialDeviceId &&
+      deviceId === initialDeviceId &&
       error?.message &&
       (error.message.includes("Device not found") ||
         error.message.includes("you don't have permission"))
     ) {
       console.log(
-        `📱 Device not found or access denied for ID: ${initialDeviceId}`,
+        `Device not found or access denied for ID: ${initialDeviceId}`,
       );
       console.log("   └─ Error:", error.message);
-      console.log("   └─ Current route deviceId:", deviceId);
       console.log("   └─ Navigating back to dashboard");
 
-      // Add a small delay to prevent navigation loops and allow debugging
       const timer = setTimeout(() => {
         router.push("/dashboard");
       }, 500);
@@ -490,39 +252,35 @@ export default function DeviceDetailPage() {
   // Auto-connect to device when page loads
   useEffect(() => {
     const autoConnect = async () => {
-      // Don't auto-connect if we don't have a valid device ID or device data
-      // Check autoConnectAttempted first to prevent re-runs
       if (autoConnectAttempted) {
         return;
       }
 
       if (
-        !isMountedRef.current || // Page is unmounting
-        !deviceId || // No route parameter
-        !initialDeviceId || // No stored ID
-        devicesBeingDeleted.has(deviceId) || // Device is being deleted
-        !device?.serialNumber || // No device data or serial number
-        error || // Query has an error (device might be deleted)
+        !isMountedRef.current ||
+        !deviceId ||
+        !initialDeviceId ||
+        devicesBeingDeleted.has(deviceId) ||
+        !device?.serialNumber ||
+        error ||
         connectionState === "connected" ||
         connectionState === "connecting"
       ) {
         if (devicesBeingDeleted.has(deviceId)) {
           console.log(
-            "🚫 Skipping auto-connect - device is being deleted:",
+            "Skipping auto-connect - device is being deleted:",
             deviceId,
           );
         }
         return;
       }
 
-      console.log("🔄 Auto-connecting to device:", device.serialNumber);
+      console.log("Auto-connecting to device:", device.serialNumber);
 
       try {
-        // Connect with proper configuration and progress tracking
         await connectToDevice(
           device.serialNumber,
           (progress) => {
-            // Update connection progress for UI display
             setConnectionProgress({
               message: progress.message,
               progress: progress.progress,
@@ -533,29 +291,28 @@ export default function DeviceDetailPage() {
           },
           {
             maxRetries: 3,
-            connectionTimeoutMs: 60000, // 60 seconds per attempt
+            connectionTimeoutMs: 60000,
             stabilizationDelayMs: 900,
             mtuSize: 512,
-            scanTimeoutSeconds: 30, // 30 seconds scan timeout
+            scanTimeoutSeconds: 30,
           },
         );
-        console.log("✅ Auto-connect successful!");
-        setConnectionProgress(null); // Clear progress on success
-        setConnectionError(null); // Clear any previous errors
-        setAutoConnectAttempted(true); // Mark attempt as complete
+        console.log("Auto-connect successful!");
+        setConnectionProgress(null);
+        setConnectionError(null);
+        setAutoConnectAttempted(true);
       } catch (error) {
-        console.warn("⚠️ Auto-connect failed:", error);
+        console.warn("Auto-connect failed:", error);
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
         setConnectionError(errorMessage);
-        setConnectionProgress(null); // Clear progress on error
-        setShowRetryModal(true); // Show retry modal
-        setAutoConnectAttempted(true); // Mark attempt as complete even on failure
+        setConnectionProgress(null);
+        setShowRetryModal(true);
+        setAutoConnectAttempted(true);
       }
     };
 
     void autoConnect();
-    // Only depend on the serial number changing, not the entire device object
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     device?.serialNumber,
@@ -573,15 +330,13 @@ export default function DeviceDetailPage() {
     }
 
     try {
-      // Reset progress and attempt reconnect with full pairing process
       setConnectionProgress(null);
       setConnectionError(null);
-      setShowRetryModal(false); // Close modal when retrying
+      setShowRetryModal(false);
 
       await connectToDevice(
         device.serialNumber,
         (progress) => {
-          // Update connection progress for UI display
           setConnectionProgress({
             message: progress.message,
             progress: progress.progress,
@@ -592,21 +347,73 @@ export default function DeviceDetailPage() {
         },
         {
           maxRetries: 3,
-          connectionTimeoutMs: 60000, // 60 seconds per attempt
+          connectionTimeoutMs: 60000,
           stabilizationDelayMs: 900,
           mtuSize: 512,
-          scanTimeoutSeconds: 30, // 30 seconds scan timeout
+          scanTimeoutSeconds: 30,
         },
       );
-      console.log("✅ Manual reconnect successful!");
-      setConnectionProgress(null); // Clear progress on success
-      setConnectionError(null); // Clear any previous errors
+      console.log("Manual reconnect successful!");
+      setConnectionProgress(null);
+      setConnectionError(null);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       setConnectionError(errorMessage);
-      setConnectionProgress(null); // Clear progress on error
-      setShowRetryModal(true); // Show retry modal
+      setConnectionProgress(null);
+      setShowRetryModal(true);
+    }
+  };
+
+  const handleTriggerVibrate = async () => {
+    setTriggerLoading("vibrate");
+    try {
+      await sendBLECommand(
+        createTriggerVibrationPatternRequest({
+          vibrationPattern: 1, // Heartbeat
+          vibrationIntensity: 2, // HIGH
+          totalDurationSeconds: 2,
+        }),
+      );
+    } catch (e) {
+      Alert.alert("Error", "Failed to trigger vibration");
+    } finally {
+      setTriggerLoading(null);
+    }
+  };
+
+  const handleTriggerSound = async () => {
+    setTriggerLoading("sound");
+    try {
+      await sendBLECommand(
+        createTriggerAudioPatternRequest({
+          onDurationMs: 200,
+          offDurationMs: 200,
+          totalDurationSeconds: 2,
+        }),
+      );
+    } catch (e) {
+      Alert.alert("Error", "Failed to trigger sound");
+    } finally {
+      setTriggerLoading(null);
+    }
+  };
+
+  const handleTriggerLight = async () => {
+    setTriggerLoading("light");
+    try {
+      await sendBLECommand(
+        createTriggerLedPatternRequest({
+          ledColor: 1, // Blue
+          onDurationMs: 500,
+          offDurationMs: 500,
+          totalDurationSeconds: 2,
+        }),
+      );
+    } catch (e) {
+      Alert.alert("Error", "Failed to trigger light");
+    } finally {
+      setTriggerLoading(null);
     }
   };
 
@@ -901,361 +708,171 @@ export default function DeviceDetailPage() {
         style={containers.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Alarms Section */}
+        {/* Device Info Section */}
         <View style={[containers.section, { paddingTop: spacing[3] }]}>
           <View
             style={[
-              {
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: spacing[3],
-              },
+              cards.base,
+              { alignItems: "center", paddingVertical: spacing[8] },
             ]}
           >
+            <Ionicons
+              name="watch-outline"
+              size={48}
+              color={
+                connectionState === "connected"
+                  ? colors.success[600]
+                  : colors.gray[400]
+              }
+              style={{ marginBottom: spacing[3] }}
+            />
+            <Text
+              style={[
+                typography.h6,
+                {
+                  color: colors.text.primary,
+                  marginBottom: spacing[1],
+                },
+              ]}
+            >
+              {connectionState === "connected"
+                ? "Device Connected"
+                : "Device Disconnected"}
+            </Text>
+            <Text
+              style={[
+                typography.body,
+                { color: colors.text.secondary, textAlign: "center" },
+              ]}
+            >
+              {connectionState === "connected"
+                ? "Your Gently device is ready"
+                : "Connect to your device to get started"}
+            </Text>
+          </View>
+
+          {/* Device Trigger Buttons */}
+          {connectionState === "connected" && (
             <View
               style={{
                 flexDirection: "row",
-                alignItems: "center",
-                marginRight: spacing[2],
+                justifyContent: "space-between",
+                gap: spacing[3],
+                marginTop: spacing[4],
               }}
             >
-              <Ionicons
-                name="alarm"
-                size={24}
-                color={colors.text.primary}
-                style={{ marginRight: spacing[2] }}
-              />
-              <Text style={[typography.h5, { color: colors.text.primary }]}>
-                Alarms (
-                {
-                  device.alarms.filter((alarm) => {
-                    // Check if alarm has a next occurrence when enabled
-                    const scheduleInfo = calculateNextAlarmOccurrence({
-                      isActive: true, // Force active to check if it would have next occurrence
-                      startDate: new Date(alarm.startDate),
-                      endDate: alarm.endDate ? new Date(alarm.endDate) : null,
-                      repeat: alarm.repeat,
-                      cronExpression: alarm.cronExpression,
-                    });
-                    return scheduleInfo.nextOccurrence !== null;
-                  }).length
-                }
-                )
-              </Text>
-            </View>
-            <View style={{ flexDirection: "row", gap: spacing[2] }}>
               <Pressable
                 style={[
-                  buttons.base,
-                  buttons.primary,
+                  cards.base,
                   {
-                    paddingVertical: spacing[2],
-                    paddingHorizontal: spacing[3],
+                    flex: 1,
+                    alignItems: "center",
+                    paddingVertical: spacing[4],
+                    opacity: triggerLoading === "vibrate" ? 0.6 : 1,
                   },
                 ]}
-                onPress={() => setShowQuickReminderModal(true)}
+                onPress={handleTriggerVibrate}
+                disabled={triggerLoading !== null}
               >
-                <Ionicons
-                  name="time"
-                  size={16}
-                  color={colors.text.inverse}
-                  style={{ marginRight: spacing[1] }}
-                />
-                <Text
-                  style={[typography.label, { color: colors.text.inverse }]}
-                >
-                  Remind
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  buttons.base,
-                  buttons.success,
-                  {
-                    paddingVertical: spacing[2],
-                    paddingHorizontal: spacing[3],
-                  },
-                ]}
-                onPress={() => router.push(`/devices/${deviceId}/alarms/add`)}
-              >
-                <Ionicons
-                  name="add"
-                  size={16}
-                  color={colors.text.inverse}
-                  style={{ marginRight: spacing[1] }}
-                />
-                <Text
-                  style={[typography.label, { color: colors.text.inverse }]}
-                >
-                  Add Alarm
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Alarms List */}
-          {(() => {
-            // First, map all alarms with their schedule information
-            const sortedAlarms = device.alarms.map((alarm) => {
-              const scheduleInfo = calculateNextAlarmOccurrence({
-                isActive: alarm.isActive,
-                startDate: new Date(alarm.startDate),
-                endDate: alarm.endDate ? new Date(alarm.endDate) : null,
-                repeat: alarm.repeat,
-                cronExpression: alarm.cronExpression,
-              });
-
-              // For disabled alarms, calculate what the next occurrence would be if enabled
-              const scheduleInfoIfEnabled = !alarm.isActive
-                ? calculateNextAlarmOccurrence({
-                    isActive: true, // Force active to see if it would have a next occurrence
-                    startDate: new Date(alarm.startDate),
-                    endDate: alarm.endDate ? new Date(alarm.endDate) : null,
-                    repeat: alarm.repeat,
-                    cronExpression: alarm.cronExpression,
-                  })
-                : scheduleInfo;
-
-              return { alarm, scheduleInfo, scheduleInfoIfEnabled };
-            });
-
-            // Active alarms: has next occurrence OR is disabled but would have next occurrence if enabled
-            const activeAlarms = sortedAlarms
-              .filter(
-                ({ scheduleInfo, scheduleInfoIfEnabled }) =>
-                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- using || for truthiness check (Date or null)
-                  scheduleInfo.nextOccurrence ||
-                  scheduleInfoIfEnabled.nextOccurrence,
-              )
-              .sort((a, b) => {
-                const timeA =
-                  a.scheduleInfo.nextOccurrence?.getTime() ??
-                  a.scheduleInfoIfEnabled.nextOccurrence?.getTime() ??
-                  0;
-                const timeB =
-                  b.scheduleInfo.nextOccurrence?.getTime() ??
-                  b.scheduleInfoIfEnabled.nextOccurrence?.getTime() ??
-                  0;
-                return timeA - timeB;
-              });
-
-            // Expired alarms: truly expired (no next occurrence even if enabled)
-            const expiredAlarms = sortedAlarms
-              .filter(
-                ({ scheduleInfoIfEnabled }) =>
-                  !scheduleInfoIfEnabled.nextOccurrence,
-              )
-              .sort((a, b) => {
-                return (
-                  new Date(b.alarm.createdAt).getTime() -
-                  new Date(a.alarm.createdAt).getTime()
-                );
-              });
-
-            // Show "No alarms configured" if there are no active alarms
-            if (activeAlarms.length === 0) {
-              return (
-                <View>
-                  <View
-                    style={[
-                      cards.base,
-                      { alignItems: "center", paddingVertical: spacing[8] },
-                    ]}
-                  >
-                    <Ionicons
-                      name="alarm-outline"
-                      size={48}
-                      color={colors.gray[400]}
-                      style={{ marginBottom: spacing[3] }}
-                    />
-                    <Text
-                      style={[
-                        typography.h6,
-                        {
-                          color: colors.text.primary,
-                          marginBottom: spacing[1],
-                        },
-                      ]}
-                    >
-                      No active alarms
-                    </Text>
-                    <Text
-                      style={[
-                        typography.body,
-                        { color: colors.text.secondary, textAlign: "center" },
-                      ]}
-                    >
-                      Add your first alarm to get started
-                    </Text>
-                  </View>
-
-                  {/* Show expired alarms even when there are no active alarms */}
-                  {expiredAlarms.length > 0 && (
-                    <View style={{ marginTop: spacing[4] }}>
-                      <Pressable
-                        onPress={() => setShowExpiredAlarms(!showExpiredAlarms)}
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          paddingVertical: spacing[2],
-                          paddingHorizontal: spacing[3],
-                          backgroundColor: colors.background.secondary,
-                          borderRadius: spacing[2],
-                        }}
-                      >
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: spacing[2],
-                          }}
-                        >
-                          <Ionicons
-                            name="archive-outline"
-                            size={18}
-                            color={colors.text.secondary}
-                          />
-                          <Text
-                            style={[
-                              typography.labelLarge,
-                              { color: colors.text.secondary },
-                            ]}
-                          >
-                            Expired Alarms ({expiredAlarms.length})
-                          </Text>
-                        </View>
-                        <Ionicons
-                          name={
-                            showExpiredAlarms ? "chevron-up" : "chevron-down"
-                          }
-                          size={20}
-                          color={colors.text.secondary}
-                        />
-                      </Pressable>
-
-                      {showExpiredAlarms && (
-                        <View
-                          style={{ gap: spacing[3], marginTop: spacing[3] }}
-                        >
-                          {expiredAlarms.map(({ alarm }) => (
-                            <AlarmCard
-                              key={alarm.id}
-                              alarm={alarm}
-                              isExpired={true}
-                              onPress={() => {
-                                console.log(
-                                  "🚨 Navigating to alarm edit:",
-                                  alarm.id,
-                                  "from device:",
-                                  deviceId,
-                                );
-                                router.push(
-                                  `/devices/${deviceId}/alarms/edit/${alarm.id}`,
-                                );
-                              }}
-                            />
-                          ))}
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </View>
-              );
-            }
-
-            return (
-              <View style={[{ gap: spacing[3] }]}>
-                {/* Active Alarms */}
-                {activeAlarms.map(({ alarm }) => (
-                  <AlarmCard
-                    key={alarm.id}
-                    alarm={alarm}
-                    onPress={() => {
-                      console.log(
-                        "🚨 Navigating to alarm edit:",
-                        alarm.id,
-                        "from device:",
-                        deviceId,
-                      );
-                      router.push(
-                        `/devices/${deviceId}/alarms/edit/${alarm.id}`,
-                      );
-                    }}
+                {triggerLoading === "vibrate" ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primary[500]}
+                    style={{ marginBottom: spacing[2] }}
                   />
-                ))}
-
-                {/* Expired Alarms Section */}
-                {expiredAlarms.length > 0 && (
-                  <View style={{ marginTop: spacing[2] }}>
-                    <Pressable
-                      onPress={() => setShowExpiredAlarms(!showExpiredAlarms)}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        paddingVertical: spacing[2],
-                        paddingHorizontal: spacing[3],
-                        backgroundColor: colors.background.secondary,
-                        borderRadius: spacing[2],
-                      }}
-                    >
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: spacing[2],
-                        }}
-                      >
-                        <Ionicons
-                          name="archive-outline"
-                          size={18}
-                          color={colors.text.secondary}
-                        />
-                        <Text
-                          style={[
-                            typography.labelLarge,
-                            { color: colors.text.secondary },
-                          ]}
-                        >
-                          Expired Alarms ({expiredAlarms.length})
-                        </Text>
-                      </View>
-                      <Ionicons
-                        name={showExpiredAlarms ? "chevron-up" : "chevron-down"}
-                        size={20}
-                        color={colors.text.secondary}
-                      />
-                    </Pressable>
-
-                    {showExpiredAlarms && (
-                      <View style={{ gap: spacing[3], marginTop: spacing[3] }}>
-                        {expiredAlarms.map(({ alarm }) => (
-                          <AlarmCard
-                            key={alarm.id}
-                            alarm={alarm}
-                            isExpired={true}
-                            onPress={() => {
-                              console.log(
-                                "🚨 Navigating to alarm edit:",
-                                alarm.id,
-                                "from device:",
-                                deviceId,
-                              );
-                              router.push(
-                                `/devices/${deviceId}/alarms/edit/${alarm.id}`,
-                              );
-                            }}
-                          />
-                        ))}
-                      </View>
-                    )}
-                  </View>
+                ) : (
+                  <Ionicons
+                    name="phone-portrait-outline"
+                    size={28}
+                    color={colors.primary[600]}
+                    style={{ marginBottom: spacing[2] }}
+                  />
                 )}
-              </View>
-            );
-          })()}
+                <Text
+                  style={[
+                    typography.label,
+                    { color: colors.text.primary, fontWeight: "600" },
+                  ]}
+                >
+                  Vibrate
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  cards.base,
+                  {
+                    flex: 1,
+                    alignItems: "center",
+                    paddingVertical: spacing[4],
+                    opacity: triggerLoading === "sound" ? 0.6 : 1,
+                  },
+                ]}
+                onPress={handleTriggerSound}
+                disabled={triggerLoading !== null}
+              >
+                {triggerLoading === "sound" ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primary[500]}
+                    style={{ marginBottom: spacing[2] }}
+                  />
+                ) : (
+                  <Ionicons
+                    name="volume-high-outline"
+                    size={28}
+                    color={colors.primary[600]}
+                    style={{ marginBottom: spacing[2] }}
+                  />
+                )}
+                <Text
+                  style={[
+                    typography.label,
+                    { color: colors.text.primary, fontWeight: "600" },
+                  ]}
+                >
+                  Sound
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  cards.base,
+                  {
+                    flex: 1,
+                    alignItems: "center",
+                    paddingVertical: spacing[4],
+                    opacity: triggerLoading === "light" ? 0.6 : 1,
+                  },
+                ]}
+                onPress={handleTriggerLight}
+                disabled={triggerLoading !== null}
+              >
+                {triggerLoading === "light" ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primary[500]}
+                    style={{ marginBottom: spacing[2] }}
+                  />
+                ) : (
+                  <Ionicons
+                    name="flash-outline"
+                    size={28}
+                    color={colors.primary[600]}
+                    style={{ marginBottom: spacing[2] }}
+                  />
+                )}
+                <Text
+                  style={[
+                    typography.label,
+                    { color: colors.text.primary, fontWeight: "600" },
+                  ]}
+                >
+                  Light
+                </Text>
+              </Pressable>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -1265,18 +882,6 @@ export default function DeviceDetailPage() {
         connectionError={connectionError}
         onRetry={handleReconnect}
         onClose={() => setShowRetryModal(false)}
-      />
-
-      {/* Quick Reminder Modal */}
-      <QuickReminderModal
-        visible={showQuickReminderModal}
-        deviceId={deviceId}
-        onClose={() => setShowQuickReminderModal(false)}
-        onSuccess={() => {
-          void queryClient.invalidateQueries({
-            queryKey: ["device", "getById", { id: initialDeviceId }],
-          });
-        }}
       />
 
       {/* Help Modal */}

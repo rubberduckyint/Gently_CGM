@@ -22,21 +22,6 @@ interface MockDeviceState {
   isCharging: boolean;
   firmwareVersion: string;
   uptime: number;
-  events: Map<
-    number,
-    {
-      enabled: boolean;
-      name: string;
-      cronExpression: string;
-      vibrationPattern: number;
-      vibrationIntensity: number;
-      ledPattern: number;
-      ledColor: number;
-      severityLevel: number;
-      snoozePeriod: number;
-      retriggerDelay: number;
-    }
-  >;
   currentTime: Date;
 }
 
@@ -49,7 +34,6 @@ let mockDeviceState: MockDeviceState = {
   isCharging: false,
   firmwareVersion: SIMULATED_DEVICE.firmwareVersion,
   uptime: 0,
-  events: new Map(),
   currentTime: new Date(),
 };
 
@@ -65,7 +49,6 @@ export function resetMockDeviceState(): void {
     isCharging: false,
     firmwareVersion: SIMULATED_DEVICE.firmwareVersion,
     uptime: 0,
-    events: new Map(),
     currentTime: new Date(),
   };
 }
@@ -85,7 +68,7 @@ export async function mockScanForDevices(
   onDeviceFound: (peripheral: Peripheral) => void,
   timeoutSeconds = 5,
 ): Promise<void> {
-  console.log(`🧪 [Mock BLE] Simulating device scan for ${timeoutSeconds}s`);
+  console.log(`[Mock BLE] Simulating device scan for ${timeoutSeconds}s`);
 
   // Simulate scanning delay
   await simulateDelay(1000);
@@ -109,12 +92,12 @@ export async function mockScanForDevices(
     },
   };
 
-  console.log(`🧪 [Mock BLE] Found simulated device:`, mockPeripheral.name);
+  console.log(`[Mock BLE] Found simulated device:`, mockPeripheral.name);
   onDeviceFound(mockPeripheral);
 
   // Simulate scan completion
   await simulateDelay(timeoutSeconds * 1000);
-  console.log(`🧪 [Mock BLE] Scan completed`);
+  console.log(`[Mock BLE] Scan completed`);
 }
 
 /**
@@ -125,7 +108,7 @@ export async function mockConnectToDevice(
   serialNumber: string,
 ): Promise<void> {
   console.log(
-    `🧪 [Mock BLE] Connecting to device: ${peripheralId} (${serialNumber})`,
+    `[Mock BLE] Connecting to device: ${peripheralId} (${serialNumber})`,
   );
 
   // Simulate connection delay
@@ -134,17 +117,17 @@ export async function mockConnectToDevice(
   mockDeviceState.isConnected = true;
   mockDeviceState.serialNumber = serialNumber;
 
-  console.log(`🧪 [Mock BLE] Connected successfully`);
+  console.log(`[Mock BLE] Connected successfully`);
 }
 
 /**
  * Mock disconnect from device
  */
 export async function mockDisconnectDevice(): Promise<void> {
-  console.log(`🧪 [Mock BLE] Disconnecting from device`);
+  console.log(`[Mock BLE] Disconnecting from device`);
   await simulateDelay(200);
   mockDeviceState.isConnected = false;
-  console.log(`🧪 [Mock BLE] Disconnected`);
+  console.log(`[Mock BLE] Disconnected`);
 }
 
 /**
@@ -160,7 +143,7 @@ export function isMockDeviceConnected(): boolean {
 export async function mockStartNotifications(
   peripheralId: string,
 ): Promise<void> {
-  console.log(`🧪 [Mock BLE] Starting notifications for: ${peripheralId}`);
+  console.log(`[Mock BLE] Starting notifications for: ${peripheralId}`);
   await simulateDelay(100);
 }
 
@@ -170,7 +153,7 @@ export async function mockStartNotifications(
 export async function mockStopNotifications(
   peripheralId: string,
 ): Promise<void> {
-  console.log(`🧪 [Mock BLE] Stopping notifications for: ${peripheralId}`);
+  console.log(`[Mock BLE] Stopping notifications for: ${peripheralId}`);
   await simulateDelay(100);
 }
 
@@ -229,84 +212,9 @@ function generateMockResponse(command: BLECommandRequest): BLECommandResponse {
       break;
     }
 
-    case CommandCode.ADD_EVENT: {
-      // Parse event data from command payload
-      if (command.payload && command.payload.length >= 10) {
-        const eventIndex = command.payload[0] ?? 0;
-        const eventNameBytes = Array.from(command.payload.slice(1, 11)).filter(
-          (b) => b !== 0,
-        );
-        const eventName = String.fromCharCode(...eventNameBytes);
-        const cronBytes = Array.from(command.payload.slice(11, 53)).filter(
-          (b) => b !== 0,
-        );
-        const cronExpression = String.fromCharCode(...cronBytes);
-
-        mockDeviceState.events.set(eventIndex, {
-          enabled: true,
-          name: eventName,
-          cronExpression,
-          vibrationPattern: command.payload[53] ?? 0,
-          vibrationIntensity: command.payload[54] ?? 2,
-          ledPattern: command.payload[55] ?? 0,
-          ledColor: command.payload[56] ?? 0,
-          severityLevel: command.payload[57] ?? 1,
-          snoozePeriod: command.payload[58] ?? 5,
-          retriggerDelay: command.payload[59] ?? 1,
-        });
-
-        console.log(
-          `🧪 [Mock BLE] Added event ${eventIndex}: ${eventName} (${cronExpression})`,
-        );
-      }
-      break;
-    }
-
-    case CommandCode.REMOVE_EVENT: {
-      // Remove event by index
-      const eventIndex = command.payload?.[0] ?? 0;
-      mockDeviceState.events.delete(eventIndex);
-      console.log(`🧪 [Mock BLE] Removed event ${eventIndex}`);
-      break;
-    }
-
-    case CommandCode.REMOVE_ALL_EVENTS: {
-      // Clear all events
-      mockDeviceState.events.clear();
-      console.log(`🧪 [Mock BLE] Removed all events`);
-      break;
-    }
-
-    case CommandCode.GET_NUMBER_OF_EVENTS: {
-      // Return event count
-      responsePayload.push(mockDeviceState.events.size);
-      break;
-    }
-
-    case CommandCode.SET_EVENT_ON_OFF: {
-      // Toggle event enabled state
-      const eventIndex = command.payload?.[0] ?? 0;
-      const enabled = (command.payload?.[1] ?? 0) !== 0;
-      const event = mockDeviceState.events.get(eventIndex);
-      if (event) {
-        event.enabled = enabled;
-        console.log(
-          `🧪 [Mock BLE] Set event ${eventIndex} to ${enabled ? "ON" : "OFF"}`,
-        );
-      }
-      break;
-    }
-
-    case CommandCode.ACKNOWLEDGE_EVENT: {
-      // Acknowledge alarm
-      const eventIndex = command.payload?.[0] ?? 0;
-      console.log(`🧪 [Mock BLE] Acknowledged event ${eventIndex}`);
-      break;
-    }
-
     case CommandCode.FIND_ME: {
       // Find device command
-      console.log(`🧪 [Mock BLE] Find Me activated`);
+      console.log(`[Mock BLE] Find Me activated`);
       break;
     }
 
@@ -315,13 +223,13 @@ function generateMockResponse(command: BLECommandRequest): BLECommandResponse {
     case CommandCode.TRIGGER_AUDIO_PATTERN: {
       // Pattern trigger commands
       console.log(
-        `🧪 [Mock BLE] Triggered pattern: 0x${command.command.toString(16)}`,
+        `[Mock BLE] Triggered pattern: 0x${command.command.toString(16)}`,
       );
       break;
     }
 
     case CommandCode.REBOOT_BRACELET: {
-      console.log(`🧪 [Mock BLE] Rebooting device`);
+      console.log(`[Mock BLE] Rebooting device`);
       // Simulate disconnect after reboot
       setTimeout(() => {
         mockDeviceState.isConnected = false;
@@ -343,7 +251,7 @@ function generateMockResponse(command: BLECommandRequest): BLECommandResponse {
     default: {
       // Unknown command - return success anyway for test mode
       console.warn(
-        `🧪 [Mock BLE] Unknown command: 0x${command.command.toString(16)}`,
+        `[Mock BLE] Unknown command: 0x${command.command.toString(16)}`,
       );
       break;
     }
@@ -365,7 +273,7 @@ export async function mockSendCommand(
   _timeoutMs?: number,
 ): Promise<BLECommandResponse> {
   console.log(
-    `🧪 [Mock BLE] Sending command: 0x${command.command.toString(16).padStart(2, "0")}`,
+    `[Mock BLE] Sending command: 0x${command.command.toString(16).padStart(2, "0")}`,
   );
 
   if (!mockDeviceState.isConnected) {
@@ -378,14 +286,14 @@ export async function mockSendCommand(
   const response = generateMockResponse(command);
 
   console.log(
-    `🧪 [Mock BLE] Command response: status=${response.status}, payload length=${response.payload.length}`,
+    `[Mock BLE] Command response: status=${response.status}, payload length=${response.payload.length}`,
   );
 
   return response;
 }
 
 /**
- * Mock send multi-packet command (e.g., GET_ALL_EVENTS)
+ * Mock send multi-packet command
  */
 export async function mockSendMultiPacketCommand<T>(
   command: BLECommandRequest,
@@ -393,82 +301,14 @@ export async function mockSendMultiPacketCommand<T>(
   timeoutMs?: number,
 ): Promise<T> {
   console.log(
-    `🧪 [Mock BLE] Sending multi-packet command: 0x${command.command.toString(16).padStart(2, "0")}`,
+    `[Mock BLE] Sending multi-packet command: 0x${command.command.toString(16).padStart(2, "0")}`,
   );
 
   if (!mockDeviceState.isConnected) {
     throw new Error("Mock device not connected");
   }
 
-  // Handle GET_ALL_EVENTS specially
-  if (command.command === CommandCode.GET_ALL_EVENTS) {
-    // Simulate multi-packet response
-    await simulateDelay(200);
-
-    // Generate packets for each event
-    const packets: Uint8Array[] = [];
-
-    mockDeviceState.events.forEach((event, eventIndex) => {
-      // Each event packet: [AA 55 06 00 eventIndex name(10) cron(42) vibPattern vibIntensity led ledColor severity snooze retrigger]
-      const packet = new Uint8Array(64);
-      packet[0] = 0xaa;
-      packet[1] = 0x55;
-      packet[2] = CommandCode.GET_ALL_EVENTS;
-      packet[3] = ResponseStatus.OK;
-      packet[4] = eventIndex;
-
-      // Event name (10 bytes)
-      const nameBytes = new TextEncoder().encode(event.name.slice(0, 10));
-      packet.set(nameBytes, 5);
-
-      // Cron expression (42 bytes)
-      const cronBytes = new TextEncoder().encode(
-        event.cronExpression.slice(0, 42),
-      );
-      packet.set(cronBytes, 15);
-
-      // Event properties
-      packet[57] = event.vibrationPattern;
-      packet[58] = event.vibrationIntensity;
-      packet[59] = event.ledPattern;
-      packet[60] = event.ledColor;
-      packet[61] = event.severityLevel;
-      packet[62] = event.snoozePeriod;
-      packet[63] = event.retriggerDelay;
-
-      packets.push(packet);
-    });
-
-    // Add end-of-stream packet
-    const endPacket = new Uint8Array(5);
-    endPacket[0] = 0xaa;
-    endPacket[1] = 0x55;
-    endPacket[2] = CommandCode.GET_ALL_EVENTS;
-    endPacket[3] = ResponseStatus.OK;
-    endPacket[4] = 0xff; // End marker
-    packets.push(endPacket);
-
-    console.log(
-      `🧪 [Mock BLE] Sending ${packets.length} packets (${mockDeviceState.events.size} events)`,
-    );
-
-    // Process packets through handler
-    let result: T | null = null;
-    for (const packet of packets) {
-      result = packetHandler(packet, mockDeviceState.serialNumber);
-      if (result !== null) {
-        break;
-      }
-    }
-
-    if (result === null) {
-      throw new Error("Multi-packet command did not return a result");
-    }
-
-    return result;
-  }
-
-  // For other multi-packet commands, use single response
+  // For multi-packet commands, use single response
   const response = await mockSendCommand(command, timeoutMs);
   const result = packetHandler(response.payload, mockDeviceState.serialNumber);
 

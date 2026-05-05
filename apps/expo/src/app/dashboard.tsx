@@ -5,7 +5,7 @@
  * with improved consistency and maintainability
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -41,7 +41,6 @@ import {
   spacing,
   typography,
 } from "~/styles";
-import { calculateNextAlarmOccurrence } from "~/utils/alarmUtils";
 import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 import { devicesBeingDeleted } from "~/utils/deviceDeletionTracker";
@@ -51,124 +50,9 @@ import {
   resetOnboarding,
 } from "~/utils/userPreferences";
 
-type DeviceWithAlarmsCount = RouterOutputs["device"]["getAll"][number];
+type DeviceData = RouterOutputs["device"]["getAll"][number];
 
-interface Alarm {
-  id: string;
-  title: string;
-  isActive: boolean;
-  startDate: Date;
-  endDate: Date | null;
-  repeat: boolean;
-  cronExpression: string | null;
-  deviceId: string | null;
-}
-
-function DeviceCard({
-  device,
-  alarms,
-}: {
-  device: DeviceWithAlarmsCount;
-  alarms: Alarm[];
-}) {
-  // Filter alarms for this device
-  const deviceAlarms = useMemo(() => {
-    return alarms.filter((alarm) => alarm.deviceId === device.id);
-  }, [alarms, device.id]);
-
-  // Calculate alarm counts (non-expired only)
-  const alarmCounts = useMemo(() => {
-    const nonExpiredAlarms = deviceAlarms.filter(
-      (alarm): alarm is Alarm & { cronExpression: string } => {
-        if (alarm.cronExpression === null) return false;
-        const scheduleInfo = calculateNextAlarmOccurrence({
-          isActive: true, // Check if it would have next occurrence
-          startDate: alarm.startDate,
-          endDate: alarm.endDate,
-          repeat: alarm.repeat,
-          cronExpression: alarm.cronExpression,
-        });
-        return scheduleInfo.nextOccurrence !== null;
-      },
-    );
-
-    const enabled = nonExpiredAlarms.filter((a) => a.isActive).length;
-    const disabled = nonExpiredAlarms.filter((a) => !a.isActive).length;
-    const total = nonExpiredAlarms.length;
-
-    return { enabled, disabled, total };
-  }, [deviceAlarms]);
-
-  // Calculate next alarm
-  const nextAlarm = useMemo(() => {
-    if (deviceAlarms.length === 0) return null;
-
-    // Filter active alarms and calculate next occurrence for each
-    const activeAlarms = deviceAlarms
-      .filter(
-        (alarm): alarm is Alarm & { cronExpression: string } =>
-          alarm.isActive && alarm.cronExpression !== null,
-      )
-      .map((alarm) => {
-        const scheduleInfo = calculateNextAlarmOccurrence({
-          isActive: alarm.isActive,
-          startDate: alarm.startDate,
-          endDate: alarm.endDate,
-          repeat: alarm.repeat,
-          cronExpression: alarm.cronExpression,
-        });
-        return {
-          alarm,
-          scheduleInfo,
-        };
-      })
-      .filter(
-        ({ scheduleInfo }) =>
-          scheduleInfo.status === "active" && scheduleInfo.nextOccurrence,
-      )
-      .sort((a, b) => {
-        if (!a.scheduleInfo.nextOccurrence || !b.scheduleInfo.nextOccurrence)
-          return 0;
-        return (
-          a.scheduleInfo.nextOccurrence.getTime() -
-          b.scheduleInfo.nextOccurrence.getTime()
-        );
-      });
-
-    return activeAlarms[0] ?? null;
-  }, [deviceAlarms]);
-
-  // Format next alarm time
-  const formatNextAlarmTime = (date: Date) => {
-    const now = new Date();
-    const isToday =
-      date.getDate() === now.getDate() &&
-      date.getMonth() === now.getMonth() &&
-      date.getFullYear() === now.getFullYear();
-
-    const isTomorrow =
-      date.getDate() === now.getDate() + 1 &&
-      date.getMonth() === now.getMonth() &&
-      date.getFullYear() === now.getFullYear();
-
-    const timeStr = date.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-
-    if (isToday) return `Today at ${timeStr}`;
-    if (isTomorrow) return `Tomorrow at ${timeStr}`;
-
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-  };
-
+function DeviceCard({ device }: { device: DeviceData }) {
   return (
     <View style={{ marginBottom: spacing[6] }}>
       <Link
@@ -217,7 +101,6 @@ function DeviceCard({
             style={{
               flexDirection: "row",
               alignItems: "center",
-              marginBottom: spacing[4],
               marginTop: spacing[2],
             }}
           >
@@ -243,95 +126,29 @@ function DeviceCard({
 
             {/* Device Info */}
             <View style={{ flex: 1 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: spacing[2],
-                }}
+              <Text
+                style={[
+                  typography.h4,
+                  {
+                    color: colors.text.primary,
+                    fontWeight: "700",
+                    marginBottom: spacing[1],
+                  },
+                ]}
+                numberOfLines={1}
               >
+                {device.title}
+              </Text>
+              {device.serialNumber && (
                 <Text
                   style={[
-                    typography.h4,
-                    {
-                      color: colors.text.primary,
-                      fontWeight: "700",
-                      marginBottom: spacing[1],
-                      flex: 1,
-                    },
+                    typography.caption,
+                    { color: colors.text.tertiary },
                   ]}
-                  numberOfLines={1}
                 >
-                  {device.title}
+                  SN: ...{device.serialNumber.slice(-5)}
                 </Text>
-              </View>
-
-              {/* Alarm Count with breakdown */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: spacing[2],
-                }}
-              >
-                {alarmCounts.total === 0 ? (
-                  <Text
-                    style={[
-                      typography.caption,
-                      { color: colors.text.tertiary },
-                    ]}
-                  >
-                    No alarms set
-                  </Text>
-                ) : (
-                  <>
-                    <View
-                      style={{ flexDirection: "row", alignItems: "center" }}
-                    >
-                      <View
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 4,
-                          backgroundColor: colors.success[500],
-                          marginRight: spacing[1],
-                        }}
-                      />
-                      <Text
-                        style={[
-                          typography.caption,
-                          { color: colors.success[600], fontWeight: "600" },
-                        ]}
-                      >
-                        {alarmCounts.enabled} active
-                      </Text>
-                    </View>
-                    {alarmCounts.disabled > 0 && (
-                      <View
-                        style={{ flexDirection: "row", alignItems: "center" }}
-                      >
-                        <View
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: 4,
-                            backgroundColor: colors.gray[400],
-                            marginRight: spacing[1],
-                          }}
-                        />
-                        <Text
-                          style={[
-                            typography.caption,
-                            { color: colors.text.tertiary, fontWeight: "500" },
-                          ]}
-                        >
-                          {alarmCounts.disabled} paused
-                        </Text>
-                      </View>
-                    )}
-                  </>
-                )}
-              </View>
+              )}
             </View>
 
             {/* Chevron indicator */}
@@ -352,84 +169,6 @@ function DeviceCard({
               />
             </View>
           </View>
-
-          {/* Next Alarm - Prominent */}
-          {nextAlarm?.scheduleInfo.nextOccurrence && (
-            <View
-              style={{
-                backgroundColor: colors.primary[50],
-                padding: spacing[4],
-                borderRadius: 12,
-                borderLeftWidth: 4,
-                borderLeftColor: colors.primary[500],
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginBottom: spacing[2],
-                }}
-              >
-                <View
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 14,
-                    backgroundColor: colors.primary[100],
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginRight: spacing[2],
-                  }}
-                >
-                  <Ionicons
-                    name="alarm"
-                    size={16}
-                    color={colors.primary[600]}
-                  />
-                </View>
-                <Text
-                  style={[
-                    typography.labelLarge,
-                    {
-                      color: colors.text.primary,
-                      flex: 1,
-                      fontWeight: "600",
-                    },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {nextAlarm.alarm.title}
-                </Text>
-              </View>
-
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginLeft: 36, // Align with title
-                }}
-              >
-                <Ionicons
-                  name="time-outline"
-                  size={14}
-                  color={colors.primary[600]}
-                />
-                <Text
-                  style={[
-                    typography.caption,
-                    {
-                      color: colors.primary[700],
-                      marginLeft: spacing[1],
-                      fontWeight: "600",
-                    },
-                  ]}
-                >
-                  {formatNextAlarmTime(nextAlarm.scheduleInfo.nextOccurrence)}
-                </Text>
-              </View>
-            </View>
-          )}
         </Pressable>
       </Link>
     </View>
@@ -485,17 +224,6 @@ export default function DashboardPage() {
     queryKey: ["devices"],
     queryFn: () => trpc.device.getAll.query({}),
     enabled: !!session?.user,
-    refetchOnMount: "always", // Always refetch when component mounts
-    refetchOnWindowFocus: true, // Refetch when app comes to foreground
-    staleTime: 0, // Consider data stale immediately
-    gcTime: 0, // No garbage collection time - data removed immediately
-  });
-
-  // Fetch all alarms for the user
-  const { data: allAlarms = [] } = useQuery({
-    queryKey: ["alarms"],
-    queryFn: () => trpc.alarm.getAll.query({}),
-    enabled: !!session?.user,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
     staleTime: 0,
@@ -504,11 +232,8 @@ export default function DashboardPage() {
 
   const signOutMutation = useMutation({
     mutationFn: async () => {
-      // Track logout event
       trackLogout();
-      // Clear user identity from analytics
       await clearUserIdentity();
-      // Reset user preferences on logout
       await resetOnboarding();
       await authClient.signOut();
     },
@@ -516,30 +241,27 @@ export default function DashboardPage() {
       router.replace("/");
     },
     onError: (error) => {
-      console.error("❌ Failed to sign out:", error);
+      console.error("Failed to sign out:", error);
       Alert.alert("Error", "Failed to sign out. Please try again.");
     },
   });
 
   const updateYearOfBirthMutation = useMutation({
     mutationFn: async (yearOfBirth: number) => {
-      // Update user's year of birth via API
       return await trpc.auth.update.mutate({ yearOfBirth });
     },
     onSuccess: async () => {
-      // Invalidate user profile to refetch with updated year of birth
       await queryClient.invalidateQueries({ queryKey: ["userProfile"] });
 
       setShowYearOfBirthModal(false);
 
-      // Check if user needs to see help modal
       const hasSeenHelp = await hasSeenOnboarding();
       if (!hasSeenHelp) {
         setShowHelpModal(true);
       }
     },
     onError: (error) => {
-      console.error("❌ Failed to update year of birth:", error);
+      console.error("Failed to update year of birth:", error);
       Alert.alert("Error", "Failed to save year of birth. Please try again.");
     },
   });
@@ -551,17 +273,13 @@ export default function DashboardPage() {
   useFocusEffect(
     useCallback(() => {
       if (session?.user) {
-        // Don't refetch if any device is currently being deleted
-        // This prevents the app from reloading during the deletion process
         if (devicesBeingDeleted.size > 0) {
           console.log(
-            "⏸️ Skipping dashboard refetch - device deletion in progress",
+            "Skipping dashboard refetch - device deletion in progress",
           );
           return;
         }
 
-        // Invalidate queries to ensure fresh data on next mount
-        // The useQuery hook will automatically refetch due to refetchOnMount: "always"
         void queryClient.invalidateQueries({ queryKey: ["devices"] });
       }
     }, [session, queryClient]),
@@ -579,9 +297,6 @@ export default function DashboardPage() {
   };
 
   const handleUserProfile = () => {
-    console.log(
-      "🔧 Dashboard: Settings button pressed, navigating to /settings",
-    );
     router.push("/settings");
   };
 
@@ -684,7 +399,7 @@ export default function DashboardPage() {
                 },
               ]}
             >
-              Add your first Gently to start managing alarms and notifications.
+              Add your first Gently to get started.
             </Text>
             <Pressable
               style={[
@@ -706,7 +421,7 @@ export default function DashboardPage() {
             showsVerticalScrollIndicator={false}
           >
             {devices.map((device) => (
-              <DeviceCard key={device.id} device={device} alarms={allAlarms} />
+              <DeviceCard key={device.id} device={device} />
             ))}
 
             {/* Add device button */}
