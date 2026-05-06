@@ -48,11 +48,16 @@ describe("cgmToken", () => {
     expect(payload.sub).toBe(USER_ID);
     expect(payload.aud).toBe(AUDIENCE);
     expect(payload.iss).toBe(ISSUER);
-    expect(payload.iat).toBeGreaterThanOrEqual(before);
-    expect(payload.iat).toBeLessThanOrEqual(after);
+    const iat = payload.iat;
+    const exp = payload.exp;
+    if (typeof iat !== "number" || typeof exp !== "number") {
+      throw new Error("iat/exp missing from minted token");
+    }
+    expect(iat).toBeGreaterThanOrEqual(before);
+    expect(iat).toBeLessThanOrEqual(after);
     // 15 minute TTL
-    expect(payload.exp).toBe((payload.iat as number) + 15 * 60);
-    expect(Math.floor(expiresAt.getTime() / 1000)).toBe(payload.exp);
+    expect(exp).toBe(iat + 15 * 60);
+    expect(Math.floor(expiresAt.getTime() / 1000)).toBe(exp);
   });
 
   it("publishes only public key material in JWKS (no private params)", async () => {
@@ -60,7 +65,8 @@ describe("cgmToken", () => {
     const jwks = await buildJwks(privateKey, KID);
 
     expect(jwks.keys).toHaveLength(1);
-    const jwk = jwks.keys[0]!;
+    const [jwk] = jwks.keys;
+    if (!jwk) throw new Error("expected at least one JWK");
     expect(jwk.kty).toBe("RSA");
     expect(jwk.alg).toBe("RS256");
     expect(jwk.use).toBe("sig");
