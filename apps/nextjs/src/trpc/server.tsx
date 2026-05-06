@@ -8,6 +8,7 @@ import type { AppRouter } from "@gently/api";
 import { appRouter, createTRPCContext } from "@gently/api";
 
 import { auth } from "~/auth/server";
+import { env } from "~/env";
 import { createQueryClient } from "./query-client";
 
 /**
@@ -21,6 +22,7 @@ const createContext = cache(async () => {
   return createTRPCContext({
     headers: heads,
     auth,
+    apiBaseUrl: env.NEXT_PUBLIC_BASE_URL,
   });
 });
 

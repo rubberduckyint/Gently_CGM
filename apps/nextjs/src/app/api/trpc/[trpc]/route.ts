@@ -4,6 +4,7 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter, createTRPCContext } from "@gently/api";
 
 import { auth } from "~/auth/server";
+import { env } from "~/env";
 
 /**
  * Configure basic CORS headers
@@ -33,6 +34,7 @@ const handler = async (req: NextRequest) => {
       createTRPCContext({
         auth: auth,
         headers: req.headers,
+        apiBaseUrl: env.NEXT_PUBLIC_BASE_URL,
       }),
     onError({ error, path }) {
       console.error(`>>> tRPC Error on '${path}'`, error);

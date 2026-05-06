@@ -133,7 +133,43 @@ APPLE_KEY_ID="R984ML9MQ8"
 APPLE_CLIENT_ID="com.gentlyus.gently.web"
 APPLE_APP_BUNDLE_ID="com.gentlyus.gently"
 APPLE_PRIVATE_KEY="<apple-private-key>"
+
+# CGM Cloud auth seam (RS256 JWT signing)
+CGM_TOKEN_PRIVATE_KEY="<base64 PKCS8 RSA private key, no PEM headers>"
+CGM_TOKEN_KID="<key id, e.g. cgm-2026-05>"
 ```
+
+### Generating the CGM token keypair
+
+The Gently Core API mints short-lived JWTs (`aud: "cgm-cloud"`) so the separate
+[CGM Cloud](../Gently_CGM_Cloud/) service can verify the user's identity without
+calling back. The public key is published at `/.well-known/jwks.json`.
+
+Generate a fresh RS256 keypair with openssl:
+
+```bash
+# 1. Generate a 2048-bit RSA private key in PKCS8 format
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out cgm-token.pem
+
+# 2. Strip the PEM header/footer and base64-encode for env storage
+CGM_TOKEN_PRIVATE_KEY=$(
+  grep -v -- '-----' cgm-token.pem | tr -d '\n'
+)
+
+# 3. Pick a key id — anything stable, e.g. a date stamp
+CGM_TOKEN_KID="cgm-$(date +%Y-%m)"
+
+echo "CGM_TOKEN_PRIVATE_KEY=$CGM_TOKEN_PRIVATE_KEY"
+echo "CGM_TOKEN_KID=$CGM_TOKEN_KID"
+
+# 4. Wipe the on-disk key once the env vars are stored in your secret manager
+rm cgm-token.pem
+```
+
+Put both values in your env / secret manager. The public JWK is derived from
+the private key at request time — there is no separate public key file to
+manage. To rotate, generate a new keypair, change `CGM_TOKEN_KID`, and CGM
+Cloud will pick up the new key on its next JWKS fetch (1-hour cache).
 
 ## Infrastructure
 

@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 import { db } from "@gently/db/client";
 import { user } from "@gently/db/schema";
 
+import { mintCgmToken } from "../jwt/cgmToken";
 import { protectedProcedure, publicProcedure } from "../trpc";
 
 export const authRouter = {
@@ -65,6 +66,12 @@ export const authRouter = {
 
       return updatedUser[0];
     }),
+  mintCgmToken: protectedProcedure.mutation(async ({ ctx }) => {
+    return mintCgmToken({
+      userId: ctx.session.user.id,
+      issuer: ctx.apiBaseUrl,
+    });
+  }),
   promoteToAdmin: protectedProcedure
     .input(
       z.object({

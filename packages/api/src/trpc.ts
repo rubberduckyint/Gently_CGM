@@ -29,6 +29,7 @@ import { db } from "@gently/db/client";
 export const createTRPCContext = async (opts: {
   headers: Headers;
   auth: Auth;
+  apiBaseUrl: string;
 }) => {
   const authApi = opts.auth.api;
   const session = await authApi.getSession({
@@ -38,6 +39,7 @@ export const createTRPCContext = async (opts: {
     authApi,
     session,
     db,
+    apiBaseUrl: opts.apiBaseUrl,
   };
 };
 /**

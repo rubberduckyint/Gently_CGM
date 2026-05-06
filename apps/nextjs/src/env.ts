@@ -27,6 +27,17 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
+
+    // CGM Cloud auth seam — RS256 keypair for JWTs scoped to aud="cgm-cloud".
+    // Required in production; optional in dev so existing flows still boot.
+    CGM_TOKEN_PRIVATE_KEY:
+      process.env.NODE_ENV === "production"
+        ? z.string().min(1)
+        : z.string().min(1).optional(),
+    CGM_TOKEN_KID:
+      process.env.NODE_ENV === "production"
+        ? z.string().min(1)
+        : z.string().min(1).optional(),
   },
 
   /**
@@ -60,6 +71,9 @@ export const env = createEnv({
 
     POSTGRES_URL: process.env.POSTGRES_URL,
     NODE_ENV: process.env.NODE_ENV,
+
+    CGM_TOKEN_PRIVATE_KEY: process.env.CGM_TOKEN_PRIVATE_KEY,
+    CGM_TOKEN_KID: process.env.CGM_TOKEN_KID,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

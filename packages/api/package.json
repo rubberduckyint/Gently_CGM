@@ -16,6 +16,7 @@
     "dev": "tsc",
     "format": "prettier --check . --ignore-path ../../.gitignore",
     "lint": "eslint",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false"
   },
   "dependencies": {
@@ -26,6 +27,7 @@
     "@react-email/components": "^0.0.34",
     "@trpc/server": "catalog:",
     "expo-server-sdk": "^4.0.0",
+    "jose": "^6.1.2",
     "minimatch": "catalog:",
     "superjson": "catalog:",
     "zod": "catalog:"
@@ -36,7 +38,8 @@
     "@gently/tsconfig": "workspace:*",
     "eslint": "catalog:",
     "prettier": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^3.2.4"
   },
   "prettier": "@gently/prettier-config"
 }

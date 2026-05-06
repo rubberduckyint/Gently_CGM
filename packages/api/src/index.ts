@@ -22,4 +22,6 @@ type RouterOutputs = inferRouterOutputs<AppRouter>;
 
 export { createTRPCContext, appRouter };
 export { sendPushNotificationToUser } from "./router/notification";
+export { getCgmJwks } from "./jwt/cgmToken";
+export type { CgmTokenJwks } from "./jwt/cgmToken";
 export type { AppRouter, RouterInputs, RouterOutputs };
