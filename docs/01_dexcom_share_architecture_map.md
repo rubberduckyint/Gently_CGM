@@ -189,7 +189,7 @@ The only reason to skip cloud is cost/complexity, but for a CGM alert product th
 
 | Layer | Recommendation | Why |
 |---|---|---|
-| Cloud compute | Node 22 + TS on Fly.io (HTTP API + worker machines), or Lambda + EventBridge if you prefer serverless | Mirror the existing Gently Core stack to minimize new mental load |
+| Cloud compute | Node 22 + TS on Railway (HTTP API service + always-on worker service) | Mirror the existing Gently Core stack to minimize new mental load |
 | Credential vault | AES-256-GCM in Postgres with key in env/KMS | Encrypted at rest; rotate via `keyVersion` column when KMS lands |
 | State store | Postgres 17 + Drizzle (own instance, separate from Gently Core) | Same conventions as the existing app |
 | Push to device | Expo Push Notifications | Same SDK already in the mobile app; sidesteps Apple-personal-team APNs limitations |

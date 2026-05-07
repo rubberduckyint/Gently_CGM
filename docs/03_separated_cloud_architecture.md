@@ -158,14 +158,14 @@ The shared seam contract (`packages/contract`: JWT verifier helpers, alert paylo
 
 The alert engine itself sits in `packages/alert-engine` as **pure functions with no I/O** — portable to any future runtime.
 
-### Hosting: Fly.io
-- One Fly app for `cgm-api` (HTTP tRPC service)
-- One Fly machine class for `cgm-worker` (the 60s poller) — long-running process, not request-driven
-- Fly Postgres (or Neon if you prefer external)
-- Fly Secrets for `DEXCOM_CRED_KEY`, JWKS public key URL, etc.
-- Vercel (or Fly) for the `cgm.gently.us` Next.js dashboard
+### Hosting: Railway
+- One Railway service for `cgm-api` (HTTP tRPC service)
+- One Railway service for `cgm-worker` (the 60s poller) — long-running process, no exposed port
+- One Railway service for `cgm-web` (Next.js dashboard) — alternatively Vercel if you prefer
+- Railway Postgres add-on, attached to all three services via `${{ Postgres.DATABASE_URL }}`
+- Railway environment variables for `DEXCOM_CRED_KEY`, `GENTLY_CORE_JWKS_URL`, etc.
 
-Strict separation from wherever Gently Core is hosted: different Fly org/project, different secrets, different Sentry project, different uptime monitoring (UptimeRobot or Better Stack ping the worker's `/healthz` — which fails if `lastSuccessAt` is stale across the fleet).
+Strict separation from wherever Gently Core is hosted: separate Railway project, separate environment variables, separate Sentry project, separate uptime monitoring (Better Stack pings the worker's `/healthz` — which fails if `lastSuccessAt` is stale across the fleet). Decision rationale and full stack details in `05_stack_decisions.md`.
 
 ### Domains
 - `api.gently.us` → Gently Core
@@ -235,7 +235,7 @@ Roughly 3–4 weeks of focused solo dev.
 - ✅ Push token Option A (CGM stores its own) vs B (asks Gently Core)? **Option A.**
 - ✅ One web shell with framed views vs two separate dashboards? **Two separate.**
 - ✅ JWT lifetime? **15 min access tokens, refresh from existing Better-Auth session.**
-- ✅ Hosting? **Fly.io.**
+- ✅ Hosting? **Railway** (existing team experience; equivalent capability for our workload).
 - ✅ Branding: separate "Gently CGM" or one Gently brand? **One Gently brand publicly; "CGM" is a feature name, not a separate product. Backend systems are named for engineering clarity.**
 
 Still genuinely open (need user decision):
