@@ -7,12 +7,21 @@ import { vexo } from "vexo-analytics";
 import "react-native-reanimated";
 
 import { BLEProvider } from "~/contexts/BLEContext";
+import { useAlertPushHandler } from "~/services/alerts";
 import {
   NotificationService,
   registerForPushNotificationsAsync,
 } from "~/services/notifications";
 import { queryClient, trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
+
+// Renderless component that runs hooks requiring the BLEProvider tree.
+// useAlertPushHandler subscribes to incoming Expo pushes and forwards
+// `type: "cgm_alert"` payloads to the bracelet over BLE.
+function AlertPushBridge() {
+  useAlertPushHandler();
+  return null;
+}
 
 // Initialize Vexo Analytics at module level (before component renders)
 // Only run in production to avoid polluting analytics during development
@@ -85,6 +94,7 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <BLEProvider>
+        <AlertPushBridge />
         <Stack
           screenOptions={{
             headerStyle: {
