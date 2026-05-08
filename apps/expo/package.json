@@ -19,8 +19,6 @@
     "@expo/dom-webview": "^0.2.8",
     "@expo/metro-runtime": "6.2.0-canary-20260121-a63c0dd",
     "@expo/vector-icons": "^15.0.3",
-    "@gently/api": "workspace:*",
-    "@gently/db": "workspace:*",
     "@react-native-community/datetimepicker": "^8.6.0",
     "@react-native-community/slider": "^5.1.2",
     "@react-native-google-signin/google-signin": "^22.4.0",
