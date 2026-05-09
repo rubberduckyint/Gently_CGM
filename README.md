@@ -1,231 +1,120 @@
-# Gently
+# Gently Mobile
 
-A health management platform for controlling a BLE smart bracelet. The bracelet delivers notifications via vibration, sound, and LED light patterns. The system consists of a React Native mobile app, a Next.js web dashboard, and a shared backend.
+iOS + Android Expo client for the Gently CGM alert system. The bracelet wears on the wrist; the phone is the messenger between the cloud and the bracelet.
 
-## Architecture
+When the user's glucose crosses a configured threshold, the unified backend ([Gently_SRF](../Gently_SRF/), `srf.gentlyus.com`) sends an Expo push tagged `type: "cgm_alert"`. The phone wakes briefly and sends a BLE command so the bracelet vibrates / lights / buzzes per the payload's pattern ids. The phone is purely the BLE messenger; SRF is the brain.
+
+For full architectural framing see [`CLAUDE.md`](./CLAUDE.md) and the parent coordinator file at `../CLAUDE.md`.
+
+## Quick start
+
+```bash
+# 1. Install
+pnpm install
+
+# 2. Run the Expo dev server (Android-first per CGM v1 plan)
+pnpm -F @gently/expo dev:android      # or dev:ios
+
+# 3. Sign in to skip BLE/hardware
+#    Email: extraspecialtestuser@gentlyus.com
+#    OTP:   123456
+#    Activates the mock BLE service so you can exercise the app
+#    without a paired Gently bracelet.
+```
+
+The mobile app talks to a backend at `EXPO_PUBLIC_BASE_URL` (defaults to `https://srf.gentlyus.com`). For local development against a locally-running SRF, point this at your dev URL in `apps/expo/.env`.
+
+## Repo layout
 
 ```
-apps/
-  expo/          React Native mobile app (iOS + Android)
-  nextjs/        Next.js 15 web dashboard
-
+apps/expo/         React Native mobile app (iOS + Android) — Expo SDK 55, Expo Router
 packages/
-  api/           tRPC API router definitions
-  auth/          Better-Auth configuration
-  db/            Drizzle ORM schema + PostgreSQL
-  email/         React Email templates + SMTP sender
-  shared/        Shared utilities
-  validators/    Zod validation schemas
-
+  shared/          Mobile-only shared utils
+  validators/      Mobile-only Zod schemas
 tooling/
-  eslint/        Shared ESLint config
-  prettier/      Code formatting
-  typescript/    Shared tsconfig
+  eslint, prettier, typescript, github   workspace-shared configs
 ```
 
-**Monorepo**: Turborepo + pnpm workspaces. All packages are TypeScript with end-to-end type safety via tRPC.
+There's no Next.js, no DB, no server-side packages here. Anything backend-shaped lives in [Gently_SRF](../Gently_SRF/).
 
-## Tech Stack
+## Tech stack
 
-| Layer        | Technology                                           |
-| ------------ | ---------------------------------------------------- |
-| Mobile       | React Native, Expo SDK 55, Expo Router               |
-| Web          | Next.js 15, React 19, Tailwind CSS v4                |
-| Styling      | NativeWind (mobile), Tailwind + Radix UI (web)       |
-| API          | tRPC with React Query                                |
-| Auth         | Better-Auth (email OTP, Google OAuth, Apple Sign In)  |
-| Database     | PostgreSQL 17, Drizzle ORM                           |
-| BLE          | react-native-ble-manager, TEA encryption             |
-| Email        | React Email, SMTP (MailHog in dev)                   |
-| Analytics    | Vexo Analytics                                       |
-| Build        | Turborepo, EAS Build (mobile), Node 22               |
-| CI           | GitHub Actions (lint, format, typecheck)              |
+| Layer       | Tech |
+| ----------- | ---- |
+| Mobile      | React Native, Expo SDK 55, Expo Router, NativeWind |
+| API client  | tRPC + React Query (consumes SRF's `AppRouter` type via tsconfig path) |
+| Auth client | Better-Auth Expo client (OTP / Google / Apple) |
+| BLE         | react-native-ble-manager + custom TEA-encrypted protocol |
+| Push        | expo-notifications |
+| Build       | Turborepo, EAS Build, Node 22, pnpm 10 |
+| Analytics   | Vexo |
 
-## Getting Started
+## Development
 
 ### Prerequisites
 
 - Node.js >= 22.11.0
 - pnpm 10.x (`corepack enable && corepack prepare`)
-- Docker (for PostgreSQL + MailHog)
-- Xcode (iOS development)
-- Android Studio (Android development)
-- EAS CLI (`npm install -g eas-cli`)
+- Xcode (iOS development) and/or Android Studio (Android development)
+- EAS CLI (`npm install -g eas-cli`) — for builds
+- A locally-running [Gently_SRF](../Gently_SRF/) if you want a real backend round-trip
 
-### Setup
-
-```bash
-# Install dependencies
-pnpm install
-
-# Start infrastructure (Postgres on :5832, MailHog on :8025)
-docker compose up -d
-
-# Copy environment variables
-cp .env.bk .env
-# Edit .env with your secrets (see Environment Variables below)
-
-# Push database schema
-pnpm db:push
-
-# Optional: seed test data
-pnpm -F @gently/db seed
-```
-
-### Development
+### Common commands
 
 ```bash
-# Run everything (mobile + web + API)
-pnpm dev
+# Expo dev server (Metro)
+pnpm -F @gently/expo dev:android      # or dev:ios
 
-# Web dashboard only
-pnpm dev:next
+# Native run (Xcode / Gradle build)
+pnpm -F @gently/expo android
+pnpm -F @gently/expo ios
 
-# Mobile app
-cd apps/expo
-pnpm dev           # Expo dev server
-pnpm ios           # Run on iOS simulator
-pnpm android       # Run on Android emulator
-
-# Database studio (GUI)
-pnpm db:studio
+# Quality gates
+pnpm typecheck
+pnpm lint
+pnpm format
+pnpm format:fix
 ```
 
-### Quality
-
-```bash
-pnpm typecheck     # TypeScript validation
-pnpm lint          # ESLint
-pnpm format        # Prettier check
-pnpm format:fix    # Auto-fix formatting
-```
-
-## Environment Variables
-
-Create a `.env` file at the project root:
-
-```bash
-# Database
-POSTGRES_URL="postgresql://gently:gently@localhost:5832/gently"
-
-# Auth
-AUTH_SECRET="<openssl rand -base64 32>"
-
-# Email (SMTP)
-EMAIL_SERVER_HOST="localhost"    # MailHog in dev, smtp.gmail.com in prod
-EMAIL_SERVER_PORT="1025"         # 1025 for MailHog, 587 for Gmail
-EMAIL_SERVER_USER=""
-EMAIL_SERVER_PASSWORD=""
-EMAIL_FROM="noreply@gentlyus.com"
-
-# URLs
-NEXT_PUBLIC_BASE_URL=http://localhost:3000
-EXPO_PUBLIC_BASE_URL=http://localhost:3000
-
-# Google OAuth
-AUTH_GOOGLE_ID="<google-client-id>"
-AUTH_GOOGLE_SECRET="<google-client-secret>"
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID="<google-web-client-id>"
-
-# Apple Sign In
-APPLE_TEAM_ID="K2ZWWF4P2G"
-APPLE_KEY_ID="R984ML9MQ8"
-APPLE_CLIENT_ID="com.gentlyus.gently.web"
-APPLE_APP_BUNDLE_ID="com.gentlyus.gently"
-APPLE_PRIVATE_KEY="<apple-private-key>"
-
-# CGM Cloud auth seam (RS256 JWT signing)
-CGM_TOKEN_PRIVATE_KEY="<base64 PKCS8 RSA private key, no PEM headers>"
-CGM_TOKEN_KID="<key id, e.g. cgm-2026-05>"
-```
-
-### Generating the CGM token keypair
-
-The Gently Core API mints short-lived JWTs (`aud: "cgm-cloud"`) so the separate
-[CGM Cloud](../Gently_CGM_Cloud/) service can verify the user's identity without
-calling back. The public key is published at `/.well-known/jwks.json`.
-
-Generate a fresh RS256 keypair with openssl:
-
-```bash
-# 1. Generate a 2048-bit RSA private key in PKCS8 format
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out cgm-token.pem
-
-# 2. Strip the PEM header/footer and base64-encode for env storage
-CGM_TOKEN_PRIVATE_KEY=$(
-  grep -v -- '-----' cgm-token.pem | tr -d '\n'
-)
-
-# 3. Pick a key id — anything stable, e.g. a date stamp
-CGM_TOKEN_KID="cgm-$(date +%Y-%m)"
-
-echo "CGM_TOKEN_PRIVATE_KEY=$CGM_TOKEN_PRIVATE_KEY"
-echo "CGM_TOKEN_KID=$CGM_TOKEN_KID"
-
-# 4. Wipe the on-disk key once the env vars are stored in your secret manager
-rm cgm-token.pem
-```
-
-Put both values in your env / secret manager. The public JWK is derived from
-the private key at request time — there is no separate public key file to
-manage. To rotate, generate a new keypair, change `CGM_TOKEN_KID`, and CGM
-Cloud will pick up the new key on its next JWKS fetch (1-hour cache).
-
-## Infrastructure
-
-### Local Development
-
-Docker Compose provides:
-- **PostgreSQL 17** on port `5832` (user: gently, pass: gently, db: gently)
-- **MailHog** on port `1025` (SMTP) / `8025` (web UI for viewing emails)
-
-### Mobile Builds (EAS)
+## Mobile builds (EAS)
 
 Three build profiles in `apps/expo/eas.json`:
 
-| Profile       | Purpose              | Distribution |
-| ------------- | -------------------- | ------------ |
-| `development` | Dev client builds    | Internal     |
-| `preview`     | Testing builds       | Internal     |
-| `production`  | App Store / Play Store | Store      |
+| Profile       | Purpose                | Distribution |
+| ------------- | ---------------------- | ------------ |
+| `development` | Dev client builds      | Internal     |
+| `preview`     | Testing builds         | Internal     |
+| `production`  | App Store / Play Store | Store        |
 
 ```bash
-# Build for iOS
 eas build --platform ios --profile production
-
-# Build for Android
 eas build --platform android --profile production
-
-# Submit to App Store
 eas submit --platform ios --profile production
 ```
 
 **App identifiers:**
 
-| Platform | Production                | Development                |
-| -------- | ------------------------- | -------------------------- |
-| iOS      | `com.gentlyus.mobile`     | `com.gentlyus.mobile-dev`  |
-| Android  | `com.gentlyus.gently`     | `com.gentlyus.gently.dev`  |
+| Platform | Production            | Development               |
+| -------- | --------------------- | ------------------------- |
+| iOS      | `com.gentlyus.mobile` | `com.gentlyus.mobile-dev` |
+| Android  | `com.gentlyus.gently` | `com.gentlyus.gently.dev` |
 
 App Store Connect ID: `6752447097`
 EAS Project ID: `e881c3b6-0d21-4cc4-8933-176c9d6eb00e`
 
-### Web Deployment
-
-The Next.js app is configured for standard Node.js hosting. Turbo remote caching uses Vercel tokens (configured in CI via `TURBO_TEAM` and `TURBO_TOKEN`).
-
-### CI/CD
+## CI/CD
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on PRs and pushes to `main`:
+
 - ESLint across all workspaces
 - Prettier format validation
 - TypeScript type checking
 
-## BLE Device Communication
+## BLE device communication
 
-The app communicates with Gently bracelets over Bluetooth Low Energy using a custom encrypted protocol. See `apps/expo/BLE_protocol.md` for the full spec.
+The app communicates with Gently bracelets over Bluetooth Low Energy using a custom encrypted protocol. See [`apps/expo/BLE_protocol.md`](./apps/expo/BLE_protocol.md) for the full spec.
 
-### Connection Flow
+### Connection flow
 
 1. Request Bluetooth permissions
 2. Scan for devices advertising as "Gently"
@@ -239,66 +128,69 @@ The app communicates with Gently bracelets over Bluetooth Low Energy using a cus
 
 ### Encryption
 
-- **Algorithm**: TEA (Tiny Encryption Algorithm), 64-bit blocks, 128-bit key
-- **Factory key**: Used for initial connection and uptime query
-- **Dynamic key**: Generated per-session from factory key XOR'd with uptime bytes and serial number
+- **Algorithm:** TEA (Tiny Encryption Algorithm), 64-bit blocks, 128-bit key
+- **Factory key:** Used for initial connection and uptime query
+- **Dynamic key:** Generated per-session from factory key XOR'd with uptime bytes and serial number
 - All command payloads are encrypted/decrypted at the transport layer
 
-### BLE Service UUIDs
+### BLE service UUIDs
 
-| UUID   | Purpose                        |
-| ------ | ------------------------------ |
-| `F021` | Gently BLE Service             |
-| `F023` | Request characteristic (write) |
+| UUID   | Purpose                          |
+| ------ | -------------------------------- |
+| `F021` | Gently BLE Service               |
+| `F023` | Request characteristic (write)   |
 | `F024` | Response characteristic (notify) |
 
-### Device Commands
+### Device commands
 
-| Code   | Command                    | Purpose                        |
-| ------ | -------------------------- | ------------------------------ |
-| `0x01` | GET_UPTIME                 | Device uptime (for key gen)    |
-| `0x02` | GET_DEVICE_INFO            | Hardware/firmware version       |
-| `0x0A` | GET_TIME                   | Read device clock              |
-| `0x0B` | SET_TIME                   | Sync device clock              |
-| `0x0C` | GET_DEVICE_STATUS          | Battery, charging, error codes |
-| `0x10` | FIND_ME                    | Trigger sound/light to locate  |
-| `0x11` | ENTER_DFU_MODE             | Firmware update mode           |
-| `0x12` | REBOOT_BRACELET            | Restart device                 |
-| `0x14` | TRIGGER_LED_PATTERN        | Activate LED with color/timing |
-| `0x15` | TRIGGER_VIBRATION_PATTERN  | Activate motor with pattern    |
-| `0x16` | TRIGGER_AUDIO_PATTERN      | Activate buzzer with timing    |
+| Code   | Command                   | Purpose                        |
+| ------ | ------------------------- | ------------------------------ |
+| `0x01` | GET_UPTIME                | Device uptime (for key gen)    |
+| `0x02` | GET_DEVICE_INFO           | Hardware/firmware version      |
+| `0x0A` | GET_TIME                  | Read device clock              |
+| `0x0B` | SET_TIME                  | Sync device clock              |
+| `0x0C` | GET_DEVICE_STATUS         | Battery, charging, error codes |
+| `0x10` | FIND_ME                   | Trigger sound/light to locate  |
+| `0x11` | ENTER_DFU_MODE            | Firmware update mode           |
+| `0x12` | REBOOT_BRACELET           | Restart device                 |
+| `0x14` | TRIGGER_LED_PATTERN       | Activate LED with color/timing |
+| `0x15` | TRIGGER_VIBRATION_PATTERN | Activate motor with pattern    |
+| `0x16` | TRIGGER_AUDIO_PATTERN     | Activate buzzer with timing    |
 
-### Device Capabilities
+### Device capabilities
 
-- **Vibration motor**: 64 patterns (0-63), 4 intensity levels, 1-60s duration
-- **LED**: 7 colors (Blue, Green, Cyan, Red, Yellow, Magenta, White), configurable on/off timing
-- **Audio buzzer**: Configurable beep pattern (on/off duration), 1-60s total
-- **Battery**: Voltage monitoring, charging detection, 5-level status (Critical to Full)
-- **Notifications**: Async push from device for battery status (0x80), event state (0x81), time sync (0x82)
+- **Vibration motor:** 64 patterns (0-63), 4 intensity levels, 1-60s duration
+- **LED:** 7 colors (Blue, Green, Cyan, Red, Yellow, Magenta, White), configurable on/off timing
+- **Audio buzzer:** Configurable beep pattern (on/off duration), 1-60s total
+- **Battery:** Voltage monitoring, charging detection, 5-level status (Critical to Full)
+- **Notifications:** Async push from device for battery status (`0x80`), event state (`0x81`), time sync (`0x82`)
 
-### Test Mode
+### Test mode
 
-A test user (`extraspecialtestuser@gentlyus.com`, OTP: `123456`) bypasses all Bluetooth operations using a mock BLE service. This allows Apple App Review testing without a physical device.
+Signing in as `extraspecialtestuser@gentlyus.com` with OTP `123456` activates a mock BLE service that bypasses all Bluetooth operations. This lets Apple App Review test the app without a physical device.
 
 ## Authentication
 
-Three sign-in methods:
+Three sign-in methods via Better-Auth on SRF:
 
-1. **Email OTP** (default) - 6-digit code sent via email
-2. **Google OAuth** - Social login
-3. **Apple Sign In** - iOS native auth
+1. **Email OTP** (default) — 6-digit code
+2. **Google OAuth** — Social login
+3. **Apple Sign In** — iOS native auth
 
-Sessions are managed by Better-Auth with JWT tokens stored in Expo SecureStore (mobile) or HTTP-only cookies (web).
+Sessions are stored in Expo SecureStore and forwarded as a cookie on every tRPC request to SRF.
 
-## Mobile App Structure
+## Mobile app structure
 
 ```
 apps/expo/src/
   app/                    Expo Router screens
     index.tsx             Login
-    dashboard.tsx         Device list
+    dashboard.tsx         Device list + hamburger menu
     settings.tsx          User settings
     add-device/           Device pairing flow
+    cgm/
+      index.tsx           Dexcom Source list
+      add.tsx             Connect Dexcom Share form
     devices/[deviceId]/
       index.tsx           Device detail + trigger buttons
       edit/               Edit device name
@@ -306,33 +198,39 @@ apps/expo/src/
       ble-test.tsx        BLE command testing (debug)
 
   contexts/
-    BLEContext.tsx         Global BLE state + connection management
+    BLEContext.tsx        Global BLE state + connection management
 
   services/
+    alerts/               SRF cgm_alert push → BLE bridge (subscriber + translator)
     ble/
       connection.ts       Connect/disconnect with retry
       manager.ts          Send/receive encrypted commands
       encryption.ts       TEA cipher + advertisement parsing
       storage.ts          Secure key storage
       notifications.ts    Parse async device notifications
-      mockBLEService.ts   Simulated BLE for test users
-      commands/            Individual BLE command builders
+      mockBLEService.ts   Simulated BLE for the test user
+      commands/           Individual BLE command builders
     analytics/            Vexo event tracking
-    notifications/        Push notification infrastructure
+    notifications/        Expo push registration + foreground handler
 
   components/             Reusable UI components
   hooks/                  Custom React hooks
   styles/                 Design system tokens
-  types/                  Shared TypeScript types
-  utils/                  Helper functions
+  types/
+    alert-payload.ts      Vendored copy of SRF's AlertPayload Zod schema
+  utils/
+    api.tsx               tRPC client (consumes SRF's AppRouter)
+    auth.ts               Better-Auth Expo client
 ```
 
-## Database Schema
+## Cross-repo contract surfaces
 
-```
-User            Better-Auth managed user record
-Device          id, title, description, serialNumber, batteryLevel, syncStatus, userId
-UserPreferences id, userId, pushNotificationToken
-```
+These must stay in lockstep with [Gently_SRF](../Gently_SRF/):
 
-Managed via Drizzle ORM. Push schema changes with `pnpm db:push`. View data with `pnpm db:studio`.
+- **`AppRouter` tRPC types** via `apps/expo/tsconfig.json` path mapping. SRF's `pnpm -F @gently/api build` must be fresh.
+- **`@trpc/*` versions** must match SRF's resolved versions exactly — version skew makes `inferRouterClient<AppRouter>` collapse sub-routers to `never`.
+- **Push payload schema** is vendored at `apps/expo/src/types/alert-payload.ts`; drift breaks the alert pipeline silently.
+- **Push token registration** is wired in `apps/expo/src/app/_layout.tsx` (compare-and-update on auth).
+- **Alert dispatch** runs in `apps/expo/src/services/alerts/` on incoming `cgm_alert` pushes.
+
+See [`CLAUDE.md`](./CLAUDE.md) for the load-bearing details.
