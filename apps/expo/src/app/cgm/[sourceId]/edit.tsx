@@ -7,7 +7,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { AlertRuleCard } from "~/components/cgm/AlertRuleCard";
@@ -47,6 +47,7 @@ const REGION_LABELS: Record<"us" | "ous" | "jp", string> = {
 export default function SourceEditScreen() {
   const { sourceId } = useLocalSearchParams<{ sourceId: string }>();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const sourcesQ = useQuery({
     queryKey: ["dexcom", "list"],
@@ -72,6 +73,21 @@ export default function SourceEditScreen() {
     }) => trpc.dexcom.update.mutate(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["dexcom", "list"] });
+    },
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: (input: { sourceId: string; active: boolean }) =>
+      trpc.dexcom.update.mutate(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["dexcom", "list"] });
+      router.replace("/dashboard");
+    },
+    onError: (error: unknown) => {
+      Alert.alert(
+        "Couldn't disconnect",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     },
   });
 
@@ -127,7 +143,7 @@ export default function SourceEditScreen() {
           text: "Disconnect",
           style: "destructive",
           onPress: () => {
-            // wired in Task 9
+            disconnectMutation.mutate({ sourceId, active: false });
           },
         },
       ],
@@ -173,7 +189,7 @@ export default function SourceEditScreen() {
             onChange={(next) => {
               updateSource.mutate({ sourceId, unitOfMeasure: next });
             }}
-            disabled={updateSource.isPending}
+            disabled={updateSource.isPending || disconnectMutation.isPending}
           />
         </View>
 
@@ -209,8 +225,10 @@ export default function SourceEditScreen() {
               buttons.base,
               buttons.large,
               buttons.error,
+              disconnectMutation.isPending && { opacity: 0.6 },
             ]}
             onPress={confirmDisconnect}
+            disabled={disconnectMutation.isPending}
             accessibilityLabel="Disconnect Dexcom source"
           >
             <Text style={[buttonText.primary]}>Disconnect Dexcom source</Text>
