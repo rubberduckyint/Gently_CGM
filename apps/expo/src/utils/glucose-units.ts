@@ -22,3 +22,11 @@ export const CRITICAL_LOW_FLOOR_MG_DL = 50;
 export function clampCriticalLow(mgDl: number): number {
   return Math.max(mgDl, CRITICAL_LOW_FLOOR_MG_DL);
 }
+
+export type GlucoseRange = "low" | "in_range" | "high";
+
+export function rangeColor(mgDl: number): GlucoseRange {
+  if (mgDl < 70) return "low";
+  if (mgDl > 180) return "high";
+  return "in_range";
+}

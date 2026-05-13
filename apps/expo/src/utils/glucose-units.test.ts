@@ -4,6 +4,7 @@ import {
   toMgDl,
   formatGlucose,
   clampCriticalLow,
+  rangeColor,
 } from "./glucose-units";
 
 describe("glucose-units", () => {
@@ -35,5 +36,21 @@ describe("glucose-units", () => {
     expect(clampCriticalLow(49)).toBe(50);
     expect(clampCriticalLow(50)).toBe(50);
     expect(clampCriticalLow(70)).toBe(70);
+  });
+});
+
+describe("rangeColor", () => {
+  it("returns 'low' below 70 mg/dL", () => {
+    expect(rangeColor(50)).toBe("low");
+    expect(rangeColor(69)).toBe("low");
+  });
+  it("returns 'in_range' 70-180", () => {
+    expect(rangeColor(70)).toBe("in_range");
+    expect(rangeColor(120)).toBe("in_range");
+    expect(rangeColor(180)).toBe("in_range");
+  });
+  it("returns 'high' above 180", () => {
+    expect(rangeColor(181)).toBe("high");
+    expect(rangeColor(300)).toBe("high");
   });
 });
