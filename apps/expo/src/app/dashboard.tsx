@@ -47,6 +47,7 @@ import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 import { nextOnboardingRoute } from "~/utils/onboarding-gate";
 import { devicesBeingDeleted } from "~/utils/deviceDeletionTracker";
+import { FEATURE_FLAGS } from "~/config/feature-flags";
 import {
   hasSeenOnboarding,
   markOnboardingComplete,
@@ -450,17 +451,19 @@ export default function DashboardPage() {
             ))}
 
             {/* Add device button */}
-            <Pressable
-              style={[
-                buttons.base,
-                buttons.large,
-                buttons.outline,
-                { marginTop: spacing[4] },
-              ]}
-              onPress={handleAddDevice}
-            >
-              <Text style={buttonText.outline}>+ Add Another Gently</Text>
-            </Pressable>
+            {FEATURE_FLAGS.MULTI_DEVICE_ENABLED && (
+              <Pressable
+                style={[
+                  buttons.base,
+                  buttons.large,
+                  buttons.outline,
+                  { marginTop: spacing[4] },
+                ]}
+                onPress={handleAddDevice}
+              >
+                <Text style={buttonText.outline}>+ Add Another Gently</Text>
+              </Pressable>
+            )}
           </ScrollView>
         )}
       </View>
