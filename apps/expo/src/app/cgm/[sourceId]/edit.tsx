@@ -128,12 +128,7 @@ export default function SourceEditScreen() {
     visibleKinds.includes(r.kind),
   );
 
-  // unitOfMeasure is not returned from dexcom.list (the field is stored on
-  // cgmSource but sourceListSelect doesn't project it). Default to "mg_dl"
-  // so the picker is usable and mutations go through normally. When SRF adds
-  // the projection, change this to `source.unitOfMeasure ?? "mg_dl"` —
-  // otherwise the picker keeps snapping back to mg/dL after each save.
-  const currentUnit: GlucoseUnit = "mg_dl";
+  const currentUnit: GlucoseUnit = source.unitOfMeasure ?? "mg_dl";
 
   function confirmDisconnect() {
     Alert.alert(
