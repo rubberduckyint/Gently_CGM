@@ -39,7 +39,6 @@
     "expo-device": "8.0.11-canary-20260121-a63c0dd",
     "expo-font": "14.1.0-canary-20260121-a63c0dd",
     "expo-linking": "8.0.12-canary-20260121-a63c0dd",
-    "expo-location": "19.1.0-canary-20260121-a63c0dd",
     "expo-notifications": "1.0.0-canary-20260121-a63c0dd",
     "expo-router": "7.0.0-canary-20260121-a63c0dd",
     "expo-secure-store": "15.0.9-canary-20260121-a63c0dd",

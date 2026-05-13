@@ -181,7 +181,7 @@ export default function ConnectDexcomPage() {
               },
             ]}
           >
-            Use the same credentials as the Dexcom Share / Follow app.
+            Sign in with the Dexcom Share account you use at dexcom.com/share. This is a separate account from your Gently sign-in.
           </Text>
 
           {/* Region card */}
@@ -217,7 +217,7 @@ export default function ConnectDexcomPage() {
                 setUsername(t);
                 if (errors.username) setErrors((e) => ({ ...e, username: undefined }));
               }}
-              placeholder="you@example.com"
+              placeholder="Dexcom username"
               placeholderTextColor={tokens.color.ink3}
               autoCapitalize="none"
               autoCorrect={false}
@@ -236,7 +236,7 @@ export default function ConnectDexcomPage() {
               </Text>
             ) : (
               <Text style={[typographyV2.body, { fontSize: 13, color: tokens.color.ink3, marginTop: 6 }]}>
-                Use your Dexcom Share username (or email).
+                The username (or email) you use to sign in to Dexcom Share — not your Gently account.
               </Text>
             )}
           </View>

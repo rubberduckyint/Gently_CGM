@@ -162,10 +162,15 @@ export default function SourceEditScreen() {
           <Text
             style={[
               typographyV2.eyebrow,
-              { color: tokens.color.ink3, marginBottom: 4 },
+              { color: tokens.color.ink3, marginBottom: 2 },
             ]}
           >
             Username
+          </Text>
+          <Text
+            style={{ fontSize: 12, color: tokens.color.ink3, marginBottom: 4 }}
+          >
+            Dexcom Share account
           </Text>
           <Text
             style={{ fontSize: 15, color: tokens.color.ink, marginBottom: 16 }}
