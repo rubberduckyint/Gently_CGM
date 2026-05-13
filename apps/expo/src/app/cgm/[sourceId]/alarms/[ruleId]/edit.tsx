@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { Chev } from "~/components/icons";
+import { Bell, Chev, Info } from "~/components/icons";
+import { Stepper } from "~/components/ui/Stepper";
+import { tabularNums, typographyV2 } from "~/styles/typographyV2";
 import { tokens } from "~/styles/tokens";
-import { typographyV2 } from "~/styles/typographyV2";
 import { trpc } from "~/utils/api";
 import type { RouterOutputs } from "~/utils/api";
+import { toMmolL } from "~/utils/glucose-units";
 
 type Rule = RouterOutputs["rule"]["listForSource"][number];
 
@@ -24,6 +26,59 @@ const KIND_LABELS: Record<string, string> = {
   post_meal_unresolved: "Post-meal unresolved",
   tir_breach: "Time-in-range breach",
 };
+
+function kindToTint(kind: string): { bg: string; fg: string } {
+  switch (kind) {
+    case "critical_low": return { bg: tokens.color.coralBg, fg: tokens.color.coral };
+    case "low":          return { bg: tokens.color.cyanBg, fg: tokens.color.cyanDeep };
+    case "high":
+    case "spike_above":
+    case "sustained_above": return { bg: tokens.color.amberBg, fg: tokens.color.amber };
+    case "falling_fast":
+    case "rising_fast":  return { bg: tokens.color.amberBg, fg: tokens.color.amber };
+    default:             return { bg: tokens.color.bg, fg: tokens.color.ink2 };
+  }
+}
+
+function aboveOrBelow(kind: string): "ALERT WHEN ABOVE" | "ALERT WHEN BELOW" {
+  switch (kind) {
+    case "high":
+    case "spike_above":
+    case "sustained_above":
+    case "rising_fast":   return "ALERT WHEN ABOVE";
+    default:              return "ALERT WHEN BELOW";
+  }
+}
+
+function tierDescription(kind: string): string {
+  switch (kind) {
+    case "critical_low":         return "Hardware-enforced safety floor";
+    case "low":                  return "Sustained low blood sugar";
+    case "high":                 return "Sustained high blood sugar";
+    case "falling_fast":         return "Rapid drop in glucose";
+    case "rising_fast":          return "Rapid rise in glucose";
+    case "stale":                return "No reading received recently";
+    case "spike_above":          return "Sharp rise above threshold";
+    case "sustained_above":      return "Held above threshold";
+    case "post_meal_unresolved": return "Glucose not recovering after meal";
+    case "tir_breach":           return "Time-in-range below target";
+    default:                     return kind;
+  }
+}
+
+// Per plan Step 2 — tier-aware stepper bounds (all values stored as mg/dL)
+function thresholdBounds(kind: string): { min: number; max: number; step: number } {
+  switch (kind) {
+    case "critical_low":     return { min: 50, max: 70, step: 1 };
+    case "low":              return { min: 50, max: 100, step: 1 };
+    case "high":
+    case "spike_above":
+    case "sustained_above":  return { min: 100, max: 400, step: 5 };
+    case "falling_fast":
+    case "rising_fast":      return { min: 50, max: 200, step: 5 };
+    default:                 return { min: 50, max: 400, step: 5 };
+  }
+}
 
 export default function EditAlarmScreen() {
   const { sourceId, ruleId } = useLocalSearchParams<{
@@ -191,16 +246,135 @@ export default function EditAlarmScreen() {
         </Pressable>
       </View>
 
-      {/* Body — Tasks 13-15 fill this in */}
+      {/* Body */}
       <ScrollView
-        contentContainerStyle={{ padding: tokens.spacing.pageHorizontal }}
+        contentContainerStyle={{ padding: tokens.spacing.pageHorizontal, gap: 12 }}
       >
-        <Text style={[typographyV2.body, { color: tokens.color.ink3 }]}>
-          Body sections rendered in Tasks 13-15 (threshold hero, sliders, color
-          picker, test alarm, timing, footer).
-        </Text>
+        <ThresholdHeroCard
+          kind={rule.kind}
+          draft={draft}
+          setDraft={setDraft}
+          isMmol={source.unitOfMeasure === "mmol_l"}
+        />
+        {null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function ThresholdHeroCard({
+  kind,
+  draft,
+  setDraft,
+  isMmol,
+}: {
+  kind: string;
+  draft: Rule;
+  setDraft: (r: Rule) => void;
+  isMmol: boolean;
+}) {
+  const tint = kindToTint(kind);
+  const { min, max, step } = thresholdBounds(kind);
+  const rawValue = draft.threshold ?? min;
+
+  // mmol/L mode: display is converted; storage stays mg/dL.
+  // Stepper operates in mg/dL throughout — onChange already delivers mg/dL — so no
+  // back-conversion is needed; only the rendered label changes.
+  const displayValue = isMmol ? toMmolL(rawValue).toFixed(1) : String(rawValue);
+
+  function handleStepperChange(next: number) {
+    setDraft({ ...draft, threshold: next });
+  }
+
+  return (
+    <View
+      style={[
+        tokens.shadow.card,
+        {
+          backgroundColor: tokens.color.card,
+          borderRadius: tokens.radius.cardLarge,
+          padding: tokens.spacing.contentHorizontal,
+          gap: 20,
+        },
+      ]}
+    >
+      {/* Top row: tier badge | text stack | enabled toggle */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        {/* Tier badge */}
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: tint.bg,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Bell size={18} color={tint.fg} strokeWidth={1.8} />
+        </View>
+
+        {/* Text stack */}
+        <View style={{ flex: 1 }}>
+          <Text style={[typographyV2.eyebrow, { color: tokens.color.ink3 }]}>
+            {aboveOrBelow(kind)}
+          </Text>
+          <Text style={[typographyV2.body, { color: tokens.color.ink2 }]}>
+            {tierDescription(kind)}
+          </Text>
+        </View>
+
+        {/* Enabled toggle */}
+        <Switch
+          value={draft.enabled}
+          onValueChange={(val) => setDraft({ ...draft, enabled: val })}
+          trackColor={{ false: "#D2D8E0", true: tokens.color.cyanDeep }}
+          style={{ width: 52, height: 32 }}
+          accessibilityLabel="Enable alarm"
+        />
+      </View>
+
+      {/* Stepper row */}
+      <View style={{ alignItems: "center" }}>
+        <Stepper
+          value={rawValue}
+          onChange={handleStepperChange}
+          min={min}
+          max={max}
+          step={step}
+        >
+          <Text
+            style={[
+              typographyV2.threshold,
+              { color: tokens.color.inkH, minWidth: 72, textAlign: "center", fontVariant: tabularNums },
+            ]}
+          >
+            {displayValue}
+          </Text>
+        </Stepper>
+      </View>
+
+      {/* Critical-low floor callout — hardware enforces 50 mg/dL minimum */}
+      {kind === "critical_low" && (
+        <View
+          style={{
+            backgroundColor: tokens.color.cyanBgSoft,
+            borderRadius: tokens.radius.list,
+            padding: 14,
+            flexDirection: "row",
+            gap: 10,
+            alignItems: "flex-start",
+          }}
+        >
+          <Info size={18} color={tokens.color.cyanDeep} strokeWidth={1.8} />
+          <Text style={[typographyV2.body, { color: tokens.color.ink2, flex: 1 }]}>
+            The bracelet hardware enforces a{" "}
+            <Text style={{ fontWeight: "600" }}>50 mg/dL floor</Text> on
+            critical-low. You can&apos;t set this any lower — it&apos;s a safety stop.
+          </Text>
+        </View>
+      )}
+    </View>
   );
 }
 
