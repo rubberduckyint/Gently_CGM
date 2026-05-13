@@ -31,7 +31,6 @@ export async function requestBluetoothPermissions(): Promise<boolean> {
         const permissions = [
           PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
           PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         ];
 
         const results = await PermissionsAndroid.requestMultiple(permissions);

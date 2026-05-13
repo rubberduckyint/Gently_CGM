@@ -41,8 +41,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         "This app uses Bluetooth to connect to your Gently devices for monitoring and control.",
       NSBluetoothPeripheralUsageDescription:
         "This app uses Bluetooth to connect to your Gently devices for monitoring and control.",
-      NSLocationWhenInUseUsageDescription:
-        "This app needs location access to scan for Bluetooth devices.",
       ITSAppUsesNonExemptEncryption: false,
     },
     entitlements: {
@@ -64,7 +62,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       "android.permission.BLUETOOTH_SCAN",
       "android.permission.BLUETOOTH_CONNECT",
       "android.permission.ACCESS_FINE_LOCATION",
-      "android.permission.ACCESS_COARSE_LOCATION",
     ],
   },
   extra: {
@@ -82,7 +79,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     "expo-font",
     "expo-secure-store",
     "expo-web-browser",
-    "expo-location",
     "expo-apple-authentication",
     "@react-native-community/datetimepicker",
     [
