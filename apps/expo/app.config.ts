@@ -49,7 +49,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
   },
   android: {
-    package: IS_DEV ? "com.gentlyus.gently.dev" : "com.gentlyus.gently",
+    // Hardcoded to .dev variant until the package rename (see coordinator
+    // memory project_srf_deferred_threads.md "Mobile package rename"). The
+    // .dev Android OAuth client is registered in Google Cloud against this
+    // exact package; the legacy `com.gentlyus.gently` package is owned by
+    // the previous developer's GCP project and conflicts on (package, SHA-1).
+    package: "com.gentlyus.gently.dev",
     googleServicesFile: "./google-services.json",
     adaptiveIcon: {
       foregroundImage: IS_DEV
@@ -86,12 +91,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       "@react-native-google-signin/google-signin",
       {
+        // iOS clientId + URL scheme are placeholders from the previous
+        // developer's GCP project. iOS sign-in is out of scope until iOS
+        // OAuth clients are created in the gently-cgm GCP project. Android
+        // is the v1 target — only androidClientId is load-bearing for now.
         iosUrlScheme:
           "com.googleusercontent.apps.947334995233-esim0ufno1bhk7c72idlc3qoltlqqncb",
         iosClientId:
           "947334995233-6li09ju14r42u6fkgm4btib13pilk34n.apps.googleusercontent.com",
         androidClientId:
-          "947334995233-dihv04slek371rgobnjc2855518aqtbr.apps.googleusercontent.com",
+          "782842188008-i2k706in72p9q2jnr7tiqkbjo6e9aufj.apps.googleusercontent.com",
       },
     ],
   ],
