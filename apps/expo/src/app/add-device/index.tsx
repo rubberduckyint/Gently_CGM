@@ -11,7 +11,9 @@ import {
 } from "react-native";
 import BleManager from "react-native-ble-manager";
 import { SafeAreaView } from "react-native-safe-area-context";
+import type { RelativePathString } from "expo-router";
 import { router } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 
 import type { AdvertisementData } from "~/services/ble/types";
@@ -38,6 +40,7 @@ import {
 } from "~/styles";
 import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
+import { nextOnboardingRoute } from "~/utils/onboarding-gate";
 import { getSimulatedDeviceData, isTestUserSession } from "~/utils/testMode";
 
 interface DiscoveredGentlyDevice {
@@ -69,6 +72,12 @@ const AddDeviceScreen = () => {
 
   // Responsive design hook
   const { getIconSize, getSpacing } = useResponsive();
+
+  // Fetch existing CGM sources so post-pair navigation can consult the onboarding gate
+  const sourcesQ = useQuery({
+    queryKey: ["dexcom", "list"],
+    queryFn: () => trpc.dexcom.list.query(),
+  });
 
   const [isScanning, setIsScanning] = useState(false);
   const [isConnecting, setIsConnecting] = useState<string | null>(null);
@@ -1253,11 +1262,24 @@ const AddDeviceScreen = () => {
                         `✅ [Pairing] Device updated, navigating to: ${pairingSuccess.deviceId}`,
                       );
 
-                      // Navigate to device page
-                      router.push({
-                        pathname: "/devices/[deviceId]",
-                        params: { deviceId: pairingSuccess.deviceId },
+                      // If onboarding is still incomplete (no CGM sources), advance
+                      // to the next onboarding step; otherwise go to device detail.
+                      const next = nextOnboardingRoute({
+                        hasBracelet: true,
+                        sources: (sourcesQ.data ?? []).map((s) => ({
+                          id: s.id,
+                          displayName: s.displayName,
+                          active: s.dexcom?.active ?? true,
+                        })),
                       });
+                      if (next) {
+                        router.replace(next as RelativePathString);
+                      } else {
+                        router.push({
+                          pathname: "/devices/[deviceId]",
+                          params: { deviceId: pairingSuccess.deviceId },
+                        });
+                      }
                     } catch (error) {
                       console.error("Failed to update device:", error);
                       Alert.alert(
