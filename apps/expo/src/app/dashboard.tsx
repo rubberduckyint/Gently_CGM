@@ -47,6 +47,7 @@ import { trpc } from "~/utils/api";
 import { authClient } from "~/utils/auth";
 import { nextOnboardingRoute } from "~/utils/onboarding-gate";
 import { devicesBeingDeleted } from "~/utils/deviceDeletionTracker";
+import { CurrentGlucoseCard } from "~/components/cgm/CurrentGlucoseCard";
 import { FEATURE_FLAGS } from "~/config/feature-flags";
 import {
   hasSeenOnboarding,
@@ -374,7 +375,8 @@ export default function DashboardPage() {
     );
   }
 
-  const dexcomItem = sourceMenuItem({ primarySourceId: sourcesQ.data?.[0]?.id });
+  const primarySource = sourcesQ.data?.[0];
+  const dexcomItem = sourceMenuItem({ primarySourceId: primarySource?.id });
 
   return (
     <SafeAreaView style={containers.safeArea}>
@@ -446,6 +448,12 @@ export default function DashboardPage() {
             style={{ paddingVertical: spacing[4] }}
             showsVerticalScrollIndicator={false}
           >
+            {primarySource && (
+              <CurrentGlucoseCard
+                sourceId={primarySource.id}
+                unit={primarySource.unitOfMeasure ?? "mg_dl"}
+              />
+            )}
             {devices.map((device) => (
               <DeviceCard key={device.id} device={device} />
             ))}
