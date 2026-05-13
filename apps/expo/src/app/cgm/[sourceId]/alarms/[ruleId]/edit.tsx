@@ -5,6 +5,8 @@ import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Bell, Chev, Info } from "~/components/icons";
+import { LevelSlider } from "~/components/cgm/AlarmDetail/LevelSlider";
+import { LightColorPicker } from "~/components/cgm/AlarmDetail/LightColorPicker";
 import { Stepper } from "~/components/ui/Stepper";
 import { tabularNums, typographyV2 } from "~/styles/typographyV2";
 import { tokens } from "~/styles/tokens";
@@ -13,6 +15,13 @@ import type { RouterOutputs } from "~/utils/api";
 import { toMmolL } from "~/utils/glucose-units";
 
 type Rule = RouterOutputs["rule"]["listForSource"][number];
+
+const VIBRATION_LABELS: [string, string, string, string, string] = [
+  "Off", "Soft", "Medium", "Strong", "Max",
+];
+const AUDIO_LABELS: [string, string, string, string, string] = [
+  "Silent", "Quiet", "Mid", "Loud", "Loudest",
+];
 
 const KIND_LABELS: Record<string, string> = {
   low: "Low",
@@ -256,7 +265,79 @@ export default function EditAlarmScreen() {
           setDraft={setDraft}
           isMmol={source.unitOfMeasure === "mmol_l"}
         />
-        {null}
+
+        {/* Vibration */}
+        <View
+          style={[
+            tokens.shadow.card,
+            {
+              backgroundColor: tokens.color.card,
+              borderRadius: tokens.radius.list,
+              padding: tokens.spacing.cardInternal,
+            },
+          ]}
+        >
+          <Text
+            style={[typographyV2.eyebrow, { color: tokens.color.ink3, marginBottom: 14 }]}
+          >
+            VIBRATION
+          </Text>
+          <LevelSlider
+            labels={VIBRATION_LABELS}
+            accent={tokens.color.cyanDeep}
+            value={draft.vibrationLevel ?? 0}
+            onChange={(v) => setDraft({ ...draft, vibrationLevel: v })}
+            readOut={{
+              value: String(draft.vibrationLevel ?? 0),
+              label: VIBRATION_LABELS[draft.vibrationLevel ?? 0] ?? "",
+            }}
+          />
+        </View>
+
+        {/* Volume */}
+        <View
+          style={[
+            tokens.shadow.card,
+            {
+              backgroundColor: tokens.color.card,
+              borderRadius: tokens.radius.list,
+              padding: tokens.spacing.cardInternal,
+            },
+          ]}
+        >
+          <Text
+            style={[typographyV2.eyebrow, { color: tokens.color.ink3, marginBottom: 14 }]}
+          >
+            VOLUME
+          </Text>
+          <LevelSlider
+            labels={AUDIO_LABELS}
+            accent={tokens.color.cyanDeep}
+            value={draft.audioLevel ?? 0}
+            onChange={(v) => setDraft({ ...draft, audioLevel: v })}
+            readOut={{
+              value: String(draft.audioLevel ?? 0),
+              label: AUDIO_LABELS[draft.audioLevel ?? 0] ?? "",
+            }}
+          />
+        </View>
+
+        {/* Light color */}
+        <View
+          style={[
+            tokens.shadow.card,
+            {
+              backgroundColor: tokens.color.card,
+              borderRadius: tokens.radius.list,
+              padding: 14,
+            },
+          ]}
+        >
+          <LightColorPicker
+            value={draft.ledColor ?? null}
+            onChange={(c) => setDraft({ ...draft, ledColor: c })}
+          />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
