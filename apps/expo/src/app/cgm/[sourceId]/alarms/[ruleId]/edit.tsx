@@ -8,6 +8,7 @@ import { Bell, Chev, Info, Pulse } from "~/components/icons";
 import { LevelSlider } from "~/components/cgm/AlarmDetail/LevelSlider";
 import { LightColorPicker } from "~/components/cgm/AlarmDetail/LightColorPicker";
 import { Stepper } from "~/components/ui/Stepper";
+import { useBracePreview } from "~/hooks/useBracePreview";
 import { tabularNums, typographyV2 } from "~/styles/typographyV2";
 import { tokens } from "~/styles/tokens";
 import { trpc } from "~/utils/api";
@@ -32,8 +33,12 @@ interface MutationInput {
 const VIBRATION_LABELS: [string, string, string, string, string] = [
   "Off", "Soft", "Medium", "Strong", "Max",
 ];
+// Audio is pattern-based, not volume-based — the bracelet buzzer has fixed
+// loudness. These labels match the vibration "intensity" vocabulary so the
+// two sliders feel coherent, even though the underlying mechanism differs
+// (vibration = motor amplitude, audio = beep pattern / count).
 const AUDIO_LABELS: [string, string, string, string, string] = [
-  "Silent", "Quiet", "Mid", "Loud", "Loudest",
+  "Off", "Soft", "Medium", "Strong", "Max",
 ];
 
 const KIND_LABELS: Record<string, string> = {
@@ -145,6 +150,11 @@ export default function EditAlarmScreen() {
   const [local, setLocal] = useState<Rule | null>(null);
   const [savingState, setSavingState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Tactile previews fired directly to the bracelet (Mobile→BLE, bypassing
+  // SRF push) whenever the user changes a feedback slider/color. Lets the
+  // user feel level 3 vs level 4 before saving the alarm.
+  const { previewVibration, previewLed, previewAudio } = useBracePreview();
 
   // One-shot initialization from first server load; local owns state after that.
   useEffect(() => {
@@ -340,7 +350,10 @@ export default function EditAlarmScreen() {
             labels={VIBRATION_LABELS}
             accent={tokens.color.cyanDeep}
             value={local.vibrationLevel ?? 0}
-            onChange={(v) => applyChange({ vibrationLevel: v })}
+            onChange={(v) => {
+              applyChange({ vibrationLevel: v });
+              previewVibration(v);
+            }}
             readOut={{
               value: String(local.vibrationLevel ?? 0),
               label: VIBRATION_LABELS[local.vibrationLevel ?? 0] ?? "",
@@ -362,13 +375,16 @@ export default function EditAlarmScreen() {
           <Text
             style={[typographyV2.eyebrow, { color: tokens.color.ink3, marginBottom: 14 }]}
           >
-            VOLUME
+            SOUND
           </Text>
           <LevelSlider
             labels={AUDIO_LABELS}
             accent={tokens.color.cyanDeep}
             value={local.audioLevel ?? 0}
-            onChange={(v) => applyChange({ audioLevel: v })}
+            onChange={(v) => {
+              applyChange({ audioLevel: v });
+              previewAudio(v);
+            }}
             readOut={{
               value: String(local.audioLevel ?? 0),
               label: AUDIO_LABELS[local.audioLevel ?? 0] ?? "",
@@ -389,7 +405,10 @@ export default function EditAlarmScreen() {
         >
           <LightColorPicker
             value={local.ledColor ?? null}
-            onChange={(c) => applyChange({ ledColor: c })}
+            onChange={(c) => {
+              applyChange({ ledColor: c });
+              previewLed(c);
+            }}
           />
         </View>
 

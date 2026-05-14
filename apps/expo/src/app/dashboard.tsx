@@ -330,6 +330,63 @@ export default function DashboardPage() {
   const braceletPillAccent = bleConnected
     ? tokens.color.cyanDeep
     : tokens.color.ink3;
+  const primaryDevice = devicesQ.data?.[0];
+
+  // Dexcom pill tap → take user to the right place:
+  //   - no source configured → /cgm/add (create new)
+  //   - source is paused/inactive (user already disconnected) → /cgm/add to
+  //     create a fresh one instead of returning to the dead source's edit
+  //     screen
+  //   - source is active → /cgm/[sourceId] (manage current)
+  const handleDexcomPillPress = () => {
+    if (!primarySource || primarySource.dexcom?.active === false) {
+      router.push("/cgm/add" as RelativePathString);
+      return;
+    }
+    router.push(`/cgm/${primarySource.id}` as RelativePathString);
+  };
+
+  // Bracelet pill tap → action sheet with management options. Keeps the
+  // disconnect / delete-and-re-pair affordances reachable now that the
+  // standalone device-management screens are hidden in the v1 one-device-
+  // per-app UX.
+  const handleBraceletPillPress = () => {
+    if (!primaryDevice) {
+      // No paired device yet — go straight to pair flow.
+      router.push("/add-device");
+      return;
+    }
+    Alert.alert(
+      "Bracelet",
+      bleConnected
+        ? `Connected to ${primaryDevice.title ?? "your bracelet"}.`
+        : `Not connected to ${primaryDevice.title ?? "your bracelet"}.`,
+      [
+        ...(!bleConnected
+          ? [
+              {
+                text: "Try to reconnect",
+                onPress: () => {
+                  router.push(
+                    `/devices/${primaryDevice.id}` as RelativePathString,
+                  );
+                },
+              },
+            ]
+          : []),
+        {
+          text: "Delete and pair a new bracelet",
+          style: "destructive" as const,
+          onPress: () => {
+            router.push(
+              `/devices/${primaryDevice.id}/delete` as RelativePathString,
+            );
+          },
+        },
+        { text: "Cancel", style: "cancel" as const },
+      ],
+    );
+  };
 
   // Dexcom pill value
   const dexcomActive = primarySource?.dexcom?.active;
@@ -393,7 +450,11 @@ export default function DashboardPage() {
 
         {/* Status pills row */}
         <View style={{ flexDirection: "row", gap: 10, marginBottom: 22 }}>
-          <View style={{ flex: 1 }}>
+          <Pressable
+            style={{ flex: 1 }}
+            onPress={handleBraceletPillPress}
+            android_ripple={{ color: tokens.color.cyanBg, borderless: true }}
+          >
             <StatusPill
               icon={<Watch size={18} color={braceletPillAccent} />}
               label="Bracelet"
@@ -405,15 +466,19 @@ export default function DashboardPage() {
                   : undefined
               }
             />
-          </View>
-          <View style={{ flex: 1 }}>
+          </Pressable>
+          <Pressable
+            style={{ flex: 1 }}
+            onPress={handleDexcomPillPress}
+            android_ripple={{ color: tokens.color.cyanBg, borderless: true }}
+          >
             <StatusPill
               icon={<Cloud size={18} color={dexcomPillAccent} />}
               label="Dexcom"
               value={dexcomPillValue}
               accentColor={dexcomPillAccent}
             />
-          </View>
+          </Pressable>
         </View>
 
         {/* Alarms armed section */}
