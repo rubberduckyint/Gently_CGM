@@ -927,12 +927,29 @@ export function BLEProvider({ children }: BLEProviderProps) {
     });
 
     console.log("[BLE Context] Setting up global BLE event listeners...");
+    const handleBtStateChange = (event: { state: string }) => {
+      // States from react-native-ble-manager: "on", "off", "turning_on",
+      // "turning_off", "unauthorized", "unknown", "resetting".
+      console.log(`[BLE Context] BT adapter state → ${event.state}`);
+      if (event.state !== "on") return;
+      if (connectionStateRef.current === "connected") return;
+      void (async () => {
+        // Let the BLE stack settle after re-enable before scanning.
+        await new Promise((r) => setTimeout(r, 1500));
+        if (connectionStateRef.current === "connected") return;
+        console.log(
+          "[BLE Context] BT turned back on while disconnected — attempting reconnect",
+        );
+        await findAndReconnectPairedBracelet({ scanSeconds: 8 });
+      })();
+    };
     const listeners = [
       BleManager.onStopScan(stableHandleStopScan),
       BleManager.onDisconnectPeripheral(stableHandleDisconnectedDevice),
       BleManager.onDidUpdateValueForCharacteristic(
         stableHandleUpdateValueForCharacteristic,
       ),
+      BleManager.onDidUpdateState(handleBtStateChange),
     ];
     listenersRef.current = listeners;
     console.log(
