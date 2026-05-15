@@ -61,19 +61,33 @@ export function parseAlertPayload(data: unknown): AlertPayload | null {
  * three modalities (vibration / led / audio) are already independent
  * commands at the firmware level.
  *
- * If the bracelet is disconnected, logs and returns. The OS notification
- * already surfaced the alert; the bracelet is a *secondary* alert
- * accessory per CLAUDE.md, never the primary alarm.
+ * If the bracelet is disconnected on push arrival, attempt one short
+ * inline reconnect before giving up. Closes the gap between the
+ * background 5-min reconnect cadence and the moment an alert lands.
+ * The OS notification already surfaced the alert; the bracelet is a
+ * *secondary* alert accessory per CLAUDE.md, never the primary alarm.
  */
 export async function dispatchAlertToBracelet(
   payload: AlertPayload,
-  ble: Pick<BLEContextValue, "isDeviceConnected" | "sendBLECommand">,
+  ble: Pick<
+    BLEContextValue,
+    "isDeviceConnected" | "sendBLECommand" | "reconnectLastPaired"
+  >,
 ): Promise<void> {
   if (!ble.isDeviceConnected()) {
     console.log(
-      `[alerts] Bracelet not connected; skipping BLE dispatch for ${payload.alertEventId} (${payload.ruleKind})`,
+      `[alerts] Bracelet disconnected on push arrival for ${payload.alertEventId} — attempting inline reconnect`,
     );
-    return;
+    const reconnected = await ble.reconnectLastPaired();
+    if (!reconnected) {
+      console.warn(
+        `[alerts] Inline reconnect failed for ${payload.alertEventId} (${payload.ruleKind}); skipping BLE dispatch — OS notification already surfaced`,
+      );
+      return;
+    }
+    console.log(
+      `[alerts] Inline reconnect succeeded for ${payload.alertEventId}`,
+    );
   }
 
   const commands = alertPayloadToBleCommands(payload);
@@ -103,7 +117,10 @@ export async function dispatchAlertToBracelet(
 
 async function handleNotification(
   notification: Notifications.Notification,
-  ble: Pick<BLEContextValue, "isDeviceConnected" | "sendBLECommand">,
+  ble: Pick<
+    BLEContextValue,
+    "isDeviceConnected" | "sendBLECommand" | "reconnectLastPaired"
+  >,
 ): Promise<void> {
   const data = notification.request.content.data;
   const payload = parseAlertPayload(data);
