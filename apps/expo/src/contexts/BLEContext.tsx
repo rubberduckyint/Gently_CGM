@@ -637,17 +637,11 @@ export function BLEProvider({ children }: BLEProviderProps) {
         setConnectionState("disconnected");
         setConnectedDevice(null);
 
-        // Range-loss-then-return: if this wasn't a user-initiated disconnect
-        // (i.e., the ble_last_paired_device pointer is still in SecureStore),
-        // ask Android to start a persistent background auto-reconnect.
-        // Android keeps trying in the background and re-establishes the link
-        // when the bracelet is in range again — no scan needed (bracelet
-        // doesn't advertise post-pairing). If user explicitly disconnects, the
-        // disconnect flow clears the pointer, so this is a no-op.
-        const peripheralId = event.peripheral;
         // Range-loss-then-return: kick off an immediate scan-and-reconnect.
         // The periodic-poll useEffect is the safety net at 30s ticks if
         // this immediate attempt fails (e.g., bracelet still out of range).
+        // If user explicitly disconnects, the disconnect flow clears the
+        // ble_last_paired_device pointer, so this becomes a no-op.
         void (async () => {
           try {
             const lastPairedJson = await SecureStore.getItemAsync(
