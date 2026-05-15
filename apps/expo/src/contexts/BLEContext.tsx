@@ -566,53 +566,7 @@ export function BLEProvider({ children }: BLEProviderProps) {
   // immediately. Used by the dashboard pill's "Try to reconnect" affordance.
   // Returns true if we ended up in "connected" state.
   const reconnectLastPairedNow = async (): Promise<boolean> => {
-    try {
-      const lastPairedJson = await SecureStore.getItemAsync(
-        "ble_last_paired_device",
-      );
-      if (!lastPairedJson) {
-        console.log(
-          "[BLE Context] reconnectLastPaired: no last-paired pointer in SecureStore — user must re-pair",
-        );
-        return false;
-      }
-      const lastPaired = JSON.parse(lastPairedJson) as {
-        id: string;
-        name: string | null;
-        serialNumber: string;
-      };
-      const isOsConnected = await BleManager.isPeripheralConnected(
-        lastPaired.id,
-      );
-      if (!isOsConnected) {
-        try {
-          await BleManager.connect(lastPaired.id);
-        } catch (connErr) {
-          console.warn(
-            "[BLE Context] reconnectLastPaired: connect failed (bracelet probably out of range):",
-            connErr,
-          );
-          return false;
-        }
-      }
-      const newKey = await rehandshakeAfterReconnect(
-        lastPaired.id,
-        lastPaired.serialNumber,
-      );
-      if (!newKey) return false;
-      setConnectedDevice({
-        id: lastPaired.id,
-        name: lastPaired.name ?? undefined,
-        serialNumber: lastPaired.serialNumber,
-        peripheral: { id: lastPaired.id } as Peripheral,
-      });
-      setEncryptionKey(newKey);
-      setConnectionState("connected");
-      return true;
-    } catch (err) {
-      console.warn("[BLE Context] reconnectLastPaired threw:", err);
-      return false;
-    }
+    return findAndReconnectPairedBracelet({ scanSeconds: 10 });
   };
 
   // Background reconnect loop. When connectionState is "disconnected" AND
