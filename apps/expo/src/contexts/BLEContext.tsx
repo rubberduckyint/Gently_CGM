@@ -16,7 +16,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { NativeEventEmitter, NativeModules, Platform } from "react-native";
+import { AppState, type AppStateStatus, NativeEventEmitter, NativeModules, Platform } from "react-native";
 import BleManager, {
   BleScanCallbackType,
   BleScanMatchMode,
@@ -601,6 +601,25 @@ export function BLEProvider({ children }: BLEProviderProps) {
       if (timer) clearInterval(timer);
     };
   }, [connectionState]);
+
+  // AppState foreground trigger. When the app comes back to the foreground
+  // while disconnected, kick off an immediate scan-reconnect instead of
+  // making the user wait up to 30s for the next periodic-poll tick.
+  // Critical for the backgrounded-walk-away → return → check-phone path —
+  // Android Doze suspends JS setInterval timers while backgrounded, so the
+  // periodic poll may not have fired during the away window.
+  useEffect(() => {
+    const handleAppStateChange = (next: AppStateStatus) => {
+      if (next !== "active") return;
+      if (connectionStateRef.current === "connected") return;
+      console.log(
+        "[BLE Context] App foregrounded while disconnected — attempting reconnect",
+      );
+      void findAndReconnectPairedBracelet({ scanSeconds: 8 });
+    };
+    const sub = AppState.addEventListener("change", handleAppStateChange);
+    return () => sub.remove();
+  }, []);
 
   // Create stable event handlers using refs
   const stableHandleStopScan = useCallback(() => {
