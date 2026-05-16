@@ -60,14 +60,33 @@ function clampDurationSec(durationSec: number): number {
   return durationSec;
 }
 
+// SRF's translator sends patternId 4/8/12/16 for vibration levels 1-4 (per
+// packages/alert-engine/src/level-translator.ts VIBRATION_BY_LEVEL). Firmware
+// accepts patternIds 4+ syntactically (returns OK) but they do NOT produce
+// perceptible vibration on the bracelet's motor — confirmed empirically
+// 2026-05-16 with Dave's bracelet in hand. Pattern 0 (QUICK) with explicit
+// intensity IS the working path; same one useBracePreview.previewVibration
+// already uses successfully via the slider tap-to-preview surface.
+//
+// Map the incoming patternId to an intensity tier and always use QUICK as the
+// pattern. If SRF later adds richer pattern semantics (or firmware ships
+// support for patterns 4-63), this mapping is the single place to update.
+const VIBRATION_INTENSITY_BY_PATTERN_ID: Record<number, VibrationIntensity> = {
+  4: VibrationIntensity.LOW,
+  8: VibrationIntensity.MEDIUM,
+  12: VibrationIntensity.HIGH,
+  16: VibrationIntensity.MAXIMUM,
+};
+
 function vibrationCommand(
   vibrationPatternId: number,
   durationSec: number,
 ): BLECommandRequest | null {
-  if (vibrationPatternId < 0 || vibrationPatternId > 63) return null;
+  const intensity = VIBRATION_INTENSITY_BY_PATTERN_ID[vibrationPatternId];
+  if (intensity === undefined) return null;
   return createTriggerVibrationPatternRequest({
-    vibrationPattern: vibrationPatternId as VibrationPattern,
-    vibrationIntensity: VibrationIntensity.MAXIMUM,
+    vibrationPattern: VibrationPattern.QUICK,
+    vibrationIntensity: intensity,
     totalDurationSeconds: clampDurationSec(durationSec),
   });
 }

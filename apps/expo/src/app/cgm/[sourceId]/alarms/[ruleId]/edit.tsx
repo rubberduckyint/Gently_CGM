@@ -157,7 +157,7 @@ export default function EditAlarmScreen() {
   // Tactile previews fired directly to the bracelet (Mobile→BLE, bypassing
   // SRF push) whenever the user changes a feedback slider/color. Lets the
   // user feel level 3 vs level 4 before saving the alarm.
-  const { previewVibration, previewLed } = useBracePreview();
+  const { previewVibration, previewLed, previewAudio } = useBracePreview();
 
   // One-shot initialization from first server load; local owns state after that.
   useEffect(() => {
@@ -204,21 +204,6 @@ export default function EditAlarmScreen() {
       // path renders the TRPCError message instead.
       setTestErrorMsg(null);
     },
-  });
-
-  // Preview mutation for tap-to-audition. Distinct from the main "Test
-  // this alarm" CTA so its loading/error state doesn't bleed into the CTA's
-  // affordances. Same RPC, different UX surface.
-  const previewMutation = useMutation({
-    mutationFn: (input: {
-      ruleId: string;
-      override?: {
-        vibrationLevel?: number;
-        audioLevel?: number;
-        ledColor?: string | null;
-        durationSec?: number;
-      };
-    }) => trpc.rule.test.mutate(input),
   });
 
   const update = useMutation({
@@ -418,15 +403,7 @@ export default function EditAlarmScreen() {
             onChange={(v) => {
               applyChange({ audioLevel: v });
             }}
-            onPreview={(v) => {
-              // Fire a one-shot preview via rule.test with this audio override only.
-              // No threshold / vibration / LED override — those should not preview
-              // when user is auditioning sound patterns.
-              previewMutation.mutate({
-                ruleId: serverRule.id,
-                override: { audioLevel: v, durationSec: 5 },
-              });
-            }}
+            onPreview={(v) => previewAudio(v)}
           />
         </View>
 
