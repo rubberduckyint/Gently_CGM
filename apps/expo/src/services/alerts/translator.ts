@@ -17,7 +17,7 @@ import type { BLECommandRequest } from "~/services/ble/types";
 import { createTriggerAudioPatternRequest } from "~/services/ble/commands/triggerAudioPattern";
 import { createTriggerLedPatternRequest } from "~/services/ble/commands/triggerLedPattern";
 import { createTriggerVibrationPatternRequest } from "~/services/ble/commands/triggerVibrationPattern";
-import type { VibrationPattern } from "~/services/ble/types";
+import { VibrationPattern } from "~/services/ble/types";
 import { LedColor, VibrationIntensity } from "~/services/ble/types";
 
 const MIN_DURATION_SEC = 1;
